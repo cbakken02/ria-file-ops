@@ -1,0 +1,224 @@
+.switcher {
+  position: relative;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.label {
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: auto;
+  max-width: 280px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-subtle);
+  cursor: pointer;
+}
+
+.triggerText {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 0;
+  text-align: right;
+}
+
+.triggerText strong {
+  font-size: 0.86rem;
+  line-height: 1.15;
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  color: var(--foreground);
+}
+
+.triggerText span {
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.triggerDivider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+}
+
+.chevron {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  transform: rotate(180deg);
+  transition: transform 0.18s ease;
+}
+
+.chevronOpen {
+  transform: rotate(0deg);
+}
+
+.popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: min(360px, calc(100vw - 56px));
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: #202020;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
+  z-index: 30;
+}
+
+.popoverHeader,
+.popoverFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.popoverHeader {
+  padding: 4px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.popoverHeader strong {
+  font-size: 0.88rem;
+  letter-spacing: -0.02em;
+}
+
+.popoverHeader span {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.connectionList {
+  display: grid;
+  margin-top: 2px;
+}
+
+.connectionForm {
+  display: block;
+}
+
+.connectionRow,
+.connectionRowActive {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.connectionRow {
+  cursor: pointer;
+}
+
+.connectionRowActive {
+  color: var(--foreground);
+}
+
+.connectionMeta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.connectionMeta strong {
+  font-size: 0.88rem;
+  letter-spacing: -0.02em;
+}
+
+.connectionMeta span {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activeBadge,
+.switchHint,
+.reauthHint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.activeBadge {
+  background: var(--surface-muted);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+
+.switchHint {
+  background: var(--primary);
+  color: var(--primary-contrast);
+  border: 1px solid var(--border);
+}
+
+.reauthHint {
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+}
+
+.popoverFooter {
+  margin-top: 6px;
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--border);
+  justify-content: flex-start;
+}
+
+.footerLink {
+  color: var(--foreground);
+  font-size: 0.84rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  .switcher {
+    width: 100%;
+    justify-items: stretch;
+  }
+
+  .trigger,
+  .popover {
+    width: 100%;
+    max-width: none;
+  }
+
+  .triggerText {
+    text-align: left;
+  }
+
+  .triggerDivider {
+    display: none;
+  }
+}

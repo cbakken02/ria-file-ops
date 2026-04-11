@@ -1,0 +1,275 @@
+.page {
+  min-height: 100vh;
+  padding: 40px 24px 72px;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+.header,
+.summaryGrid,
+.queueList,
+.noteCard,
+.noticeCard {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.header h1 {
+  max-width: 780px;
+  margin: 6px 0 10px;
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: -0.06em;
+}
+
+.eyebrow,
+.cardEyebrow {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.subhead,
+.summaryCard p,
+.noteCard p,
+.reasonList p,
+.excerptBox p,
+.contextRow p,
+.fieldHint {
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.headerActions,
+.cardActions,
+.formActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.secondaryAction,
+.primaryAction,
+.viewerLink,
+.secondaryButton,
+.primaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-weight: 700;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.secondaryAction,
+.viewerLink,
+.secondaryButton {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.primaryAction,
+.primaryButton,
+.signOutButton {
+  border: 0;
+  background: var(--primary);
+  color: var(--primary-contrast);
+}
+
+.primaryAction:disabled,
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.signOutButton {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.summaryCard,
+.queueCard,
+.noteCard,
+.noticeCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.summaryCard,
+.noteCard,
+.noticeCard {
+  padding: 24px;
+}
+
+.noticeCard {
+  margin-bottom: 18px;
+  border-color: var(--border-strong);
+  background: var(--surface-subtle);
+}
+
+.summaryCard span,
+.field span,
+.excerptBox span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.summaryCard strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 1.15rem;
+}
+
+.queueList {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.queueCard {
+  padding: 20px;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.fileName {
+  margin-top: 4px;
+  font-size: 1.2rem;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.goodBadge,
+.warnBadge {
+  padding: 8px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.goodBadge {
+  background: var(--primary);
+  color: var(--primary-contrast);
+}
+
+.warnBadge {
+  background: var(--surface-strong);
+  color: var(--foreground);
+}
+
+.contextRow {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.reasonList {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.excerptBox {
+  margin-bottom: 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+}
+
+.reviewForm {
+  display: grid;
+  gap: 14px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.fieldHint {
+  margin: 0;
+  font-size: 0.92rem;
+  min-height: 3rem;
+  color: #8a1f1f;
+}
+
+.filenameField {
+  grid-column: 1 / -1;
+}
+
+.field input,
+.field select {
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: var(--surface-subtle);
+  color: var(--foreground);
+  font: inherit;
+}
+
+@media (max-width: 900px) {
+  .summaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .filenameField {
+    grid-column: auto;
+  }
+
+  .cardHeader,
+  .header {
+    flex-direction: column;
+  }
+}

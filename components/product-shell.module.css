@@ -1,0 +1,531 @@
+.shell {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  background: #171717;
+  overflow: hidden;
+}
+
+.sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 16px 12px 12px;
+  background: #171717;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ececec;
+  overflow: hidden;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 8px 10px;
+}
+
+.brandMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  color: #111111;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.brandText {
+  display: grid;
+  gap: 2px;
+}
+
+.brandText strong {
+  font-size: 0.91rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.brandText span {
+  color: #8d8d8d;
+  font-size: 0.8rem;
+}
+
+.navSection {
+  display: grid;
+  gap: 8px;
+}
+
+.navLabel {
+  padding: 0 12px 8px;
+  color: #757575;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.navLink,
+.activeNavLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  color: #c7c7c7;
+  font-size: 0.94rem;
+  font-weight: 580;
+  text-decoration: none;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.navLink:hover {
+  background: #202020;
+  color: #f1f1f1;
+}
+
+.activeNavLink {
+  background: #232323;
+  border: 1px solid #2f2f2f;
+  color: #f5f5f5;
+}
+
+.navHint {
+  color: inherit;
+  opacity: 0.46;
+  font-size: 0.79rem;
+}
+
+.sidebarSpacer {
+  flex: 1;
+}
+
+.accountMenu {
+  position: relative;
+  margin-top: 16px;
+}
+
+.accountButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: #202020;
+  border: 1px solid #2a2a2a;
+  cursor: pointer;
+  list-style: none;
+}
+
+.accountButton::-webkit-details-marker {
+  display: none;
+}
+
+.accountIdentity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  background: #f3f4f6;
+  color: #111111;
+  border: 1px solid #d4d4d4;
+  font-weight: 800;
+  font-size: 0.8rem;
+}
+
+.avatarImage {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  object-fit: cover;
+  border: 1px solid #3a3a3a;
+  background: #f3f4f6;
+}
+
+.accountText {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  text-align: left;
+}
+
+.accountText strong {
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: #f1f1f1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.accountText span,
+.accountText small {
+  color: #8e8e8e;
+  font-size: 0.76rem;
+}
+
+.accountText span,
+.accountText small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.accountText small {
+  font-size: 0.72rem;
+}
+
+.accountChevron {
+  color: #777777;
+  font-size: 0.88rem;
+  transform: rotate(180deg);
+  transition: transform 0.18s ease;
+}
+
+.accountMenuOpen .accountChevron {
+  transform: rotate(0deg);
+}
+
+.accountPopover {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 12px);
+  display: grid;
+  gap: 0;
+  padding: 12px 0;
+  border-radius: 20px;
+  background: #242424;
+  border: 1px solid #323232;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
+  z-index: 20;
+}
+
+.accountPopoverHeader {
+  padding: 0 14px 12px;
+  border-bottom: 1px solid #3d3d3d;
+}
+
+.accountMenuLinks {
+  display: grid;
+  gap: 0;
+}
+
+.accountLink,
+.activeAccountLink,
+.accountActionButton,
+.accountSubmenuButton {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: #ececec;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 540;
+  text-decoration: none;
+  text-align: left;
+}
+
+.accountLink,
+.accountActionButton,
+.accountSubmenuButton {
+  cursor: pointer;
+}
+
+.accountLink + .accountActionButton,
+.accountActionButton + .accountActionButton,
+.accountActionButton + .accountSubmenu,
+.accountSubmenu + .accountActionButton {
+  border-top: 1px solid #313131;
+}
+
+.accountLink:hover,
+.activeAccountLink:hover,
+.accountActionButton:hover,
+.accountSubmenuButton:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.activeAccountLink {
+  color: #f5f5f5;
+}
+
+.accountRowIcon,
+.accountRowAccessory {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: #b4b4b4;
+  flex-shrink: 0;
+}
+
+.accountRowIcon svg,
+.accountRowAccessory svg {
+  width: 100%;
+  height: 100%;
+}
+
+.accountRowAccessory {
+  color: #7c7c7c;
+  transition: transform 0.18s ease;
+}
+
+.accountRowAccessoryOpen {
+  transform: rotate(90deg);
+}
+
+.accountSubmenu {
+  display: grid;
+  margin: 0 14px 8px 24px;
+  padding-left: 12px;
+  border-left: 1px solid #353535;
+}
+
+.accountSubmenuButton {
+  min-height: 42px;
+  padding-left: 0;
+}
+
+.accountSubmenuButton .accountRowIcon {
+  color: #9f9f9f;
+}
+
+.accountStatusIndicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.statusDotConnected,
+.statusDotDisconnected {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.statusDotConnected {
+  background: #2cc56f;
+}
+
+.statusDotDisconnected {
+  background: #d34b4b;
+}
+
+.bugReportOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 10, 10, 0.48);
+  backdrop-filter: blur(8px);
+}
+
+.bugReportModal {
+  width: min(560px, 100%);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border: 1px solid #323232;
+  border-radius: 24px;
+  background: #202020;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.bugReportHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid #323232;
+}
+
+.bugReportClose {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #f1f1f1;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.bugReportClose:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.bugReportTitle {
+  margin: 0;
+  font-size: 1.24rem;
+  font-weight: 560;
+  letter-spacing: -0.03em;
+}
+
+.bugReportBody {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.bugReportTextarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 14px 16px;
+  border: 1px solid #343434;
+  border-radius: 16px;
+  resize: vertical;
+  background: #1a1a1a;
+  color: #f2f2f2;
+  font: inherit;
+  line-height: 1.55;
+  outline: none;
+}
+
+.bugReportTextarea::placeholder {
+  color: #8f8f8f;
+}
+
+.bugReportTextarea:focus,
+.bugReportTextarea:focus-visible {
+  border-color: #424242;
+}
+
+.bugReportActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.bugReportSubmit {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid #3a3a3a;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f1f1;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 560;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.bugReportSubmit:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.bugReportSubmit:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.bugReportError,
+.bugReportSuccess {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.bugReportError {
+  color: #ffb5b5;
+}
+
+.bugReportSuccess {
+  color: #b8e4c6;
+}
+
+.content {
+  min-width: 0;
+  height: 100vh;
+  overflow-y: auto;
+  background: #242424;
+}
+
+@media (max-width: 980px) {
+  .shell {
+    height: auto;
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid #262626;
+    overflow: visible;
+  }
+
+  .navSection {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .navLabel {
+    padding-bottom: 10px;
+  }
+
+  .sidebarSpacer {
+    display: none;
+  }
+
+  .accountMenu {
+    margin-top: 18px;
+  }
+
+  .accountPopover {
+    position: static;
+    margin-top: 12px;
+  }
+
+  .bugReportOverlay {
+    padding: 16px;
+  }
+
+  .content {
+    height: auto;
+    overflow: visible;
+  }
+}

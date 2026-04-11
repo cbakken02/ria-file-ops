@@ -1,0 +1,949 @@
+.page {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(12, 12, 12, 0.56);
+  backdrop-filter: blur(16px);
+}
+
+.settingsOverlay {
+  position: relative;
+  width: min(1240px, 100%);
+  height: min(840px, calc(100vh - 48px));
+  display: grid;
+  place-items: center;
+}
+
+.settingsBackdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.settingsShell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  background: #202020;
+  color: #f4f4f4;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+}
+
+.settingsSidebar {
+  align-self: stretch;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
+  padding: 22px 18px;
+  min-height: 0;
+  overflow: hidden;
+  background: #171717;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settingsSidebarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.settingsCloseButton {
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.settingsCloseButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settingsNav {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.settingsNavItem,
+.activeSettingsNavItem {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.74);
+  font: inherit;
+  font-size: 1.02rem;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settingsNavItem:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.activeSettingsNavItem {
+  background: #303030;
+  color: #ffffff;
+}
+
+.settingsPane {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: #242424;
+}
+
+.settingsPaneHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 24px 28px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settingsPaneHeaderContent {
+  display: grid;
+  gap: 8px;
+}
+
+.settingsPaneHeader h2 {
+  font-size: 2.1rem;
+  line-height: 1.04;
+  letter-spacing: -0.05em;
+}
+
+.settingsPaneHeader p {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.98rem;
+}
+
+.settingsPaneHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.settingsPaneBody {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 28px;
+}
+
+.settingsNotice {
+  margin-bottom: 18px;
+  padding: 13px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.5;
+}
+
+.sectionStack,
+.cleanupGrid {
+  width: min(840px, 100%);
+}
+
+.sectionStack {
+  display: grid;
+  gap: 16px;
+}
+
+.builderSection,
+.helperCard,
+.pickerShell {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 22px;
+  background: #2b2b2b;
+}
+
+.builderSection,
+.helperCard {
+  padding: 18px;
+}
+
+.helperCard {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.settingsList {
+  display: grid;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settingsRowButton,
+.settingsRowLink,
+.settingsRowStatic,
+.modalRowButton,
+.settingsDangerRowButton {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.settingsRowButton,
+.modalRowButton,
+.settingsDangerRowButton {
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.modalRowButton {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 18px;
+  padding: 20px 0;
+}
+
+.settingsRowLabel {
+  font-size: 0.98rem;
+  letter-spacing: -0.02em;
+}
+
+.settingsRowValue {
+  justify-self: end;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.98rem;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settingsRowChevron {
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.settingsDangerValue {
+  justify-self: end;
+  color: #ff7b7b;
+  font-size: 0.98rem;
+  text-align: right;
+}
+
+.storageConnectionDetails {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.storageConnectionDetails[open] .storageConnectionChevron {
+  transform: rotate(90deg);
+}
+
+.storageConnectionSummary {
+  list-style: none;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 0;
+  cursor: pointer;
+}
+
+.storageConnectionSummary::-webkit-details-marker {
+  display: none;
+}
+
+.storageConnectionPrimary,
+.storageConnectionSecondary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.storageConnectionPrimary strong,
+.storageConnectionSecondary strong {
+  font-size: 0.98rem;
+  font-weight: 550;
+  letter-spacing: -0.02em;
+}
+
+.storageConnectionPrimary span,
+.storageConnectionSecondary span,
+.storageEmptyState p {
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.5;
+}
+
+.storageConnectionSecondary {
+  justify-items: end;
+  text-align: right;
+}
+
+.storageConnectionSecondary strong {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.storageConnectionChevron {
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 1.8rem;
+  line-height: 1;
+  transition: transform 160ms ease;
+}
+
+.storageConnectionExpanded {
+  padding-bottom: 4px;
+}
+
+.storageEmptyState {
+  display: grid;
+  gap: 8px;
+  padding: 22px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.storageEmptyState strong {
+  font-size: 0.98rem;
+  font-weight: 550;
+  letter-spacing: -0.02em;
+}
+
+.helperCard strong {
+  font-size: 0.98rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.helperCard p {
+  color: rgba(255, 255, 255, 0.66);
+  line-height: 1.55;
+}
+
+.inlineLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  width: fit-content;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.editorOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(11, 11, 11, 0.58);
+  backdrop-filter: blur(8px);
+}
+
+.editorModal {
+  width: min(720px, 100%);
+  max-height: calc(100% - 24px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background: #1f1f1f;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.32);
+}
+
+.editorModalWide {
+  width: min(860px, 100%);
+}
+
+.editorHeader {
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.editorHeader h3 {
+  font-size: 1.5rem;
+  line-height: 1.06;
+  letter-spacing: -0.04em;
+}
+
+.editorBody {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 18px;
+  padding: 20px 24px 24px;
+}
+
+.editorIntro {
+  color: rgba(255, 255, 255, 0.68);
+  line-height: 1.6;
+}
+
+.editorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.infoSectionList {
+  display: grid;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.infoSection {
+  display: grid;
+  gap: 8px;
+  padding: 18px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.infoSection strong {
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.infoSection p {
+  color: rgba(255, 255, 255, 0.68);
+  line-height: 1.6;
+}
+
+.confirmationCopy {
+  display: grid;
+  gap: 8px;
+}
+
+.confirmationCopy p,
+.confirmationCopy span {
+  color: rgba(255, 255, 255, 0.68);
+  line-height: 1.55;
+}
+
+.confirmationCopy strong {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.modalRowCopy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  max-width: 560px;
+}
+
+.modalRowCopy strong {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.modalRowCopy small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.modalRowState {
+  min-width: 92px;
+  justify-self: end;
+  align-self: center;
+  text-align: right;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.5;
+}
+
+.modalRowStateActive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 560;
+  line-height: 1;
+}
+
+.sectionHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sectionHeading h3 {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.sectionHeading p {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.64);
+  line-height: 1.5;
+}
+
+.singleFieldGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 10px;
+}
+
+.field span,
+.pickerHeader span {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.field input,
+.searchInput,
+.folderInput {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 15px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: #1f1f1f;
+  color: #ffffff;
+  font: inherit;
+  outline: none;
+  box-shadow: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.field input:focus,
+.field input:focus-visible,
+.searchInput:focus,
+.searchInput:focus-visible,
+.folderInput:focus,
+.folderInput:focus-visible {
+  border-color: rgba(255, 255, 255, 0.12);
+  outline: none;
+  box-shadow: none;
+}
+
+.destructiveAction {
+  min-height: 52px;
+  padding: 0 20px;
+  border: 1px solid rgba(255, 123, 123, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 123, 123, 0.12);
+  color: #ffd2d2;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.destructiveAction:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pickerHeader {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.pickerHeader p {
+  color: rgba(255, 255, 255, 0.64);
+  line-height: 1.55;
+}
+
+.pickerShell {
+  padding: 16px;
+}
+
+.selectedFolderCard {
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: #212121;
+}
+
+.selectedFolderCard strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.98rem;
+  font-weight: 650;
+}
+
+.selectedFolderCard p,
+.disabledPicker,
+.emptyFolders,
+.reviewCard p,
+.footerHint span {
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.55;
+}
+
+.searchInput {
+  margin-top: 12px;
+}
+
+.folderList {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.folderOption {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: #232323;
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.folderOption small {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.folderOptionActive {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: #2f2f2f;
+}
+
+.disabledPicker,
+.emptyFolders {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: #212121;
+}
+
+.addRowButton,
+.rowAction {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.addRowButton {
+  min-height: 40px;
+  padding: 0 15px;
+  font-weight: 650;
+}
+
+.folderTree {
+  display: grid;
+  gap: 12px;
+}
+
+.folderRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: #232323;
+}
+
+.folderGlyph {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #1a1a1a;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rowAction {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.rowAction:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.reviewGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.reviewCard {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: #232323;
+  cursor: pointer;
+}
+
+.reviewCard input {
+  width: 18px;
+  height: 18px;
+}
+
+.reviewCard strong {
+  font-size: 0.98rem;
+  font-weight: 650;
+}
+
+.reviewCardActive {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: #2f2f2f;
+}
+
+.settingsPaneFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 28px 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.footerHint {
+  display: grid;
+  gap: 2px;
+}
+
+.footerHint strong {
+  font-size: 0.96rem;
+  font-weight: 650;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.primaryAction,
+.secondaryAction {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 560;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.primaryAction {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.primaryAction:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.secondaryAction {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.secondaryAction:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.primaryAction:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.successMessage,
+.errorMessage {
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: #2a2a2a;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+@media (max-width: 1080px) {
+  .settingsShell {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .page {
+    padding: 16px;
+  }
+
+  .settingsOverlay {
+    height: min(920px, calc(100vh - 32px));
+  }
+
+  .settingsShell {
+    grid-template-columns: 1fr;
+    height: 100%;
+  }
+
+  .settingsSidebar {
+    height: auto;
+    grid-template-rows: auto auto;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .settingsNav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .helperGrid,
+  .cleanupGrid,
+  .reviewGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 12px;
+  }
+
+  .settingsOverlay {
+    height: calc(100vh - 24px);
+  }
+
+  .settingsPaneHeader,
+  .settingsPaneBody,
+  .settingsPaneFooter {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .settingsPaneHeader h2 {
+    font-size: 1.6rem;
+  }
+
+  .settingsRowButton,
+  .settingsRowLink,
+  .settingsRowStatic,
+  .modalRowButton {
+    grid-template-columns: 1fr auto auto;
+    gap: 10px;
+  }
+
+  .modalRowButton {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .settingsNav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .folderRow {
+    grid-template-columns: 1fr;
+  }
+
+  .rowActions {
+    justify-content: flex-start;
+  }
+
+  .settingsPaneFooter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions {
+    justify-content: stretch;
+  }
+
+  .primaryAction {
+    width: 100%;
+  }
+}
