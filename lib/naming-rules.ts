@@ -57,6 +57,7 @@ export type DocumentFilenamePlanInput = {
   detectedClient?: string | null;
   detectedClient2?: string | null;
   documentDate?: string | null;
+  documentTypeId?: NamingRuleDocumentType;
   documentTypeLabel: string;
   entityName?: string | null;
   extension?: string | null;
@@ -80,6 +81,57 @@ type RuleDefinition = {
   exampleContext: NamingRuleContext;
   label: string;
   supportedTokens: NamingTokenId[];
+};
+
+const DOCUMENT_SUBTYPE_OPTIONS: Partial<Record<NamingRuleDocumentType, string[]>> = {
+  account_statement: [
+    "Monthly statement",
+    "Quarterly statement",
+    "Annual statement",
+    "Performance report",
+  ],
+  money_movement_form: [
+    "ACH form",
+    "Wire form",
+    "Journal form",
+    "Transfer form",
+    "Standing letter",
+  ],
+  tax_return: ["1040", "1040X", "State return", "Extension", "Estimated payment"],
+  tax_document: [
+    "1099",
+    "1099-DA",
+    "1099-DIV",
+    "1099-INT",
+    "1099-B",
+    "1099-R",
+    "1099-MISC",
+    "1099-NEC",
+    "1098",
+    "W-2",
+    "K-1",
+  ],
+  identity_document: [
+    "Driver License",
+    "Passport",
+    "Social Security Card",
+    "State ID",
+    "Birth Certificate",
+  ],
+  planning_document: [
+    "Meeting notes",
+    "Financial plan",
+    "Retirement analysis",
+    "Recommendation letter",
+    "Action items",
+  ],
+  legal_document: [
+    "Trust document",
+    "Will",
+    "Power of Attorney",
+    "LLC document",
+    "Beneficiary form",
+  ],
 };
 
 export const NAMING_TOKEN_DEFINITIONS: TokenDefinition[] = [
@@ -249,15 +301,16 @@ export const NAMING_RULE_DEFINITIONS: Record<
       "last_name",
       "first_name",
       "client2_first_name",
+      "custodian",
       "document_type",
       "tax_year",
     ],
     exampleContext: {
       clientFolder: "Bakken_Christopher",
       clientName2: "Mary Bakken",
-      custodian: "Fidelity",
+      custodian: "Coinbase",
       documentTypeId: "tax_document",
-      documentTypeLabel: "1099",
+      documentTypeLabel: "1099-DA",
       extension: ".pdf",
       ownershipType: "joint",
       taxYear: "2025",
@@ -429,6 +482,36 @@ export function getNamingRuleDefinition(documentType: NamingRuleDocumentType) {
   return NAMING_RULE_DEFINITIONS[documentType];
 }
 
+export function getNamingDocumentTypeLabel(documentType: NamingRuleDocumentType) {
+  return NAMING_RULE_DEFINITIONS[documentType].label;
+}
+
+export function getDetectedDocumentSubtype(
+  documentTypeId: NamingRuleDocumentType,
+  detectedDocumentType: string | null | undefined,
+) {
+  const normalized = (detectedDocumentType ?? "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized === getNamingDocumentTypeLabel(documentTypeId) ? null : normalized;
+}
+
+export function getDocumentSubtypeOptions(
+  documentTypeId: NamingRuleDocumentType,
+  currentSubtype?: string | null,
+) {
+  const options = [...(DOCUMENT_SUBTYPE_OPTIONS[documentTypeId] ?? [])];
+  const normalizedCurrent = (currentSubtype ?? "").trim();
+
+  if (normalizedCurrent && !options.includes(normalizedCurrent)) {
+    options.unshift(normalizedCurrent);
+  }
+
+  return options;
+}
+
 export function getNamingDocumentTypeOptions() {
   return (
     Object.entries(NAMING_RULE_DEFINITIONS) as Array<
@@ -497,7 +580,14 @@ export function getDocumentTypeIdFromLabel(label: string | null | undefined) {
     return "tax_return";
   }
 
-  if (normalized.includes("tax")) {
+  if (
+    normalized.includes("tax") ||
+    normalized.includes("1099") ||
+    normalized.includes("1098") ||
+    normalized.includes("w-2") ||
+    normalized.includes("w2") ||
+    normalized.includes("k-1")
+  ) {
     return "tax_document";
   }
 
@@ -611,7 +701,8 @@ export function buildDocumentFilenamePlan(input: DocumentFilenamePlanInput) {
     detectedClient: normalizeOptionalPlanValue(input.detectedClient),
     detectedClient2: normalizeOptionalPlanValue(input.detectedClient2),
     documentDate: normalizeOptionalPlanValue(input.documentDate),
-    documentTypeId: getDocumentTypeIdFromLabel(input.documentTypeLabel),
+    documentTypeId:
+      input.documentTypeId ?? getDocumentTypeIdFromLabel(input.documentTypeLabel),
     documentTypeLabel: input.documentTypeLabel,
     entityName: normalizeOptionalPlanValue(input.entityName),
     extension: normalizeOptionalPlanValue(input.extension),
@@ -786,6 +877,13 @@ function upgradeLegacyRecommendedRule(
     ],
     tax_document: [
       ["last_name", "first_name", "document_type", "tax_year"],
+      [
+        "last_name",
+        "first_name",
+        "client2_first_name",
+        "document_type",
+        "tax_year",
+      ],
       [
         "last_name",
         "first_name",

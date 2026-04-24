@@ -27,6 +27,7 @@ export type FilingCandidate = {
   finalTopLevelFolder: string | null;
   finalFilename: string | null;
   detectedDocumentType?: string | null;
+  detectedDocumentSubtype?: string | null;
   detectedClient?: string | null;
   detectedClient2?: string | null;
   detectedOwnershipType?: "single" | "joint" | null;
