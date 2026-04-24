@@ -630,8 +630,11 @@ function isIdentityContext(state: DataIntelligenceConversationState) {
   );
 }
 
-function appendQuestionForClient(question: string, clientName: string) {
+function appendQuestionForClient(question: string, clientName: string | null) {
   const trimmedQuestion = question.trim().replace(/[?.!]+$/, "");
+  if (!clientName) {
+    return `${trimmedQuestion}?`;
+  }
   return `${trimmedQuestion} for ${clientName}?`;
 }
 
