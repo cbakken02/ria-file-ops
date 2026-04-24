@@ -2,42 +2,14 @@ import Link from "next/link";
 import type { Session } from "next-auth";
 import { AccountMenu } from "@/components/account-menu";
 import { getFirmSettingsByOwnerEmail } from "@/lib/db";
+import { PRODUCT_NAV_ITEMS, type ProductNavPath } from "@/lib/product-navigation";
 import styles from "./product-shell.module.css";
 
 type ProductShellProps = {
   children: React.ReactNode;
-  currentPath:
-    | "/dashboard"
-    | "/preview"
-    | "/cleanup"
-    | "/history"
-    | "/security"
-    | "/setup";
+  currentPath: ProductNavPath;
   session: Session;
 };
-
-const navItems = [
-  {
-    href: "/dashboard" as const,
-    label: "Dashboard",
-    hint: "Overview",
-  },
-  {
-    href: "/preview" as const,
-    label: "Intake",
-    hint: "New Files",
-  },
-  {
-    href: "/cleanup" as const,
-    label: "Cleanup",
-    hint: "Existing Files",
-  },
-  {
-    href: "/history" as const,
-    label: "Filing history",
-    hint: "Audit",
-  },
-];
 
 export async function ProductShell({
   children,
@@ -66,7 +38,7 @@ export async function ProductShell({
 
         <div className={styles.navLabel}>Workspace</div>
         <nav className={styles.navSection}>
-          {navItems.map((item) => {
+          {PRODUCT_NAV_ITEMS.map((item) => {
             const isActive = item.href === currentPath;
 
             return (
