@@ -20,6 +20,7 @@ import {
   storageConnectionHasWriteAccess,
 } from "@/lib/storage-connections";
 import { IntakeQueue } from "./intake-queue";
+import { RefreshIntakeButton } from "./refresh-intake-button";
 import styles from "./page.module.css";
 
 export default async function PreviewPage({
@@ -123,6 +124,7 @@ export default async function PreviewPage({
         },
         existingClientFolders,
         clientMemoryRules,
+        { analysisMode: "preview" },
       );
 
   const readyItems = preview.items.filter((item) => item.status === "Ready to stage");
@@ -178,30 +180,36 @@ export default async function PreviewPage({
             Review exceptions and file ready items.
           </p>
         </div>
-        <StorageSwitcher
-          activeConnection={
-            displayConnection
-              ? {
-                  id: displayConnection.id,
-                  provider: displayConnection.provider,
-                  accountName: displayConnection.accountName,
-                  accountEmail: displayConnection.accountEmail,
-                  isPrimary: displayConnection.isPrimary,
-                  status: displayConnection.status,
-                }
-              : null
-          }
-          connections={storageConnections.map((connection) => ({
-            id: connection.id,
-            provider: connection.provider,
-            accountName: connection.accountName,
-            accountEmail: connection.accountEmail,
-            isPrimary: connection.isPrimary,
-            status: connection.status,
-          }))}
-          currentPath="/preview"
-          workspaceName={settings?.firmName ?? null}
-        />
+        <div className={styles.headerActions}>
+          <RefreshIntakeButton
+            activeTab={activeTab}
+            disabled={!canPreview || Boolean(liveQueueError)}
+          />
+          <StorageSwitcher
+            activeConnection={
+              displayConnection
+                ? {
+                    id: displayConnection.id,
+                    provider: displayConnection.provider,
+                    accountName: displayConnection.accountName,
+                    accountEmail: displayConnection.accountEmail,
+                    isPrimary: displayConnection.isPrimary,
+                    status: displayConnection.status,
+                  }
+                : null
+            }
+            connections={storageConnections.map((connection) => ({
+              id: connection.id,
+              provider: connection.provider,
+              accountName: connection.accountName,
+              accountEmail: connection.accountEmail,
+              isPrimary: connection.isPrimary,
+              status: connection.status,
+            }))}
+            currentPath="/preview"
+            workspaceName={settings?.firmName ?? null}
+          />
+        </div>
       </header>
 
       {notice ? (

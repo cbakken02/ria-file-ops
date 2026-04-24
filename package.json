@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "inspect:firm-db": "node --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/inspect-firm-document-sqlite.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",

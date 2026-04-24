@@ -90,6 +90,31 @@ export async function createPreviewFileSnapshot(input: {
   return meta;
 }
 
+export async function hasPreviewFileSnapshot(snapshotId: string) {
+  if (!isSafeSnapshotId(snapshotId)) {
+    return false;
+  }
+
+  await ensureSnapshotDir();
+
+  try {
+    const rawMeta = await fs.readFile(getSnapshotMetaPath(snapshotId), "utf8");
+    const meta = JSON.parse(rawMeta) as PreviewFileSnapshotMeta;
+    const createdAt = new Date(meta.createdAt).getTime();
+
+    if (!Number.isFinite(createdAt) || Date.now() - createdAt > SNAPSHOT_TTL_MS) {
+      await removeSnapshot(snapshotId);
+      return false;
+    }
+
+    await fs.access(getSnapshotBufferPath(snapshotId));
+    return true;
+  } catch {
+    await removeSnapshot(snapshotId);
+    return false;
+  }
+}
+
 export async function readPreviewFileSnapshot(snapshotId: string) {
   if (!isSafeSnapshotId(snapshotId)) {
     return null;

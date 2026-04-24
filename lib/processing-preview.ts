@@ -1,10 +1,26 @@
 import type { GoogleDriveFile } from "@/lib/google-drive";
-import { createPreviewFileSnapshot } from "@/lib/preview-file-snapshots";
+import { resolveAnalysisProfileForMode } from "@/lib/ai-primary-parser";
+import {
+  createPreviewFileSnapshot,
+  hasPreviewFileSnapshot,
+} from "@/lib/preview-file-snapshots";
 import {
   resolveHouseholdFolderName,
   suggestCanonicalHouseholdFolderName,
 } from "@/lib/client-matching";
-import { analyzeDocument } from "@/lib/document-intelligence";
+import {
+  analyzeDocumentWithEnvelope,
+  DOCUMENT_ANALYSIS_VERSION,
+} from "@/lib/document-intelligence";
+import {
+  writeCanonicalAccountStatementToSqlite,
+  writeCanonicalIdentityDocumentToSqlite,
+} from "@/lib/firm-document-sqlite";
+import {
+  readPreviewAnalysisCache,
+  writePreviewAnalysisCache,
+} from "@/lib/preview-analysis-cache";
+import type { AnalysisProfile } from "@/lib/ai-primary-parser-types";
 import {
   getReviewRuleOption,
   normalizeFolderTemplate,
@@ -47,6 +63,9 @@ export type PreviewItem = {
   suggestedClientFolder: string | null;
   clientMatchReason: string;
   clientResolutionStatus: "matched_existing" | "created_new" | "needs_review";
+  analysisSource: "fresh_analysis" | "loaded_from_cache";
+  analysisRanAt: string | null;
+  cacheWrittenAt: string | null;
   contentSource: "pdf_text" | "pdf_ocr" | "image_ocr" | "metadata_only";
   textExcerpt: string | null;
   diagnosticText: string | null;
@@ -76,6 +95,9 @@ export async function buildProcessingPreview(
   getFileBuffer: (fileId: string) => Promise<Buffer>,
   existingClientFolders: string[],
   clientMemoryRules: ClientMemoryRule[] = [],
+  options: {
+    analysisMode?: "default" | "preview";
+  } = {},
 ) {
   const folderTemplate = normalizeFolderTemplate(settings?.folderTemplate);
   const namingRules = parseNamingRules(
@@ -98,6 +120,8 @@ export async function buildProcessingPreview(
         getFileBuffer,
         existingClientFolders,
         clientMemoryRules,
+        settings?.ownerEmail ?? null,
+        resolveAnalysisProfileForMode(options.analysisMode ?? "default"),
       ),
     ),
   );
@@ -122,15 +146,21 @@ async function buildPreviewItem(
   getFileBuffer: (fileId: string) => Promise<Buffer>,
   existingClientFolders: string[],
   clientMemoryRules: ClientMemoryRule[],
+  ownerEmail: string | null,
+  analysisProfile: AnalysisProfile,
 ): Promise<PreviewItem> {
-  const buffer = await getFileBuffer(file.id);
-  const insight = await analyzeDocument(file, async () => buffer);
-  const previewSnapshot = await createPreviewFileSnapshot({
-    buffer,
-    fileId: file.id,
-    sourceName: file.name,
-    mimeType: file.mimeType,
-  }).catch(() => null);
+  const {
+    insight,
+    previewSnapshotId,
+    analysisSource,
+    analysisRanAt,
+    cacheWrittenAt,
+  } = await loadPreviewArtifacts({
+    file,
+    getFileBuffer,
+    ownerEmail,
+    analysisProfile,
+  });
   const detectedClient = insight.detectedClient;
   const detectedClient2 = insight.detectedClient2;
   const clientMatch = resolveHouseholdFolderName(
@@ -208,7 +238,7 @@ async function buildPreviewItem(
     driveSize: file.size,
     downloadByteLength: insight.debug.downloadByteLength,
     downloadSha1: insight.debug.downloadSha1,
-    previewSnapshotId: previewSnapshot?.id ?? null,
+    previewSnapshotId,
     parserConflictSummary: insight.debug.parserConflictSummary,
     proposedTopLevelFolder,
     proposedFilename,
@@ -228,6 +258,9 @@ async function buildPreviewItem(
     suggestedClientFolder,
     clientMatchReason: clientMatch.matchReason,
     clientResolutionStatus: clientMatch.status,
+    analysisSource,
+    analysisRanAt,
+    cacheWrittenAt,
     contentSource: insight.contentSource,
     textExcerpt: insight.textExcerpt,
     diagnosticText: insight.diagnosticText,
@@ -241,6 +274,153 @@ async function buildPreviewItem(
     extractedEntityName: insight.metadata.entityName,
     extractedIdType: insight.metadata.idType,
     extractedTaxYear: insight.metadata.taxYear,
+  };
+}
+
+async function loadPreviewArtifacts(input: {
+  file: GoogleDriveFile;
+  getFileBuffer: (fileId: string) => Promise<Buffer>;
+  ownerEmail: string | null;
+  analysisProfile: AnalysisProfile;
+}) {
+  const cachedEntry = input.ownerEmail
+    ? await readPreviewAnalysisCache({
+        analysisProfile: input.analysisProfile,
+        ownerEmail: input.ownerEmail,
+        file: input.file,
+      })
+    : null;
+
+  if (cachedEntry) {
+    const cachedSnapshotId =
+      cachedEntry.previewSnapshotId &&
+      (await hasPreviewFileSnapshot(cachedEntry.previewSnapshotId))
+        ? cachedEntry.previewSnapshotId
+        : null;
+
+    if (cachedSnapshotId) {
+      return {
+        insight: cachedEntry.insight,
+        previewSnapshotId: cachedSnapshotId,
+        analysisSource: "loaded_from_cache" as const,
+        analysisRanAt: cachedEntry.analysisRanAt ?? cachedEntry.createdAt,
+        cacheWrittenAt: cachedEntry.updatedAt,
+      };
+    }
+
+    const buffer = await input.getFileBuffer(input.file.id);
+    const previewSnapshot = await createPreviewFileSnapshot({
+      buffer,
+      fileId: input.file.id,
+      sourceName: input.file.name,
+      mimeType: input.file.mimeType,
+    }).catch(() => null);
+    const previewSnapshotId = previewSnapshot?.id ?? null;
+
+    if (input.ownerEmail) {
+      const cacheEntry = await writePreviewAnalysisCache({
+        analysisProfile: input.analysisProfile,
+        ownerEmail: input.ownerEmail,
+        file: input.file,
+        insight: cachedEntry.insight,
+        previewSnapshotId,
+      });
+
+      return {
+        insight: cachedEntry.insight,
+        previewSnapshotId,
+        analysisSource: "loaded_from_cache" as const,
+        analysisRanAt: cacheEntry.analysisRanAt,
+        cacheWrittenAt: cacheEntry.updatedAt,
+      };
+    }
+
+    return {
+      insight: cachedEntry.insight,
+      previewSnapshotId,
+      analysisSource: "loaded_from_cache" as const,
+      analysisRanAt: cachedEntry.analysisRanAt ?? cachedEntry.createdAt,
+      cacheWrittenAt: null,
+    };
+  }
+
+  const buffer = await input.getFileBuffer(input.file.id);
+  const analysisRanAt = new Date().toISOString();
+  const envelope = await analyzeDocumentWithEnvelope(
+    input.file,
+    async () => buffer,
+    { analysisProfile: input.analysisProfile },
+  );
+  const insight = envelope.legacyInsight;
+  const previewSnapshot = await createPreviewFileSnapshot({
+    buffer,
+    fileId: input.file.id,
+    sourceName: input.file.name,
+    mimeType: input.file.mimeType,
+  }).catch(() => null);
+  const previewSnapshotId = previewSnapshot?.id ?? null;
+
+  if (input.ownerEmail) {
+    const canonical = envelope.canonical;
+    const canonicalDocumentTypeId =
+      canonical?.classification.normalized.documentTypeId ?? null;
+
+    if (canonical) {
+      if (
+        input.analysisProfile === "preview_ai_primary" &&
+        canonicalDocumentTypeId === "account_statement"
+      ) {
+        try {
+          writeCanonicalAccountStatementToSqlite({
+            ownerEmail: input.ownerEmail,
+            analysisProfile: input.analysisProfile,
+            analysisVersion: DOCUMENT_ANALYSIS_VERSION,
+            analysisRanAt,
+            canonical,
+          });
+        } catch (error) {
+          console.error("Canonical statement SQLite write failed.", error);
+        }
+      } else if (canonicalDocumentTypeId === "identity_document") {
+        try {
+          writeCanonicalIdentityDocumentToSqlite({
+            ownerEmail: input.ownerEmail,
+            analysisProfile: input.analysisProfile,
+            analysisVersion: DOCUMENT_ANALYSIS_VERSION,
+            analysisRanAt,
+            canonical,
+          });
+        } catch (error) {
+          console.error("Canonical identity-document SQLite write failed.", error);
+        }
+      }
+    }
+
+    const cacheEntry = await writePreviewAnalysisCache({
+      analysisProfile: input.analysisProfile,
+      ownerEmail: input.ownerEmail,
+      file: input.file,
+      insight,
+      canonical: envelope.canonical,
+      previewSnapshotId,
+      analysisRanAt,
+    });
+
+    return {
+      insight,
+      previewSnapshotId,
+      analysisSource: "fresh_analysis" as const,
+      analysisRanAt: cacheEntry.analysisRanAt,
+      cacheWrittenAt: cacheEntry.updatedAt,
+    };
+  }
+
+  return {
+    insight,
+    previewSnapshotId,
+    analysisSource: "fresh_analysis" as const,
+    analysisRanAt,
+    cacheWrittenAt: null,
   };
 }
 

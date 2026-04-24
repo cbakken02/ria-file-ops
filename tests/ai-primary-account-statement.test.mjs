@@ -9,6 +9,7 @@ import {
 } from "../lib/ai-primary-parser.ts";
 import { normalizeAccountStatementCustodian } from "../lib/account-statement-ai-normalization.ts";
 import { finalizeCanonicalExtractedDocument } from "../lib/canonical-extracted-document.ts";
+import { projectCanonicalToPreviewSafePersistedShape } from "../lib/canonical-persistence.ts";
 import { analyzeTextContentWithEnvelope } from "../lib/document-intelligence.ts";
 import { analyzeSyntheticDocument } from "./specialized-regression-helpers.mjs";
 
@@ -2079,6 +2080,9 @@ Current Balance $4,555.10
       ],
     );
 
+    const previewSafe = projectCanonicalToPreviewSafePersistedShape(envelope.canonical);
+    assert.ok(previewSafe);
+    assert.equal("accountNumber" in previewSafe.normalized.accounts[0], false);
     assert.equal(envelope.legacyInsight.metadata.accountLast4, "9012");
     assert.equal(envelope.legacyInsight.metadata.accountType, "Checking");
     assert.equal(envelope.legacyInsight.metadata.custodian, "U.S. Bank");

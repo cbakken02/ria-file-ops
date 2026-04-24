@@ -12,6 +12,7 @@ import {
   listFilesInFolder,
   type GoogleDriveFile,
 } from "@/lib/google-drive";
+import { clearPreviewAnalysisCacheForOwner } from "@/lib/preview-analysis-cache";
 import { buildProcessingPreview } from "@/lib/processing-preview";
 import { requireSession } from "@/lib/session";
 import {
@@ -150,4 +151,48 @@ export async function prepareReadyItemsFilingRedirect(
 
 export async function fileReadyItemsAction() {
   redirect(await prepareReadyItemsFilingRedirect("manual"));
+}
+
+export async function refreshIntakeAction(formData: FormData) {
+  const requestedTab = String(formData.get("tab") ?? "all");
+  const tab =
+    requestedTab === "review" ||
+    requestedTab === "ready" ||
+    requestedTab === "filed"
+      ? requestedTab
+      : "all";
+  const tabQuery = tab === "all" ? "" : `?tab=${tab}`;
+  const session = await requireSession();
+  const ownerEmail = session.user?.email;
+  const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
+
+  if (!ownerEmail || !activeConnection) {
+    redirect(
+      `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
+        "Reconnect storage before refreshing Intake.",
+      )}`,
+    );
+  }
+
+  const settings = getFirmSettingsByOwnerEmail(ownerEmail);
+  if (!settings?.sourceFolderId) {
+    redirect(
+      `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
+        "Choose an intake source folder before refreshing Intake.",
+      )}`,
+    );
+  }
+
+  await clearPreviewAnalysisCacheForOwner(ownerEmail);
+
+  revalidatePath("/preview");
+  const refreshedAt = new Intl.DateTimeFormat("en-US", {
+    timeStyle: "short",
+  }).format(new Date());
+
+  redirect(
+    `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
+      `Intake refreshed at ${refreshedAt}`,
+    )}`,
+  );
 }
