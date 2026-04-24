@@ -25,6 +25,7 @@ import styles from "./page.module.css";
 type CleanupPlannerProps = {
   hasActiveStorage: boolean;
   inactiveStorageMessage: string;
+  inactiveStorageTitle: string;
   rootBrowserFolderId: string;
   rootBrowserFolderName: string;
   initialCurrentFolderId: string;
@@ -179,6 +180,7 @@ function getDocumentTypeOptions(currentLabel: string) {
 export function CleanupPlanner({
   hasActiveStorage,
   inactiveStorageMessage,
+  inactiveStorageTitle,
   rootBrowserFolderId,
   rootBrowserFolderName,
   initialCurrentFolderId,
@@ -603,6 +605,19 @@ export function CleanupPlanner({
     });
   }, [editableRows, activePreviewFileId, mode]);
 
+  if (!storageAvailable) {
+    return (
+      <div className={styles.cleanupLayout}>
+        <section className={styles.selectionSection}>
+          <div className={styles.noteCard}>
+            <strong>{inactiveStorageTitle}</strong>
+            <p>{inactiveStorageMessage}</p>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.cleanupLayout}>
       <section className={styles.selectionSection}>
@@ -643,93 +658,85 @@ export function CleanupPlanner({
             ))}
           </div>
 
-          {!storageAvailable ? (
-            <p className={styles.placeholder}>
-              {inactiveStorageMessage}
-            </p>
-          ) : null}
-
           {browserError ? <p className={styles.errorBox}>{browserError}</p> : null}
           {runNotice ? <p className={styles.successBox}>{runNotice}</p> : null}
 
-          {storageAvailable ? (
-            <div className={styles.selectionList}>
-              {browserLoading ? (
-                <div className={styles.placeholder}>Loading folder contents...</div>
-              ) : safeBrowserItems.length === 0 ? (
-                <div className={styles.placeholder}>
-                  Nothing was returned from this folder yet.
-                </div>
-              ) : (
-                safeBrowserItems.map((item) => {
-                  const folder = isFolder(item);
-                  const selected = selectedTargets.some(
-                    (entry) => entry.id === item.id,
-                  );
+          <div className={styles.selectionList}>
+            {browserLoading ? (
+              <div className={styles.placeholder}>Loading folder contents...</div>
+            ) : safeBrowserItems.length === 0 ? (
+              <div className={styles.placeholder}>
+                Nothing was returned from this folder yet.
+              </div>
+            ) : (
+              safeBrowserItems.map((item) => {
+                const folder = isFolder(item);
+                const selected = selectedTargets.some(
+                  (entry) => entry.id === item.id,
+                );
 
-                  return (
-                    <div
-                      key={item.id}
-                      className={
-                        selected ? styles.browserRowSelected : styles.browserRow
+                return (
+                  <div
+                    key={item.id}
+                    className={
+                      selected ? styles.browserRowSelected : styles.browserRow
+                    }
+                    onDoubleClick={() => {
+                      if (folder) {
+                        void openFolder(item.id, [
+                          ...safeFolderTrail,
+                          { id: item.id, name: item.name },
+                        ]);
                       }
-                      onDoubleClick={() => {
-                        if (folder) {
-                          void openFolder(item.id, [
-                            ...safeFolderTrail,
-                            { id: item.id, name: item.name },
-                          ]);
-                        }
-                      }}
-                    >
-                      <div className={styles.browserRowMain}>
-                        <div className={styles.browserRowTitle}>
-                          <FileKindIcon
-                            className={styles.browserItemIcon}
-                            mimeType={item.mimeType}
-                            name={item.name}
-                          />
-                          <strong>{item.name}</strong>
-                        </div>
-                        {describeBrowserItem(scope, item) ? (
-                          <p>{describeBrowserItem(scope, item)}</p>
-                        ) : null}
+                    }}
+                  >
+                    <div className={styles.browserRowMain}>
+                      <div className={styles.browserRowTitle}>
+                        <FileKindIcon
+                          className={styles.browserItemIcon}
+                          mimeType={item.mimeType}
+                          name={item.name}
+                        />
+                        <strong>{item.name}</strong>
                       </div>
+                      {describeBrowserItem(scope, item) ? (
+                        <p>{describeBrowserItem(scope, item)}</p>
+                      ) : null}
+                    </div>
 
-                      <div className={styles.browserRowActions}>
-                        {folder ? (
-                          <button
-                            className={styles.browserActionSecondary}
-                            onClick={() =>
-                              openFolder(item.id, [
-                                ...safeFolderTrail,
-                                { id: item.id, name: item.name },
-                              ])
-                            }
-                            type="button"
-                          >
-                            Open
-                          </button>
-                        ) : null}
-
+                    <div className={styles.browserRowActions}>
+                      {folder ? (
                         <button
-                          className={
-                            selected
-                              ? styles.browserActionActive
-                              : styles.browserActionPrimary
+                          className={styles.browserActionSecondary}
+                          onClick={() =>
+                            openFolder(item.id, [
+                              ...safeFolderTrail,
+                              { id: item.id, name: item.name },
+                            ])
                           }
-                          onClick={() => toggleSelection(item)}
                           type="button"
                         >
-                          {getSelectLabel(scope, selected)}
+                          Open
                         </button>
-                      </div>
+                      ) : null}
+
+                      <button
+                        className={
+                          selected
+                            ? styles.browserActionActive
+                            : styles.browserActionPrimary
+                        }
+                        onClick={() => toggleSelection(item)}
+                        type="button"
+                      >
+                        {getSelectLabel(scope, selected)}
+                      </button>
                     </div>
-                  );
-                })
-              )}
-            </div>
-          ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </section>
 

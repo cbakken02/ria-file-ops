@@ -1,5 +1,7 @@
 import { FileKindIcon } from "@/components/file-kind-icon";
 import { ProductShell } from "@/components/product-shell";
+import { StorageStatusPanel } from "@/components/storage-status-panel";
+import { StorageSwitcher } from "@/components/storage-switcher";
 import {
   getFilingEventsByOwnerEmail,
   getFirmSettingsByOwnerEmail,
@@ -8,13 +10,28 @@ import {
 import { listFilesInFolder } from "@/lib/google-drive";
 import { readPreviewSnapshot } from "@/lib/preview-snapshot";
 import { requireSession } from "@/lib/session";
-import { getActiveStorageConnectionForSession } from "@/lib/storage-connections";
+import {
+  getStorageConnectionsForSession,
+  getVerifiedActiveStorageConnectionForSession,
+} from "@/lib/storage-connections";
 import styles from "./page.module.css";
 
 export default async function DashboardPage() {
   const session = await requireSession();
   const ownerEmail = session.user?.email ?? "";
-  const activeConnection = await getActiveStorageConnectionForSession(session);
+  const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
+  const storageConnections = await getStorageConnectionsForSession(session);
+  const displayConnection =
+    storageConnections.find((connection) => connection.isPrimary) ?? null;
+  const hasVerifiedStorageAccess = Boolean(activeConnection);
+  const activeStorageProvider =
+    displayConnection?.provider ?? activeConnection?.provider ?? null;
+  const storageStatusTitle = displayConnection
+    ? "Reconnect storage"
+    : "Connect storage";
+  const storageStatusSummary = displayConnection
+    ? "Dashboard is unavailable until storage access is restored."
+    : "Connect storage to use Dashboard.";
 
   const [settings, previewSnapshot, reviewDecisions, filingEvents] = await Promise.all([
     ownerEmail
@@ -30,22 +47,29 @@ export default async function DashboardPage() {
   ]);
 
   const destinationChildren =
+    hasVerifiedStorageAccess &&
     activeConnection &&
     settings?.destinationFolderId
       ? await listFilesInFolder(activeConnection.accessToken, settings.destinationFolderId).catch(
           () => [],
         )
       : [];
+  const visiblePreviewSnapshot = hasVerifiedStorageAccess ? previewSnapshot : null;
+  const visibleReviewDecisions = hasVerifiedStorageAccess ? reviewDecisions : [];
 
-  const successfulEvents = filingEvents.filter((event) => event.outcome === "succeeded");
-  const failedEvents = filingEvents.filter((event) => event.outcome === "failed");
+  const scopedFilingEvents =
+    hasVerifiedStorageAccess && activeStorageProvider
+      ? filingEvents.filter((event) => event.storageProvider === activeStorageProvider)
+      : [];
+  const successfulEvents = scopedFilingEvents.filter((event) => event.outcome === "succeeded");
+  const failedEvents = scopedFilingEvents.filter((event) => event.outcome === "failed");
   const autoFiledCount = successfulEvents.filter(
     (event) => event.actorType === "automation",
   ).length;
-  const readyCount = previewSnapshot?.readyCount ?? 0;
-  const reviewCount = previewSnapshot?.reviewCount ?? 0;
-  const previewItems = previewSnapshot?.items ?? [];
-  const approvedCount = reviewDecisions.filter(
+  const readyCount = visiblePreviewSnapshot?.readyCount ?? 0;
+  const reviewCount = visiblePreviewSnapshot?.reviewCount ?? 0;
+  const previewItems = visiblePreviewSnapshot?.items ?? [];
+  const approvedCount = visibleReviewDecisions.filter(
     (decision) => decision.status === "approved",
   ).length;
   const queueTotal = readyCount + reviewCount;
@@ -102,7 +126,7 @@ export default async function DashboardPage() {
     newClientSavedMinutes +
     failedSavedMinutes;
 
-  const recentEvents = [...filingEvents]
+  const recentEvents = [...scopedFilingEvents]
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .slice(0, 5);
 
@@ -110,136 +134,168 @@ export default async function DashboardPage() {
     <ProductShell currentPath="/dashboard" session={session}>
       <main className={styles.page}>
         <header className={styles.header}>
-          <div>
+          <div className={styles.headerIntro}>
             <p className={styles.eyebrow}>Dashboard</p>
             <h1>Operational pulse.</h1>
           </div>
-          <div className={styles.headerMeta}>
-            <span>{settings?.sourceFolderName ?? "Source not set"}</span>
-            <span>{previewSnapshot?.generatedAt ? formatTimestamp(previewSnapshot.generatedAt) : "No live snapshot yet"}</span>
+          <div className={styles.headerActions}>
+            <StorageSwitcher
+              activeConnection={
+                displayConnection
+                  ? {
+                      id: displayConnection.id,
+                      provider: displayConnection.provider,
+                      accountName: displayConnection.accountName,
+                      accountEmail: displayConnection.accountEmail,
+                      isPrimary: displayConnection.isPrimary,
+                      status: displayConnection.status,
+                    }
+                  : null
+              }
+              connections={storageConnections.map((connection) => ({
+                id: connection.id,
+                provider: connection.provider,
+                accountName: connection.accountName,
+                accountEmail: connection.accountEmail,
+                isPrimary: connection.isPrimary,
+                status: connection.status,
+              }))}
+              currentPath="/dashboard"
+              workspaceName={settings?.firmName ?? null}
+            />
           </div>
         </header>
 
-        <section className={styles.heroGrid}>
-          <section className={styles.impactSection}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <p className={styles.panelLabel}>Estimated time saved</p>
-              </div>
-              <span className={styles.metaBadge}>Weighted estimate</span>
-            </div>
-
-            <div className={styles.impactValueWrap}>
-              <div className={styles.impactValue} tabIndex={0}>
-                {formatTimeSaved(estimatedMinutesSaved)}
-              </div>
-              <div className={styles.impactTooltip}>
-                Based on {formatWholeNumber(processedFilesCount)} files touched so
-                far, weighted by document type and workflow stage. Money movement
-                forms save more time than simple IDs, while new-client and review
-                items count as partial savings instead of full automation.
-              </div>
-            </div>
-
-            <div className={styles.metaRow}>
-              <div className={styles.metaStat}>
-                <span>Automation rate</span>
-                <strong>{formatPercent(automationRate)}</strong>
-              </div>
-              <div className={styles.metaStat}>
-                <span>Files touched</span>
-                <strong>{formatWholeNumber(processedFilesCount)}</strong>
-              </div>
-              <div className={styles.metaStat}>
-                <span>Client folders</span>
-                <strong>{formatWholeNumber(clientFolderCount)}</strong>
-              </div>
-            </div>
-          </section>
-        </section>
-
-        <section className={styles.dashboardGrid}>
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <p className={styles.panelLabel}>Recent activity</p>
-                <h2>Latest filing actions</h2>
-              </div>
-            </div>
-
-            {recentEvents.length ? (
-              <div className={styles.activityList}>
-                {recentEvents.map((event) => (
-                  <div key={event.id} className={styles.activityRow}>
-                    <div className={styles.activityMain}>
-                      <div className={styles.activityFileRow}>
-                        <FileKindIcon
-                          className={styles.activityFileIcon}
-                          mimeType={event.sourceMimeType}
-                          name={event.finalFilename ?? event.sourceName}
-                        />
-                        <strong>{event.finalFilename ?? event.sourceName}</strong>
-                      </div>
-                      <p>
-                        {event.outcome === "succeeded"
-                          ? `${event.clientFolderName ?? "Unknown client"} / ${event.topLevelFolderName ?? "Unknown folder"}`
-                          : event.errorMessage ?? "Needs review"}
-                      </p>
-                    </div>
-                    <div className={styles.activityMeta}>
-                      <span
-                        className={
-                          event.outcome === "succeeded"
-                            ? styles.goodBadge
-                            : styles.warnBadge
-                        }
-                      >
-                        {event.outcome === "succeeded"
-                          ? event.actorType === "automation"
-                            ? "System"
-                            : "Reviewed"
-                          : "Error"}
-                      </span>
-                      <small>{formatTimestamp(event.createdAt)}</small>
-                    </div>
+        {hasVerifiedStorageAccess ? (
+          <>
+            <section className={styles.heroGrid}>
+              <section className={styles.impactSection}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.panelLabel}>Estimated time saved</p>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className={styles.placeholder}>
-                Once files start moving, the latest activity will show up here.
-              </p>
-            )}
-          </section>
+                  <span className={styles.metaBadge}>Weighted estimate</span>
+                </div>
 
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <p className={styles.panelLabel}>Queue totals</p>
-                <h2>Current workload</h2>
-              </div>
-            </div>
+                <div className={styles.impactValueWrap}>
+                  <div className={styles.impactValue} tabIndex={0}>
+                    {formatTimeSaved(estimatedMinutesSaved)}
+                  </div>
+                  <div className={styles.impactTooltip}>
+                    Based on {formatWholeNumber(processedFilesCount)} files touched so
+                    far, weighted by document type and workflow stage. Money movement
+                    forms save more time than simple IDs, while new-client and review
+                    items count as partial savings instead of full automation.
+                  </div>
+                </div>
 
-            <div className={styles.summaryGrid}>
-              <div className={styles.summaryCell}>
-                <span>Ready now</span>
-                <strong>{formatWholeNumber(readyCount)}</strong>
-              </div>
-              <div className={styles.summaryCell}>
-                <span>Needs review</span>
-                <strong>{formatWholeNumber(reviewCount)}</strong>
-              </div>
-              <div className={styles.summaryCell}>
-                <span>Approved</span>
-                <strong>{formatWholeNumber(approvedCount)}</strong>
-              </div>
-              <div className={styles.summaryCell}>
-                <span>Failed</span>
-                <strong>{formatWholeNumber(failedEvents.length)}</strong>
-              </div>
-            </div>
-          </section>
-        </section>
+                <div className={styles.metaRow}>
+                  <div className={styles.metaStat}>
+                    <span>Automation rate</span>
+                    <strong>{formatPercent(automationRate)}</strong>
+                  </div>
+                  <div className={styles.metaStat}>
+                    <span>Files touched</span>
+                    <strong>{formatWholeNumber(processedFilesCount)}</strong>
+                  </div>
+                  <div className={styles.metaStat}>
+                    <span>Client folders</span>
+                    <strong>{formatWholeNumber(clientFolderCount)}</strong>
+                  </div>
+                </div>
+              </section>
+            </section>
+
+            <section className={styles.dashboardGrid}>
+              <section className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.panelLabel}>Recent activity</p>
+                    <h2>Latest filing actions</h2>
+                  </div>
+                </div>
+
+                {recentEvents.length ? (
+                  <div className={styles.activityList}>
+                    {recentEvents.map((event) => (
+                      <div key={event.id} className={styles.activityRow}>
+                        <div className={styles.activityMain}>
+                          <div className={styles.activityFileRow}>
+                            <FileKindIcon
+                              className={styles.activityFileIcon}
+                              mimeType={event.sourceMimeType}
+                              name={event.finalFilename ?? event.sourceName}
+                            />
+                            <strong>{event.finalFilename ?? event.sourceName}</strong>
+                          </div>
+                          <p>
+                            {event.outcome === "succeeded"
+                              ? `${event.clientFolderName ?? "Unknown client"} / ${event.topLevelFolderName ?? "Unknown folder"}`
+                              : event.errorMessage ?? "Needs review"}
+                          </p>
+                        </div>
+                        <div className={styles.activityMeta}>
+                          <span
+                            className={
+                              event.outcome === "succeeded"
+                                ? styles.goodBadge
+                                : styles.warnBadge
+                            }
+                          >
+                            {event.outcome === "succeeded"
+                              ? event.actorType === "automation"
+                                ? "System"
+                                : "Reviewed"
+                              : "Error"}
+                          </span>
+                          <small>{formatTimestamp(event.createdAt)}</small>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={styles.placeholder}>
+                    Once files start moving, the latest activity will show up here.
+                  </p>
+                )}
+              </section>
+
+              <section className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.panelLabel}>Queue totals</p>
+                    <h2>Current workload</h2>
+                  </div>
+                </div>
+
+                <div className={styles.summaryGrid}>
+                  <div className={styles.summaryCell}>
+                    <span>Ready now</span>
+                    <strong>{formatWholeNumber(readyCount)}</strong>
+                  </div>
+                  <div className={styles.summaryCell}>
+                    <span>Needs review</span>
+                    <strong>{formatWholeNumber(reviewCount)}</strong>
+                  </div>
+                  <div className={styles.summaryCell}>
+                    <span>Approved</span>
+                    <strong>{formatWholeNumber(approvedCount)}</strong>
+                  </div>
+                  <div className={styles.summaryCell}>
+                    <span>Failed</span>
+                    <strong>{formatWholeNumber(failedEvents.length)}</strong>
+                  </div>
+                </div>
+              </section>
+            </section>
+          </>
+        ) : (
+          <StorageStatusPanel
+            className={styles.unavailableState}
+            title={storageStatusTitle}
+            message={storageStatusSummary}
+          />
+        )}
       </main>
     </ProductShell>
   );

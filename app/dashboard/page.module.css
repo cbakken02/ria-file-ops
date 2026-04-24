@@ -8,7 +8,8 @@
 
 .header,
 .heroGrid,
-.dashboardGrid {
+.dashboardGrid,
+.unavailableState {
   width: min(1160px, 100%);
   margin: 0 auto;
 }
@@ -21,6 +22,18 @@
   margin-bottom: 16px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
+}
+
+.headerIntro {
+  max-width: 680px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .eyebrow,

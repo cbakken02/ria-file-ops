@@ -11,9 +11,25 @@ export const DEFAULT_FOLDER_TEMPLATE = [
   "Client Info",
   "Accounts",
   "Money Movement",
+  "Tax",
   "Planning",
   "Review",
 ];
+
+function ensureTaxFolder(parts: string[]) {
+  if (parts.some((value) => value.toLowerCase() === "tax")) {
+    return parts;
+  }
+
+  const next = [...parts];
+  const planningIndex = next.findIndex((value) => value.toLowerCase() === "planning");
+  const reviewIndex = next.findIndex((value) => value.toLowerCase() === "review");
+  const insertAt =
+    planningIndex >= 0 ? planningIndex : reviewIndex >= 0 ? reviewIndex : next.length;
+
+  next.splice(insertAt, 0, "Tax");
+  return next;
+}
 
 export const REVIEW_RULE_OPTIONS = [
   {
@@ -46,12 +62,14 @@ export function normalizeFolderTemplate(raw: string | null | undefined) {
     .map((value) => value.trim())
     .filter(Boolean);
 
-  return parts.length ? parts : [...DEFAULT_FOLDER_TEMPLATE];
+  return parts.length ? ensureTaxFolder(parts) : [...DEFAULT_FOLDER_TEMPLATE];
 }
 
 export function serializeFolderTemplate(parts: string[]) {
   const cleaned = parts.map((value) => value.trim()).filter(Boolean);
-  return cleaned.length ? cleaned.join("\n") : DEFAULT_FOLDER_TEMPLATE.join("\n");
+  return cleaned.length
+    ? ensureTaxFolder(cleaned).join("\n")
+    : DEFAULT_FOLDER_TEMPLATE.join("\n");
 }
 
 export function normalizeReviewRuleValue(

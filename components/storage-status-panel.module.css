@@ -1,0 +1,80 @@
+.panel {
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+.surface {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+
+.inner {
+  display: grid;
+  gap: 16px;
+  padding: 26px 0;
+  justify-items: center;
+  text-align: center;
+}
+
+.copy {
+  max-width: 520px;
+}
+
+.copy strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+}
+
+.copy p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.detail {
+  margin-top: 6px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.action,
+.secondaryAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 650;
+  text-decoration: none;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.action:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border-strong);
+}
+
+@media (max-width: 760px) {
+  .inner {
+    padding: 22px 0;
+  }
+}

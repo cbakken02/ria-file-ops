@@ -20,7 +20,9 @@ export function storageConnectionHasWriteAccess(connection: StorageConnection | 
   return connection.grantedScopes.includes(GOOGLE_DRIVE_WRITE_SCOPE);
 }
 
-export async function getActiveStorageConnectionForSession(session: Session) {
+export async function getActiveStorageConnectionForSession(
+  session: Session,
+): Promise<StorageConnection | null> {
   const ownerEmail = session.user?.email ?? "";
   if (!ownerEmail) {
     return null;
@@ -37,23 +39,23 @@ export async function getActiveStorageConnectionForSession(session: Session) {
     return null;
   }
 
-  if (matchesCurrentSession(primary, session) && session.accessToken) {
-    const existingStatus = primary.status;
+  const sessionAccessToken = session.accessToken;
+
+  if (shouldUseSessionStorageAccess(primary, session) && sessionAccessToken) {
     return {
       ...primary,
-      accessToken: session.accessToken,
-      grantedScopes: session.grantedScopes,
-      status:
-        session.authError || existingStatus === "needs_reauth"
-          ? "needs_reauth"
-          : "connected",
+      accessToken: sessionAccessToken,
+      grantedScopes: getSessionDriveScopes(session),
+      status: session.authError ? "needs_reauth" : "connected",
     } satisfies StorageConnection;
   }
 
   return refreshStorageConnectionIfNeeded(primary);
 }
 
-export async function getVerifiedActiveStorageConnectionForSession(session: Session) {
+export async function getVerifiedActiveStorageConnectionForSession(
+  session: Session,
+): Promise<StorageConnection | null> {
   const activeConnection = await getActiveStorageConnectionForSession(session);
 
   if (!activeConnection || activeConnection.status !== "connected") {
@@ -221,10 +223,7 @@ function syncSessionGoogleConnection(session: Session) {
       (scope) =>
         scope === GOOGLE_DRIVE_READ_SCOPE || scope === GOOGLE_DRIVE_WRITE_SCOPE,
     ),
-    status:
-      session.authError || existingConnection?.status === "needs_reauth"
-        ? "needs_reauth"
-        : "connected",
+    status: session.authError ? "needs_reauth" : "connected",
     makePrimary: !getPrimaryStorageConnectionByOwnerEmail(ownerEmail),
   });
 }
@@ -254,5 +253,31 @@ function matchesCurrentSession(connection: StorageConnection, session: Session) 
     connection.provider === "google_drive" &&
     ((sessionUserId && connection.externalAccountId === sessionUserId) ||
       (sessionEmail && connection.accountEmail === sessionEmail))
+  );
+}
+
+function shouldUseSessionStorageAccess(
+  connection: StorageConnection,
+  session: Session,
+) {
+  if (!matchesCurrentSession(connection, session) || !session.accessToken) {
+    return false;
+  }
+
+  const sessionDriveScopes = getSessionDriveScopes(session);
+  if (!sessionDriveScopes.length) {
+    return false;
+  }
+
+  const hasPersistedStorageSession =
+    Boolean(connection.refreshToken) || typeof connection.expiresAt === "number";
+
+  return !hasPersistedStorageSession;
+}
+
+function getSessionDriveScopes(session: Session) {
+  return session.grantedScopes.filter(
+    (scope) =>
+      scope === GOOGLE_DRIVE_READ_SCOPE || scope === GOOGLE_DRIVE_WRITE_SCOPE,
   );
 }

@@ -45,6 +45,7 @@ type Props = {
     isPrimary: boolean;
     provider: string;
     providerLabel: string;
+    status: "connected" | "needs_reauth";
     statusLabel: string;
     writableLabel: string;
   } | null;
@@ -132,8 +133,12 @@ export function SetupForm({
     null,
   );
 
-  const sourceFolderName = getFolderLabel(sourceFolderValue) || "Not set";
-  const destinationFolderName = getFolderLabel(destinationFolderValue) || "Not set";
+  const sourceFolderName = driveConnected
+    ? getFolderLabel(sourceFolderValue) || "Not set"
+    : "Reconnect storage";
+  const destinationFolderName = driveConnected
+    ? getFolderLabel(destinationFolderValue) || "Not set"
+    : "Reconnect storage";
   const folderTemplateSummary = summarizeFolderTemplate(folderTemplate);
   const activeSectionMeta = sectionDefinitions.find(
     (section) => section.id === activeSection,
@@ -223,7 +228,11 @@ export function SetupForm({
       return;
     }
 
-    if (window.history.length > 1) {
+    const referrer = document.referrer ? new URL(document.referrer) : null;
+    const isInternalReferrer =
+      referrer && referrer.origin === window.location.origin;
+
+    if (window.history.length > 1 && isInternalReferrer) {
       router.back();
       return;
     }
@@ -475,6 +484,7 @@ export function SetupForm({
             onClose={() => setActiveEditor(null)}
             selectedValue={destinationFolderValue}
             showDisabledState={!driveConnected}
+            showStoredSelection={driveConnected}
           />
         ) : null}
 
@@ -488,6 +498,7 @@ export function SetupForm({
             onClose={() => setActiveEditor(null)}
             selectedValue={sourceFolderValue}
             showDisabledState={!driveConnected}
+            showStoredSelection={driveConnected}
           />
         ) : null}
 
@@ -555,6 +566,7 @@ type FolderPickerProps = {
   onSelect: (value: string) => void;
   selectedValue: string;
   showDisabledState: boolean;
+  showStoredSelection: boolean;
 };
 
 function FolderPicker({
@@ -565,9 +577,11 @@ function FolderPicker({
   onSelect,
   selectedValue,
   showDisabledState,
+  showStoredSelection,
 }: FolderPickerProps) {
   const [query, setQuery] = useState("");
   const selectedFolderName = selectedValue.split("::")[1] ?? "";
+  const visibleSelectedFolderName = showStoredSelection ? selectedFolderName : "";
   const filteredFolders = useMemo(() => filterFolders(folders, query), [folders, query]);
 
   return (
@@ -579,11 +593,16 @@ function FolderPicker({
 
       <div className={styles.pickerShell}>
         <div className={styles.selectedFolderCard}>
-          <strong>{selectedFolderName || emptyLabel}</strong>
+          <strong>
+            {visibleSelectedFolderName ||
+              (showDisabledState ? "Reconnect storage" : emptyLabel)}
+          </strong>
           <p>
-            {selectedFolderName
+            {visibleSelectedFolderName
               ? "This selection will be used the next time the app runs."
-              : "Pick a folder from the searchable list below."}
+              : showDisabledState
+                ? "Reconnect storage to browse folders here."
+                : "Pick a folder from the searchable list below."}
           </p>
         </div>
 
@@ -739,9 +758,20 @@ function StorageConnectionsSection({
 
         <div className={styles.storageConnectionExpanded}>
           <div className={styles.settingsList}>
-            <SettingsRowStatic label="Status" value={activeConnection.statusLabel} />
             <SettingsRowStatic label="Connected drive" value={activeConnection.connectedDriveLabel} />
             <SettingsRowStatic label="Connected account" value={connectedAccount} />
+            {activeConnection.status === "needs_reauth" ? (
+              <>
+                <SettingsRowStatic label="Status" value={activeConnection.statusLabel} />
+                <SettingsRowLink
+                  href={getStorageReconnectHref(activeConnection.provider)}
+                  label="Reconnect storage"
+                  value="Open"
+                />
+              </>
+            ) : (
+              <SettingsRowStatic label="Status" value={activeConnection.statusLabel} />
+            )}
             <button
               className={styles.settingsDangerRowButton}
               onClick={onRemove}
@@ -854,6 +884,7 @@ function FolderSelectionEditorModal({
   onClose,
   selectedValue,
   showDisabledState,
+  showStoredSelection,
 }: Omit<FolderPickerProps, "onSelect"> & {
   onClose: () => void;
   onApply: (value: string) => void;
@@ -870,6 +901,7 @@ function FolderSelectionEditorModal({
         onSelect={setDraftValue}
         selectedValue={draftValue}
         showDisabledState={showDisabledState}
+        showStoredSelection={showStoredSelection}
       />
       <div className={styles.editorActions}>
         <button className={styles.secondaryAction} onClick={onClose} type="button">
@@ -1201,4 +1233,12 @@ function getSectionDescription(section: SettingsSectionId) {
   }
 
   return "Data handling and audit references.";
+}
+
+function getStorageReconnectHref(provider: string) {
+  if (provider === "google_drive") {
+    return "/api/storage/google/start";
+  }
+
+  return "/setup?section=storage";
 }

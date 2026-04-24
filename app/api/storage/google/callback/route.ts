@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { buildAppUrl } from "@/lib/app-url";
 import {
   getPrimaryStorageConnectionByOwnerEmail,
   saveStorageConnectionForOwner,
@@ -47,7 +48,7 @@ export async function GET(request: Request) {
     redirect("/setup?section=storage&notice=The+storage+connection+flow+could+not+be+verified.");
   }
 
-  const redirectUri = new URL("/api/storage/google/callback", request.url).toString();
+  const redirectUri = buildAppUrl("/api/storage/google/callback", request);
 
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",

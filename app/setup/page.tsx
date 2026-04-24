@@ -11,6 +11,7 @@ import { requireSession } from "@/lib/session";
 import {
   getActiveStorageConnectionForSession,
   getStorageConnectionsForSession,
+  getVerifiedActiveStorageConnectionForSession,
   storageConnectionHasWriteAccess,
 } from "@/lib/storage-connections";
 import { SetupForm } from "./setup-form";
@@ -47,25 +48,29 @@ export default async function SetupPage({
       : null;
   const session = await requireSession();
   const ownerEmail = session.user?.email;
-  const activeConnection = await getActiveStorageConnectionForSession(session);
-  const storageConnections = await getStorageConnectionsForSession(session);
-  const driveConnected = activeConnection?.status === "connected";
+  const verifiedActiveConnection =
+    await getVerifiedActiveStorageConnectionForSession(session);
+  const [activeConnection, storageConnections] = await Promise.all([
+    getActiveStorageConnectionForSession(session),
+    getStorageConnectionsForSession(session),
+  ]);
+  const driveConnected = Boolean(verifiedActiveConnection);
 
   const [settings, driveFolders] = await Promise.all([
     ownerEmail
       ? Promise.resolve(getFirmSettingsByOwnerEmail(ownerEmail) ?? null)
       : Promise.resolve(null),
-    activeConnection
-      ? listDriveFolders(activeConnection.accessToken).catch(() => [])
+    verifiedActiveConnection
+      ? listDriveFolders(verifiedActiveConnection.accessToken).catch(() => [])
       : Promise.resolve([]),
   ]);
-  const driveContext = activeConnection
+  const driveContext = verifiedActiveConnection
     ? await getDriveConnectionContext({
-        accessToken: activeConnection.accessToken,
+        accessToken: verifiedActiveConnection.accessToken,
         destinationFolderId: settings?.destinationFolderId ?? null,
         sourceFolderId: settings?.sourceFolderId ?? null,
         fallbackDisplayName:
-          activeConnection.accountName ?? session.user?.name ?? null,
+          verifiedActiveConnection.accountName ?? session.user?.name ?? null,
       }).catch(() => null)
     : null;
 
@@ -113,6 +118,7 @@ export default async function SetupPage({
                   isPrimary: activeConnection.isPrimary,
                   provider: activeConnection.provider,
                   providerLabel: getProviderLabel(activeConnection.provider),
+                  status: activeConnection.status,
                   statusLabel:
                     activeConnection.status === "connected"
                       ? "Connected"

@@ -4,18 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useEffect, useRef, useState, useTransition } from "react";
+import type { ProductNavPath } from "@/lib/product-navigation";
 import styles from "./product-shell.module.css";
 
 type AccountMenuProps = {
   accountMeta: string | null;
   accountSubtitle: string;
-  currentPath:
-    | "/dashboard"
-    | "/preview"
-    | "/cleanup"
-    | "/history"
-    | "/security"
-    | "/setup";
+  currentPath: ProductNavPath;
   displayName: string;
   image: string | null;
   initials: string;

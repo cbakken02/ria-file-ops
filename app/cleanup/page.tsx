@@ -1,4 +1,5 @@
 import { ProductShell } from "@/components/product-shell";
+import { StorageStatusPanel } from "@/components/storage-status-panel";
 import { StorageSwitcher } from "@/components/storage-switcher";
 import { getFirmSettingsByOwnerEmail } from "@/lib/db";
 import { getDriveFolderTrail, listDriveBrowserItems } from "@/lib/google-drive";
@@ -45,6 +46,12 @@ export default async function CleanupPage() {
   }
 
   const hasVerifiedStorageAccess = Boolean(activeConnection) && !initialStorageError;
+  const inactiveStorageTitle = displayConnection
+    ? "Reconnect storage"
+    : "Connect storage";
+  const inactiveStorageMessage = displayConnection
+    ? "Cleanup is unavailable until storage access is restored."
+    : "Connect storage to use Cleanup.";
 
   return (
     <ProductShell currentPath="/cleanup" session={session}>
@@ -83,21 +90,28 @@ export default async function CleanupPage() {
           />
         </header>
 
-        <CleanupPlanner
-          hasActiveStorage={hasVerifiedStorageAccess}
-          inactiveStorageMessage={
-            initialStorageError ??
-            (displayConnection
-              ? "Reconnect the active storage connection to browse existing files."
-              : "Connect a storage to begin.")
-          }
-          rootBrowserFolderId={rootBrowserFolderId}
-          rootBrowserFolderName={rootBrowserFolderName}
-          initialCurrentFolderId={initialCurrentFolderId}
-          initialFolderTrail={initialFolderTrail}
-          initialBrowserItems={initialBrowserItems}
-          namingRules={namingRules}
-        />
+        {!hasVerifiedStorageAccess ? (
+          <div className={styles.cleanupLayout}>
+            <section className={styles.selectionSection}>
+              <StorageStatusPanel
+                title={inactiveStorageTitle}
+                message={inactiveStorageMessage}
+              />
+            </section>
+          </div>
+        ) : (
+          <CleanupPlanner
+            hasActiveStorage={hasVerifiedStorageAccess}
+            inactiveStorageMessage={inactiveStorageMessage}
+            inactiveStorageTitle={inactiveStorageTitle}
+            rootBrowserFolderId={rootBrowserFolderId}
+            rootBrowserFolderName={rootBrowserFolderName}
+            initialCurrentFolderId={initialCurrentFolderId}
+            initialFolderTrail={initialFolderTrail}
+            initialBrowserItems={initialBrowserItems}
+            namingRules={namingRules}
+          />
+        )}
       </main>
     </ProductShell>
   );

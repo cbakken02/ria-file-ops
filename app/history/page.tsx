@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { FileKindIcon } from "@/components/file-kind-icon";
 import { ProductShell } from "@/components/product-shell";
+import { StorageStatusPanel } from "@/components/storage-status-panel";
+import { StorageSwitcher } from "@/components/storage-switcher";
 import { HistoryEventsList } from "@/app/history/history-events";
 import { getFilingEventsByOwnerEmail } from "@/lib/db";
 import {
@@ -53,9 +55,12 @@ export default async function HistoryPage({
   const activeStorageProvider =
     displayConnection?.provider ?? activeConnection?.provider ?? null;
   const hasVerifiedStorageAccess = Boolean(activeConnection);
-  const historyUnavailableMessage = displayConnection
-    ? "Reconnect the active storage connection to load filing history for this workspace."
-    : "Connect a storage to begin.";
+  const historyStatusTitle = displayConnection
+    ? "Reconnect storage"
+    : "Connect storage";
+  const historyStatusSummary = displayConnection
+    ? "Filing history is unavailable until storage access is restored."
+    : "Connect storage to use Filing History.";
   const allEvents =
     ownerEmail && hasVerifiedStorageAccess && activeStorageProvider
       ? getFilingEventsByOwnerEmail(ownerEmail).filter(
@@ -98,15 +103,40 @@ export default async function HistoryPage({
     <ProductShell currentPath="/history" session={session}>
       <main className={styles.page}>
         <header className={styles.header}>
-          <div>
+          <div className={styles.headerIntro}>
             <p className={styles.eyebrow}>Audit trail</p>
             <h1>Filing history</h1>
           </div>
-          {hasVerifiedStorageAccess ? (
-            <Link className={styles.exportButton} href={exportHref}>
-              Export CSV
-            </Link>
-          ) : null}
+          <div className={styles.headerActions}>
+            {hasVerifiedStorageAccess ? (
+              <Link className={styles.exportButton} href={exportHref}>
+                Export CSV
+              </Link>
+            ) : null}
+            <StorageSwitcher
+              activeConnection={
+                displayConnection
+                  ? {
+                      id: displayConnection.id,
+                      provider: displayConnection.provider,
+                      accountName: displayConnection.accountName,
+                      accountEmail: displayConnection.accountEmail,
+                      isPrimary: displayConnection.isPrimary,
+                      status: displayConnection.status,
+                    }
+                  : null
+              }
+              connections={storageConnections.map((connection) => ({
+                id: connection.id,
+                provider: connection.provider,
+                accountName: connection.accountName,
+                accountEmail: connection.accountEmail,
+                isPrimary: connection.isPrimary,
+                status: connection.status,
+              }))}
+              currentPath="/history"
+            />
+          </div>
         </header>
 
         <section className={styles.controlsRow}>
@@ -373,10 +403,11 @@ export default async function HistoryPage({
         ) : null}
 
         {!hasVerifiedStorageAccess ? (
-          <section className={styles.emptyState}>
-            <strong>{historyUnavailableMessage}</strong>
-            <p>Filing history will reappear here once storage access is restored.</p>
-          </section>
+          <StorageStatusPanel
+            className={styles.contentState}
+            title={historyStatusTitle}
+            message={historyStatusSummary}
+          />
         ) : (mode === "events" && !events.length) ||
           (mode === "batches" && !batchGroups.length) ? (
           <section className={styles.emptyState}>

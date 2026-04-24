@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { buildAppUrl } from "@/lib/app-url";
 import { GOOGLE_DRIVE_WRITE_SCOPE } from "@/lib/google-drive";
 
 export async function GET(request: Request) {
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
   }
 
   const state = crypto.randomUUID();
-  const redirectUri = new URL("/api/storage/google/callback", request.url).toString();
+  const redirectUri = buildAppUrl("/api/storage/google/callback", request);
   const params = new URLSearchParams({
     access_type: "offline",
     client_id: process.env.GOOGLE_CLIENT_ID ?? "",
