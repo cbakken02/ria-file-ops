@@ -79,8 +79,14 @@ export async function answerDataIntelligenceQuestion(
   const history = input.history ?? [];
   const conversationState =
     sanitizeDataIntelligenceConversationState(input.conversationState) ?? null;
+  const directQuestionPlan = buildQueryAssistantRetrievalPlan(question);
   const stateAwareFallbackQuestion =
     buildStateAwareFallbackQuestion(question, conversationState) ?? question;
+  const preferStateAwareFallback =
+    !input.retrievalQuestion &&
+    !input.retrievalPlan &&
+    stateAwareFallbackQuestion !== question &&
+    directQuestionPlan.questionType === "unsupported";
   const fallbackPlan = buildQueryAssistantRetrievalPlan(stateAwareFallbackQuestion);
   const trace: DataIntelligenceHybridDebugTrace | null = input.includeDebug
     ? {
@@ -136,15 +142,21 @@ export async function answerDataIntelligenceQuestion(
     return result;
   }
 
-  const interpretation = await interpretDataIntelligenceQuestionWithModel({
-    question,
-    history,
-    conversationState,
-    fallbackPlan,
-    config,
-    fetchImpl: input.modelFetch,
-    debug: trace?.interpretation,
-  });
+  const interpretation = preferStateAwareFallback
+    ? null
+    : await interpretDataIntelligenceQuestionWithModel({
+        question,
+        history,
+        conversationState,
+        fallbackPlan,
+        config,
+        fetchImpl: input.modelFetch,
+        debug: trace?.interpretation,
+      });
+  if (trace && preferStateAwareFallback) {
+    trace.interpretation.failureReason = "state_aware_fallback";
+    trace.interpretation.fallbackUsed = true;
+  }
   if (trace && interpretation) {
     trace.interpretation.standaloneQuestion = interpretation.standaloneQuestion;
     trace.interpretation.interpretedPlan = summarizePlan(
@@ -186,8 +198,13 @@ export async function answerDataIntelligenceQuestion(
     retrievalQuestion: executedQuestion,
     retrievalPlan: executedPlan,
   });
+  const stateAdjustedResult = normalizeKnownClientContinuityNotFound({
+    result: deterministicResult,
+    state: conversationState,
+    preferStateAwareFallback,
+  });
   const displayResult = {
-    ...deterministicResult,
+    ...stateAdjustedResult,
     question,
   };
   const composition = await composeDataIntelligenceAnswerWithModel({
@@ -209,6 +226,60 @@ export async function answerDataIntelligenceQuestion(
   }
 
   return finalResult;
+}
+
+function normalizeKnownClientContinuityNotFound(input: {
+  result: QueryAssistantResult;
+  state: DataIntelligenceConversationState | null;
+  preferStateAwareFallback: boolean;
+}): QueryAssistantResult {
+  if (
+    !input.preferStateAwareFallback ||
+    !input.state?.activeClientName ||
+    input.result.status !== "not_found" ||
+    !/couldn'?t find that client/i.test(input.result.answer)
+  ) {
+    return input.result;
+  }
+
+  const answer = buildKnownClientContinuityNotFoundAnswer(
+    input.state,
+    input.result.intent,
+  );
+  if (!answer) {
+    return input.result;
+  }
+
+  return {
+    ...input.result,
+    answer,
+  };
+}
+
+function buildKnownClientContinuityNotFoundAnswer(
+  state: DataIntelligenceConversationState,
+  intent: string | null,
+) {
+  const clientName = state.activeClientName;
+  if (!clientName) {
+    return null;
+  }
+
+  switch (intent ?? state.lastIntent) {
+    case "statement_existence":
+      return `No, there is no statement uploaded for ${clientName}.`;
+    case "statement_list":
+      return `I do not see any statements uploaded for ${clientName}.`;
+    case "latest_account_document":
+      return `I could not find a matching statement for ${clientName}.`;
+    case "latest_account_snapshot":
+      return `I could not find a matching account value for ${clientName}.`;
+    case "identity_document_existence":
+    case "latest_identity_document":
+      return `I do not see an identity document on file for ${clientName}.`;
+    default:
+      return null;
+  }
 }
 
 function buildStateAwareFallbackQuestion(

@@ -716,6 +716,66 @@ test("hybrid assistant treats a repeated client-name-only reply as current-clien
   }
 });
 
+test("hybrid assistant keeps deterministic state rewrite for name-only continuity", async () => {
+  const tempDb = makeTempDbEnv("query-assistant-hybrid-name-only-repeat-");
+  const ownerEmail = "query-assistant-hybrid-name-only-repeat@example.com";
+  const restoreEnv = withEnv({
+    DATA_INTELLIGENCE_AI_ENABLED: "true",
+    DATA_INTELLIGENCE_MODEL: "gpt-5.4-mini",
+    DATA_INTELLIGENCE_API_KEY: "di-key",
+    DATA_INTELLIGENCE_API_URL: "https://example.com/v1/chat/completions",
+  });
+
+  try {
+    let callCount = 0;
+    const modelFetch = async () => {
+      callCount += 1;
+      return Response.json({
+        choices: [{ message: { content: "{}" } }],
+      });
+    };
+
+    const result = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "christopher bakken",
+      conversationState: {
+        activeClientName: "Christopher Bakken",
+        activeFamilyScope: "statement",
+        activeAccountType: null,
+        activeStatementSource: null,
+        alternateStatementSources: [],
+        lastIntent: "statement_existence",
+        lastTurnKind: "not_found",
+        lastRequestedField: "document",
+        lastPrimarySource: null,
+        lastSources: [],
+      },
+      modelFetch,
+      includeDebug: true,
+    });
+    const debug = result.debug?.dataIntelligenceHybrid;
+
+    assert.equal(result.status, "not_found");
+    assert.equal(result.intent, "statement_existence");
+    assert.match(result.answer, /No statement/i);
+    assert.doesNotMatch(result.answer, /couldn'?t find that client/i);
+    assert.equal(callCount, 1);
+    assert.ok(debug);
+    assert.equal(debug.interpretation.attempted, false);
+    assert.equal(debug.interpretation.fallbackUsed, true);
+    assert.equal(debug.interpretation.failureReason, "state_aware_fallback");
+    assert.equal(
+      debug.executedQuestion,
+      "Do we have statement for Christopher Bakken on file?",
+    );
+    assert.equal(debug.executedPlan.intent, "statement_existence");
+  } finally {
+    restoreEnv();
+    tempDb.cleanup();
+  }
+});
+
 test("assistant treats uploaded/list phrasing and latest bank statement questions as statement-family retrieval", () => {
   const tempDb = makeTempDbEnv("query-assistant-statement-family-");
   const ownerEmail = "query-assistant-statement-family@example.com";
