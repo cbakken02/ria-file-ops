@@ -1,6 +1,6 @@
-import { createRequire } from "node:module";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
 import * as sqliteDocumentQueryStore from "@/lib/firm-document-sqlite-query";
+import * as supabaseDocumentQueryStore from "@/lib/persistence/supabase-document-query-store";
 
 export type {
   FirmDocumentAccountValue,
@@ -21,17 +21,9 @@ export type {
 } from "@/lib/firm-document-sqlite-query";
 
 type SqliteDocumentQueryStoreModule = typeof import("@/lib/firm-document-sqlite-query");
-type SupabaseDocumentQueryStoreModule = typeof import("@/lib/persistence/supabase-document-query-store");
-
-const require = createRequire(import.meta.url);
-let supabaseDocumentQueryStore: SupabaseDocumentQueryStoreModule | null = null;
 
 function getActiveDocumentQueryStore() {
   if (isSupabasePersistence()) {
-    if (!supabaseDocumentQueryStore) {
-      supabaseDocumentQueryStore = require("./persistence/supabase-document-query-store.ts") as SupabaseDocumentQueryStoreModule;
-    }
-
     return supabaseDocumentQueryStore;
   }
 

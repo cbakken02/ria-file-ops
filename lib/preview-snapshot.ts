@@ -1,11 +1,9 @@
-import { createRequire } from "node:module";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
+import { queryPostgres } from "@/lib/postgres/server";
 import type { PreviewItem } from "@/lib/processing-preview";
-
-const require = createRequire(import.meta.url);
 
 export type PreviewSnapshot = {
   generatedAt: string;
@@ -118,7 +116,6 @@ export async function writePreviewSnapshot(input: {
   }
 
   const now = new Date().toISOString();
-  const queryPostgres = await getQueryPostgres();
   await queryPostgres(
     `
       INSERT INTO public.preview_snapshots (
@@ -179,7 +176,6 @@ export async function readPreviewSnapshot(ownerEmail?: string | null) {
     return null;
   }
 
-  const queryPostgres = await getQueryPostgres();
   const result = await queryPostgres<PreviewSnapshotRow>(
     `
       SELECT
@@ -218,9 +214,4 @@ function normalizeSnapshotValue(value: unknown): PreviewSnapshot | null {
   }
 
   return value as PreviewSnapshot;
-}
-
-async function getQueryPostgres() {
-  const module = require("./postgres/server.ts") as typeof import("@/lib/postgres/server");
-  return module.queryPostgres;
 }

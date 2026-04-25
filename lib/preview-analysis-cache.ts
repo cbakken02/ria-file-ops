@@ -1,4 +1,3 @@
-import { createRequire } from "node:module";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -13,6 +12,7 @@ import type { DocumentInsight } from "@/lib/document-intelligence";
 import { DOCUMENT_ANALYSIS_VERSION } from "@/lib/document-intelligence";
 import type { GoogleDriveFile } from "@/lib/google-drive";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
+import { queryPostgres } from "@/lib/postgres/server";
 
 export type PreviewAnalysisCacheEntry = {
   analysisProfile: AnalysisProfile;
@@ -52,7 +52,6 @@ type PreviewAnalysisCacheRow = {
 };
 
 const CACHE_DIR = path.join(process.cwd(), "data", "preview-analysis-cache");
-const require = createRequire(import.meta.url);
 
 function getCachePath(ownerEmail: string, fileId: string) {
   const cacheKey = crypto
@@ -104,7 +103,6 @@ export async function readPreviewAnalysisCache(input: {
     }
   }
 
-  const queryPostgres = await getQueryPostgres();
   const result = await queryPostgres<PreviewAnalysisCacheRow>(
     `
       SELECT
@@ -197,7 +195,6 @@ export async function writePreviewAnalysisCache(input: {
       ? projectCanonicalToRedactedDebugShape(input.canonical)
       : null;
 
-  const queryPostgres = await getQueryPostgres();
   const result = await queryPostgres<PreviewAnalysisCacheRow>(
     `
       INSERT INTO public.preview_analysis_cache (
@@ -298,7 +295,6 @@ export async function clearPreviewAnalysisCacheForFiles(input: {
     return;
   }
 
-  const queryPostgres = await getQueryPostgres();
   await queryPostgres(
     `
       DELETE FROM public.preview_analysis_cache
@@ -338,7 +334,6 @@ export async function clearPreviewAnalysisCacheForOwner(ownerEmail: string) {
     return;
   }
 
-  const queryPostgres = await getQueryPostgres();
   await queryPostgres(
     `
       DELETE FROM public.preview_analysis_cache
@@ -388,9 +383,4 @@ function normalizeJsonValue<T>(value: unknown): T | null {
   }
 
   return value as T;
-}
-
-async function getQueryPostgres() {
-  const module = require("./postgres/server.ts") as typeof import("@/lib/postgres/server");
-  return module.queryPostgres;
 }

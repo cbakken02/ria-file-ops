@@ -1,7 +1,9 @@
 import "server-only";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   Pool,
   type PoolClient,
@@ -16,6 +18,9 @@ declare global {
   // eslint-disable-next-line no-var
   var __riaFileOpsPostgresPool: Pool | undefined;
 }
+
+const nodeRequire = createRequire(import.meta.url);
+const POSTGRES_SYNC_TIMEOUT_MS = 15_000;
 
 if (typeof window !== "undefined") {
   throw new Error("lib/postgres/server.ts can only be imported on the server.");
@@ -128,7 +133,8 @@ export function runPostgresStatementsSync<Row extends QueryResultRow = QueryResu
   const worker = new Worker(POSTGRES_SYNC_WORKER_SOURCE, {
     eval: true,
     workerData: {
-      connectionString,
+      connectionString: normalizeConnectionStringForPg(connectionString),
+      pgModuleUrl: pathToFileURL(nodeRequire.resolve("pg")).href,
       ssl: shouldUseSsl(connectionString),
       statements: statements.map((statement) => ({
         text: statement.text,
@@ -142,7 +148,11 @@ export function runPostgresStatementsSync<Row extends QueryResultRow = QueryResu
   });
 
   try {
-    Atomics.wait(signal, 0, 0);
+    const waitResult = Atomics.wait(signal, 0, 0, POSTGRES_SYNC_TIMEOUT_MS);
+    if (waitResult === "timed-out") {
+      throw new Error("Synchronous Postgres worker timed out.");
+    }
+
     const serialized = fs.readFileSync(resultPath, "utf8");
     const payload = JSON.parse(serialized) as
       | {
@@ -178,7 +188,7 @@ export function runPostgresStatementsSync<Row extends QueryResultRow = QueryResu
 
 function buildPoolConfig(connectionString: string): PoolConfig {
   return {
-    connectionString,
+    connectionString: normalizeConnectionStringForPg(connectionString),
     max: 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
@@ -196,25 +206,47 @@ function shouldUseSsl(connectionString: string) {
   }
 }
 
+function normalizeConnectionStringForPg(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    url.searchParams.delete("ssl");
+    url.searchParams.delete("sslmode");
+    return url.toString();
+  } catch {
+    return connectionString;
+  }
+}
+
 const POSTGRES_SYNC_WORKER_SOURCE = `
-const fs = require("node:fs");
-const { Pool } = require("pg");
-const { workerData } = require("node:worker_threads");
-
 async function main() {
-  const signal = new Int32Array(workerData.signalBuffer);
-  const pool = new Pool({
-    connectionString: workerData.connectionString,
-    max: 1,
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 10_000,
-    allowExitOnIdle: true,
-    ssl: workerData.ssl ? { rejectUnauthorized: false } : undefined,
-  });
-
+  let workerData = null;
+  let fs = null;
+  let signal = null;
+  let pool = null;
   let client = null;
 
   try {
+    [{ workerData }, fs] = await Promise.all([
+      import("node:worker_threads"),
+      import("node:fs"),
+    ]);
+    signal = new Int32Array(workerData.signalBuffer);
+    const pgModule = await import(workerData.pgModuleUrl || "pg");
+    const Pool = pgModule.Pool || pgModule.default?.Pool;
+
+    if (!Pool) {
+      throw new Error("Postgres worker could not load the pg Pool export.");
+    }
+
+    pool = new Pool({
+      connectionString: workerData.connectionString,
+      max: 1,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+      allowExitOnIdle: true,
+      ssl: workerData.ssl ? { rejectUnauthorized: false } : undefined,
+    });
+
     client = await pool.connect();
 
     if (workerData.useTransaction) {
@@ -249,17 +281,19 @@ async function main() {
       }
     } catch {}
 
-    fs.writeFileSync(
-      workerData.resultPath,
-      JSON.stringify({
-        ok: false,
-        error: {
-          message: error && error.message ? error.message : "Postgres worker failed.",
-          stack: error && error.stack ? error.stack : null,
-        },
-      }),
-      "utf8",
-    );
+    if (fs && workerData?.resultPath) {
+      fs.writeFileSync(
+        workerData.resultPath,
+        JSON.stringify({
+          ok: false,
+          error: {
+            message: error && error.message ? error.message : "Postgres worker failed.",
+            stack: error && error.stack ? error.stack : null,
+          },
+        }),
+        "utf8",
+      );
+    }
   } finally {
     try {
       if (client) {
@@ -267,12 +301,16 @@ async function main() {
       }
     } catch {}
 
-    try {
-      await pool.end();
-    } catch {}
+    if (signal) {
+      Atomics.store(signal, 0, 1);
+      Atomics.notify(signal, 0, 1);
+    }
 
-    Atomics.store(signal, 0, 1);
-    Atomics.notify(signal, 0, 1);
+    try {
+      if (pool) {
+        await pool.end();
+      }
+    } catch {}
   }
 }
 
