@@ -144,6 +144,7 @@ export default async function PreviewPage({
 
   if (!liveQueueError) {
     await writePreviewSnapshot({
+      ownerEmail,
       sourceFolder: settings?.sourceFolderName ?? null,
       destinationRoot: settings?.destinationFolderName ?? null,
       reviewPosture: preview.reviewRule.title,

@@ -38,6 +38,7 @@ type AccountResolverResult = {
 
 export type CanonicalSqliteWriteInput = {
   ownerEmail: string;
+  dbPath?: string | null;
   analysisProfile: AnalysisProfile;
   analysisVersion: string;
   analysisRanAt: string;
@@ -71,6 +72,17 @@ export function closeFirmDocumentSqliteConnectionsForTests() {
   connectionCache.clear();
 }
 
+export function closeFirmDocumentSqliteConnection(dbPath: string) {
+  const normalizedPath = path.resolve(dbPath);
+  const connection = connectionCache.get(normalizedPath);
+  if (!connection) {
+    return;
+  }
+
+  connection.close();
+  connectionCache.delete(normalizedPath);
+}
+
 export function writeCanonicalAccountStatementToSqlite(
   input: CanonicalSqliteWriteInput,
 ): CanonicalSqliteWriteResult | null {
@@ -80,7 +92,7 @@ export function writeCanonicalAccountStatementToSqlite(
     return null;
   }
 
-  const dbPath = getFirmDocumentSqlitePath(input.ownerEmail);
+  const dbPath = input.dbPath?.trim() || getFirmDocumentSqlitePath(input.ownerEmail);
   const db = getFirmDocumentDatabase(dbPath);
 
   const transaction = db.transaction(
@@ -292,7 +304,7 @@ export function writeCanonicalIdentityDocumentToSqlite(
     return null;
   }
 
-  const dbPath = getFirmDocumentSqlitePath(input.ownerEmail);
+  const dbPath = input.dbPath?.trim() || getFirmDocumentSqlitePath(input.ownerEmail);
   const db = getFirmDocumentDatabase(dbPath);
 
   const transaction = db.transaction(

@@ -37,7 +37,7 @@ export default async function DashboardPage() {
     ownerEmail
       ? Promise.resolve(getFirmSettingsByOwnerEmail(ownerEmail) ?? null)
       : Promise.resolve(null),
-    readPreviewSnapshot(),
+    readPreviewSnapshot(ownerEmail),
     ownerEmail
       ? Promise.resolve(getReviewDecisionsByOwnerEmail(ownerEmail))
       : Promise.resolve([]),

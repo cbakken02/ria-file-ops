@@ -65,6 +65,7 @@ database.exec(`
     mime_type TEXT NOT NULL,
     modified_time TEXT,
     detected_document_type TEXT,
+    detected_document_subtype TEXT,
     original_client_name TEXT,
     original_client_name2 TEXT,
     original_ownership_type TEXT,
@@ -74,6 +75,7 @@ database.exec(`
     reviewed_client_name TEXT,
     reviewed_client_name2 TEXT,
     reviewed_ownership_type TEXT,
+    reviewed_document_subtype TEXT,
     reviewed_client_folder TEXT,
     reviewed_top_level_folder TEXT,
     reviewed_filename TEXT,
@@ -353,6 +355,16 @@ ensureTableColumn(
   "reviewed_ownership_type",
   "reviewed_ownership_type TEXT",
 );
+ensureTableColumn(
+  "review_decisions",
+  "detected_document_subtype",
+  "detected_document_subtype TEXT",
+);
+ensureTableColumn(
+  "review_decisions",
+  "reviewed_document_subtype",
+  "reviewed_document_subtype TEXT",
+);
 const selectByOwnerEmail = database.prepare(`
   SELECT
     id,
@@ -417,6 +429,7 @@ const selectReviewDecisionsByOwnerEmail = database.prepare(`
     mime_type AS mimeType,
     modified_time AS modifiedTime,
     detected_document_type AS detectedDocumentType,
+    detected_document_subtype AS detectedDocumentSubtype,
     original_client_name AS originalClientName,
     original_client_name2 AS originalClientName2,
     original_ownership_type AS originalOwnershipType,
@@ -426,6 +439,7 @@ const selectReviewDecisionsByOwnerEmail = database.prepare(`
     reviewed_client_name AS reviewedClientName,
     reviewed_client_name2 AS reviewedClientName2,
     reviewed_ownership_type AS reviewedOwnershipType,
+    reviewed_document_subtype AS reviewedDocumentSubtype,
     reviewed_client_folder AS reviewedClientFolder,
     reviewed_top_level_folder AS reviewedTopLevelFolder,
     reviewed_filename AS reviewedFilename,
@@ -446,6 +460,7 @@ const selectReviewDecisionByOwnerAndFile = database.prepare(`
     mime_type AS mimeType,
     modified_time AS modifiedTime,
     detected_document_type AS detectedDocumentType,
+    detected_document_subtype AS detectedDocumentSubtype,
     original_client_name AS originalClientName,
     original_client_name2 AS originalClientName2,
     original_ownership_type AS originalOwnershipType,
@@ -455,6 +470,7 @@ const selectReviewDecisionByOwnerAndFile = database.prepare(`
     reviewed_client_name AS reviewedClientName,
     reviewed_client_name2 AS reviewedClientName2,
     reviewed_ownership_type AS reviewedOwnershipType,
+    reviewed_document_subtype AS reviewedDocumentSubtype,
     reviewed_client_folder AS reviewedClientFolder,
     reviewed_top_level_folder AS reviewedTopLevelFolder,
     reviewed_filename AS reviewedFilename,
@@ -474,6 +490,7 @@ const insertReviewDecision = database.prepare(`
     mime_type,
     modified_time,
     detected_document_type,
+    detected_document_subtype,
     original_client_name,
     original_client_name2,
     original_ownership_type,
@@ -483,6 +500,7 @@ const insertReviewDecision = database.prepare(`
     reviewed_client_name,
     reviewed_client_name2,
     reviewed_ownership_type,
+    reviewed_document_subtype,
     reviewed_client_folder,
     reviewed_top_level_folder,
     reviewed_filename,
@@ -499,6 +517,7 @@ const updateReviewDecision = database.prepare(`
     mime_type = ?,
     modified_time = ?,
     detected_document_type = ?,
+    detected_document_subtype = ?,
     original_client_name = ?,
     original_client_name2 = ?,
     original_ownership_type = ?,
@@ -508,6 +527,7 @@ const updateReviewDecision = database.prepare(`
     reviewed_client_name = ?,
     reviewed_client_name2 = ?,
     reviewed_ownership_type = ?,
+    reviewed_document_subtype = ?,
     reviewed_client_folder = ?,
     reviewed_top_level_folder = ?,
     reviewed_filename = ?,
@@ -998,6 +1018,7 @@ export function saveReviewDecisionForOwner(input: {
   mimeType: string;
   modifiedTime: string | null;
   detectedDocumentType: string | null;
+  detectedDocumentSubtype: string | null;
   originalClientName: string | null;
   originalClientName2: string | null;
   originalOwnershipType: "single" | "joint" | null;
@@ -1007,6 +1028,7 @@ export function saveReviewDecisionForOwner(input: {
   reviewedClientName: string | null;
   reviewedClientName2: string | null;
   reviewedOwnershipType: "single" | "joint" | null;
+  reviewedDocumentSubtype: string | null;
   reviewedClientFolder: string | null;
   reviewedTopLevelFolder: string | null;
   reviewedFilename: string | null;
@@ -1021,6 +1043,7 @@ export function saveReviewDecisionForOwner(input: {
       input.mimeType,
       input.modifiedTime,
       input.detectedDocumentType,
+      input.detectedDocumentSubtype,
       input.originalClientName,
       input.originalClientName2,
       input.originalOwnershipType,
@@ -1030,6 +1053,7 @@ export function saveReviewDecisionForOwner(input: {
       input.reviewedClientName,
       input.reviewedClientName2,
       input.reviewedOwnershipType,
+      input.reviewedDocumentSubtype,
       input.reviewedClientFolder,
       input.reviewedTopLevelFolder,
       input.reviewedFilename,
@@ -1050,6 +1074,7 @@ export function saveReviewDecisionForOwner(input: {
     input.mimeType,
     input.modifiedTime,
     input.detectedDocumentType,
+    input.detectedDocumentSubtype,
     input.originalClientName,
     input.originalClientName2,
     input.originalOwnershipType,
@@ -1059,6 +1084,7 @@ export function saveReviewDecisionForOwner(input: {
     input.reviewedClientName,
     input.reviewedClientName2,
     input.reviewedOwnershipType,
+    input.reviewedDocumentSubtype,
     input.reviewedClientFolder,
     input.reviewedTopLevelFolder,
     input.reviewedFilename,

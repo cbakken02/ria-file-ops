@@ -29,6 +29,7 @@ export type ReviewDecision = {
   mimeType: string;
   modifiedTime: string | null;
   detectedDocumentType: string | null;
+  detectedDocumentSubtype: string | null;
   originalClientName: string | null;
   originalClientName2: string | null;
   originalOwnershipType: "single" | "joint" | null;
@@ -38,6 +39,7 @@ export type ReviewDecision = {
   reviewedClientName: string | null;
   reviewedClientName2: string | null;
   reviewedOwnershipType: "single" | "joint" | null;
+  reviewedDocumentSubtype: string | null;
   reviewedClientFolder: string | null;
   reviewedTopLevelFolder: string | null;
   reviewedFilename: string | null;
@@ -172,7 +174,7 @@ function getActiveAppStateStore() {
 
 function unsupportedSupabaseOperation(name: string): never {
   throw new Error(
-    `${name} is not supported yet when PERSISTENCE_BACKEND=supabase. Phase 1 only supports firm settings, storage connections, filing events, and bug reports.`,
+    `${name} is not supported yet when PERSISTENCE_BACKEND=supabase.`,
   );
 }
 
@@ -200,32 +202,20 @@ export function saveFirmSettingsForOwner(input: {
 export function getReviewDecisionsByOwnerEmail(
   ownerEmail: string,
 ): ReviewDecision[] {
-  if (isSupabasePersistence()) {
-    return [] as ReviewDecision[];
-  }
-
-  return getSqliteAppStateStore().getReviewDecisionsByOwnerEmail(ownerEmail);
+  return getActiveAppStateStore().getReviewDecisionsByOwnerEmail(ownerEmail);
 }
 
 export function getClientMemoryRulesByOwnerEmail(
   ownerEmail: string,
 ): ClientMemoryRule[] {
-  if (isSupabasePersistence()) {
-    return [] as ClientMemoryRule[];
-  }
-
-  return getSqliteAppStateStore().getClientMemoryRulesByOwnerEmail(ownerEmail);
+  return getActiveAppStateStore().getClientMemoryRulesByOwnerEmail(ownerEmail);
 }
 
 export function getReviewDecisionByOwnerAndFile(
   ownerEmail: string,
   fileId: string,
 ): ReviewDecision | undefined {
-  if (isSupabasePersistence()) {
-    return undefined;
-  }
-
-  return getSqliteAppStateStore().getReviewDecisionByOwnerAndFile(
+  return getActiveAppStateStore().getReviewDecisionByOwnerAndFile(
     ownerEmail,
     fileId,
   );
@@ -238,6 +228,7 @@ export function saveReviewDecisionForOwner(input: {
   mimeType: string;
   modifiedTime: string | null;
   detectedDocumentType: string | null;
+  detectedDocumentSubtype: string | null;
   originalClientName: string | null;
   originalClientName2: string | null;
   originalOwnershipType: "single" | "joint" | null;
@@ -247,16 +238,13 @@ export function saveReviewDecisionForOwner(input: {
   reviewedClientName: string | null;
   reviewedClientName2: string | null;
   reviewedOwnershipType: "single" | "joint" | null;
+  reviewedDocumentSubtype: string | null;
   reviewedClientFolder: string | null;
   reviewedTopLevelFolder: string | null;
   reviewedFilename: string | null;
   status: ReviewDecisionStatus;
 }): ReviewDecision | null {
-  if (isSupabasePersistence()) {
-    unsupportedSupabaseOperation("saveReviewDecisionForOwner");
-  }
-
-  return getSqliteAppStateStore().saveReviewDecisionForOwner(input);
+  return getActiveAppStateStore().saveReviewDecisionForOwner(input);
 }
 
 export function setReviewDecisionStatusForOwner(input: {
@@ -264,11 +252,7 @@ export function setReviewDecisionStatusForOwner(input: {
   fileId: string;
   status: ReviewDecisionStatus;
 }): ReviewDecision | null {
-  if (isSupabasePersistence()) {
-    unsupportedSupabaseOperation("setReviewDecisionStatusForOwner");
-  }
-
-  return getSqliteAppStateStore().setReviewDecisionStatusForOwner(input);
+  return getActiveAppStateStore().setReviewDecisionStatusForOwner(input);
 }
 
 export function getFilingEventsByOwnerEmail(ownerEmail: string): FilingEvent[] {
@@ -342,11 +326,7 @@ export function upsertClientMemoryRule(input: {
   rawClientName: string;
   learnedClientFolder: string;
 }): ClientMemoryRule | undefined | null {
-  if (isSupabasePersistence()) {
-    unsupportedSupabaseOperation("upsertClientMemoryRule");
-  }
-
-  return getSqliteAppStateStore().upsertClientMemoryRule(input);
+  return getActiveAppStateStore().upsertClientMemoryRule(input);
 }
 
 export function getStorageConnectionsByOwnerEmail(

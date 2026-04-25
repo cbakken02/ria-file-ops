@@ -15,7 +15,7 @@ import {
   type FirmDocumentLatestAccountSnapshot,
   type FirmDocumentLatestContact,
   type FirmDocumentPartyMatch,
-} from "@/lib/firm-document-sqlite-query";
+} from "@/lib/firm-document-query";
 
 export type QueryAssistantIntent =
   | "statement_existence"

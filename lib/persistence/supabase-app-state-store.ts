@@ -9,10 +9,13 @@ import {
 } from "@/lib/postgres/server";
 import type {
   BugReport,
+  ClientMemoryRule,
   FilingEvent,
   FilingEventOutcome,
   FilingEventType,
   FirmSettings,
+  ReviewDecision,
+  ReviewDecisionStatus,
   StorageConnection,
   StorageConnectionStatus,
 } from "@/lib/db";
@@ -105,6 +108,45 @@ type FilingEventRow = {
   outcome: FilingEventOutcome;
   errorMessage: string | null;
   createdAt: string;
+};
+
+type ReviewDecisionRow = {
+  id: string;
+  ownerEmail: string;
+  fileId: string;
+  sourceName: string;
+  mimeType: string;
+  modifiedTime: string | null;
+  detectedDocumentType: string | null;
+  detectedDocumentSubtype: string | null;
+  originalClientName: string | null;
+  originalClientName2: string | null;
+  originalOwnershipType: "single" | "joint" | null;
+  originalClientFolder: string | null;
+  originalTopLevelFolder: string | null;
+  originalFilename: string | null;
+  reviewedClientName: string | null;
+  reviewedClientName2: string | null;
+  reviewedOwnershipType: "single" | "joint" | null;
+  reviewedDocumentSubtype: string | null;
+  reviewedClientFolder: string | null;
+  reviewedTopLevelFolder: string | null;
+  reviewedFilename: string | null;
+  status: ReviewDecisionStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ClientMemoryRuleRow = {
+  id: string;
+  ownerEmail: string;
+  rawClientName: string;
+  normalizedClientName: string;
+  learnedClientFolder: string;
+  source: "human_review";
+  usageCount: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 const FIRM_SETTINGS_SELECT = `
@@ -203,6 +245,49 @@ const FILING_EVENT_SELECT = `
   FROM public.filing_events
 `;
 
+const REVIEW_DECISION_SELECT = `
+  SELECT
+    id,
+    owner_email AS "ownerEmail",
+    file_id AS "fileId",
+    source_name AS "sourceName",
+    mime_type AS "mimeType",
+    modified_time AS "modifiedTime",
+    detected_document_type AS "detectedDocumentType",
+    detected_document_subtype AS "detectedDocumentSubtype",
+    original_client_name AS "originalClientName",
+    original_client_name2 AS "originalClientName2",
+    original_ownership_type AS "originalOwnershipType",
+    original_client_folder AS "originalClientFolder",
+    original_top_level_folder AS "originalTopLevelFolder",
+    original_filename AS "originalFilename",
+    reviewed_client_name AS "reviewedClientName",
+    reviewed_client_name2 AS "reviewedClientName2",
+    reviewed_ownership_type AS "reviewedOwnershipType",
+    reviewed_document_subtype AS "reviewedDocumentSubtype",
+    reviewed_client_folder AS "reviewedClientFolder",
+    reviewed_top_level_folder AS "reviewedTopLevelFolder",
+    reviewed_filename AS "reviewedFilename",
+    status,
+    created_at AS "createdAt",
+    updated_at AS "updatedAt"
+  FROM public.review_decisions
+`;
+
+const CLIENT_MEMORY_RULE_SELECT = `
+  SELECT
+    id,
+    owner_email AS "ownerEmail",
+    raw_client_name AS "rawClientName",
+    normalized_client_name AS "normalizedClientName",
+    learned_client_folder AS "learnedClientFolder",
+    source,
+    usage_count AS "usageCount",
+    created_at AS "createdAt",
+    updated_at AS "updatedAt"
+  FROM public.client_memory_rules
+`;
+
 export function getFirmSettingsByOwnerEmail(ownerEmail: string) {
   const result = queryPostgresSync<FirmSettingsRow>(
     `${FIRM_SETTINGS_SELECT} WHERE owner_email = $1`,
@@ -210,6 +295,40 @@ export function getFirmSettingsByOwnerEmail(ownerEmail: string) {
   );
 
   return mapFirmSettingsRow(result.rows[0]);
+}
+
+export function getReviewDecisionsByOwnerEmail(ownerEmail: string) {
+  const result = queryPostgresSync<ReviewDecisionRow>(
+    `${REVIEW_DECISION_SELECT} WHERE owner_email = $1 ORDER BY updated_at DESC`,
+    [ownerEmail],
+  );
+
+  return result.rows
+    .map((row) => mapReviewDecisionRow(row))
+    .filter((decision): decision is ReviewDecision => Boolean(decision));
+}
+
+export function getClientMemoryRulesByOwnerEmail(ownerEmail: string) {
+  const result = queryPostgresSync<ClientMemoryRuleRow>(
+    `${CLIENT_MEMORY_RULE_SELECT} WHERE owner_email = $1 ORDER BY usage_count DESC, updated_at DESC`,
+    [ownerEmail],
+  );
+
+  return result.rows
+    .map((row) => mapClientMemoryRuleRow(row))
+    .filter((rule): rule is ClientMemoryRule => Boolean(rule));
+}
+
+export function getReviewDecisionByOwnerAndFile(
+  ownerEmail: string,
+  fileId: string,
+) {
+  const result = queryPostgresSync<ReviewDecisionRow>(
+    `${REVIEW_DECISION_SELECT} WHERE owner_email = $1 AND file_id = $2`,
+    [ownerEmail, fileId],
+  );
+
+  return mapReviewDecisionRow(result.rows[0]);
 }
 
 export function saveFirmSettingsForOwner(input: {
@@ -291,6 +410,181 @@ export function saveFirmSettingsForOwner(input: {
   );
 
   return mapFirmSettingsRow(result.rows[0]) ?? null;
+}
+
+export function saveReviewDecisionForOwner(input: {
+  ownerEmail: string;
+  fileId: string;
+  sourceName: string;
+  mimeType: string;
+  modifiedTime: string | null;
+  detectedDocumentType: string | null;
+  detectedDocumentSubtype: string | null;
+  originalClientName: string | null;
+  originalClientName2: string | null;
+  originalOwnershipType: "single" | "joint" | null;
+  originalClientFolder: string | null;
+  originalTopLevelFolder: string | null;
+  originalFilename: string | null;
+  reviewedClientName: string | null;
+  reviewedClientName2: string | null;
+  reviewedOwnershipType: "single" | "joint" | null;
+  reviewedDocumentSubtype: string | null;
+  reviewedClientFolder: string | null;
+  reviewedTopLevelFolder: string | null;
+  reviewedFilename: string | null;
+  status: ReviewDecisionStatus;
+}) {
+  const now = new Date().toISOString();
+  const result = queryPostgresSync<ReviewDecisionRow>(
+    `
+      INSERT INTO public.review_decisions (
+        id,
+        owner_email,
+        file_id,
+        source_name,
+        mime_type,
+        modified_time,
+        detected_document_type,
+        detected_document_subtype,
+        original_client_name,
+        original_client_name2,
+        original_ownership_type,
+        original_client_folder,
+        original_top_level_folder,
+        original_filename,
+        reviewed_client_name,
+        reviewed_client_name2,
+        reviewed_ownership_type,
+        reviewed_document_subtype,
+        reviewed_client_folder,
+        reviewed_top_level_folder,
+        reviewed_filename,
+        status,
+        created_at,
+        updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+        $17, $18, $19, $20, $21, $22, $23, $23
+      )
+      ON CONFLICT (owner_email, file_id)
+      DO UPDATE SET
+        source_name = EXCLUDED.source_name,
+        mime_type = EXCLUDED.mime_type,
+        modified_time = EXCLUDED.modified_time,
+        detected_document_type = EXCLUDED.detected_document_type,
+        detected_document_subtype = EXCLUDED.detected_document_subtype,
+        original_client_name = EXCLUDED.original_client_name,
+        original_client_name2 = EXCLUDED.original_client_name2,
+        original_ownership_type = EXCLUDED.original_ownership_type,
+        original_client_folder = EXCLUDED.original_client_folder,
+        original_top_level_folder = EXCLUDED.original_top_level_folder,
+        original_filename = EXCLUDED.original_filename,
+        reviewed_client_name = EXCLUDED.reviewed_client_name,
+        reviewed_client_name2 = EXCLUDED.reviewed_client_name2,
+        reviewed_ownership_type = EXCLUDED.reviewed_ownership_type,
+        reviewed_document_subtype = EXCLUDED.reviewed_document_subtype,
+        reviewed_client_folder = EXCLUDED.reviewed_client_folder,
+        reviewed_top_level_folder = EXCLUDED.reviewed_top_level_folder,
+        reviewed_filename = EXCLUDED.reviewed_filename,
+        status = EXCLUDED.status,
+        updated_at = EXCLUDED.updated_at
+      RETURNING
+        id,
+        owner_email AS "ownerEmail",
+        file_id AS "fileId",
+        source_name AS "sourceName",
+        mime_type AS "mimeType",
+        modified_time AS "modifiedTime",
+        detected_document_type AS "detectedDocumentType",
+        detected_document_subtype AS "detectedDocumentSubtype",
+        original_client_name AS "originalClientName",
+        original_client_name2 AS "originalClientName2",
+        original_ownership_type AS "originalOwnershipType",
+        original_client_folder AS "originalClientFolder",
+        original_top_level_folder AS "originalTopLevelFolder",
+        original_filename AS "originalFilename",
+        reviewed_client_name AS "reviewedClientName",
+        reviewed_client_name2 AS "reviewedClientName2",
+        reviewed_ownership_type AS "reviewedOwnershipType",
+        reviewed_document_subtype AS "reviewedDocumentSubtype",
+        reviewed_client_folder AS "reviewedClientFolder",
+        reviewed_top_level_folder AS "reviewedTopLevelFolder",
+        reviewed_filename AS "reviewedFilename",
+        status,
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+    `,
+    [
+      crypto.randomUUID(),
+      input.ownerEmail,
+      input.fileId,
+      input.sourceName,
+      input.mimeType,
+      input.modifiedTime,
+      input.detectedDocumentType,
+      input.detectedDocumentSubtype,
+      input.originalClientName,
+      input.originalClientName2,
+      input.originalOwnershipType,
+      input.originalClientFolder,
+      input.originalTopLevelFolder,
+      input.originalFilename,
+      input.reviewedClientName,
+      input.reviewedClientName2,
+      input.reviewedOwnershipType,
+      input.reviewedDocumentSubtype,
+      input.reviewedClientFolder,
+      input.reviewedTopLevelFolder,
+      input.reviewedFilename,
+      input.status,
+      now,
+    ],
+  );
+
+  return mapReviewDecisionRow(result.rows[0]) ?? null;
+}
+
+export function setReviewDecisionStatusForOwner(input: {
+  ownerEmail: string;
+  fileId: string;
+  status: ReviewDecisionStatus;
+}) {
+  const result = queryPostgresSync<ReviewDecisionRow>(
+    `
+      UPDATE public.review_decisions
+      SET status = $3, updated_at = $4
+      WHERE owner_email = $1 AND file_id = $2
+      RETURNING
+        id,
+        owner_email AS "ownerEmail",
+        file_id AS "fileId",
+        source_name AS "sourceName",
+        mime_type AS "mimeType",
+        modified_time AS "modifiedTime",
+        detected_document_type AS "detectedDocumentType",
+        detected_document_subtype AS "detectedDocumentSubtype",
+        original_client_name AS "originalClientName",
+        original_client_name2 AS "originalClientName2",
+        original_ownership_type AS "originalOwnershipType",
+        original_client_folder AS "originalClientFolder",
+        original_top_level_folder AS "originalTopLevelFolder",
+        original_filename AS "originalFilename",
+        reviewed_client_name AS "reviewedClientName",
+        reviewed_client_name2 AS "reviewedClientName2",
+        reviewed_ownership_type AS "reviewedOwnershipType",
+        reviewed_document_subtype AS "reviewedDocumentSubtype",
+        reviewed_client_folder AS "reviewedClientFolder",
+        reviewed_top_level_folder AS "reviewedTopLevelFolder",
+        reviewed_filename AS "reviewedFilename",
+        status,
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+    `,
+    [input.ownerEmail, input.fileId, input.status, new Date().toISOString()],
+  );
+
+  return mapReviewDecisionRow(result.rows[0]) ?? null;
 }
 
 export function getFilingEventsByOwnerEmail(ownerEmail: string) {
@@ -482,6 +776,62 @@ export function createFilingEvent(input: {
       new Date().toISOString(),
     ],
   );
+}
+
+export function upsertClientMemoryRule(input: {
+  ownerEmail: string;
+  rawClientName: string;
+  learnedClientFolder: string;
+}) {
+  const normalizedClientName = normalizeClientMemoryKey(input.rawClientName);
+  const learnedClientFolder = input.learnedClientFolder.trim();
+  if (!normalizedClientName || !learnedClientFolder) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const result = queryPostgresSync<ClientMemoryRuleRow>(
+    `
+      INSERT INTO public.client_memory_rules (
+        id,
+        owner_email,
+        raw_client_name,
+        normalized_client_name,
+        learned_client_folder,
+        source,
+        usage_count,
+        created_at,
+        updated_at
+      ) VALUES ($1, $2, $3, $4, $5, 'human_review', 1, $6, $6)
+      ON CONFLICT (owner_email, normalized_client_name)
+      DO UPDATE SET
+        raw_client_name = EXCLUDED.raw_client_name,
+        learned_client_folder = EXCLUDED.learned_client_folder,
+        source = EXCLUDED.source,
+        usage_count = public.client_memory_rules.usage_count + 1,
+        updated_at = EXCLUDED.updated_at
+      RETURNING
+        id,
+        owner_email AS "ownerEmail",
+        raw_client_name AS "rawClientName",
+        normalized_client_name AS "normalizedClientName",
+        learned_client_folder AS "learnedClientFolder",
+        source,
+        usage_count AS "usageCount",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+    `,
+    [
+      crypto.randomUUID(),
+      input.ownerEmail,
+      input.rawClientName,
+      normalizedClientName,
+      learnedClientFolder,
+      now,
+    ],
+  );
+
+  return mapClientMemoryRuleRow(result.rows[0]) ?? null;
 }
 
 export function getStorageConnectionsByOwnerEmail(ownerEmail: string) {
@@ -803,6 +1153,26 @@ function mapFirmSettingsRow(row: FirmSettingsRow | undefined) {
   } satisfies FirmSettings;
 }
 
+function mapReviewDecisionRow(row: ReviewDecisionRow | undefined) {
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    ...row,
+  } satisfies ReviewDecision;
+}
+
+function mapClientMemoryRuleRow(row: ClientMemoryRuleRow | undefined) {
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    ...row,
+  } satisfies ClientMemoryRule;
+}
+
 function mapStorageConnectionRow(row: StorageConnectionRow | undefined) {
   if (!row) {
     return undefined;
@@ -882,6 +1252,14 @@ function parseJsonString(value: string | null) {
         : "Invalid JSON value provided for app-state persistence.",
     );
   }
+}
+
+function normalizeClientMemoryKey(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function buildStorageConnectionIdentityKey(
