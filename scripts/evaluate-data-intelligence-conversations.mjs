@@ -168,6 +168,35 @@ const scenarios = [
     ],
   },
   {
+    id: "client-name-clarification-continuity",
+    title: "Client-name clarification continuity",
+    turns: [
+      {
+        question: "Do we have a statement uploaded?",
+        expect: {
+          status: "ambiguous",
+          intent: "statement_existence",
+          answerIncludes: [/Which client do you want me to check\?/i],
+        },
+      },
+      {
+        question: "christopher bakken",
+        expect: {
+          status: "answered",
+          intent: "statement_existence",
+          sourceCount: 3,
+          sourceAccountTypes: ["Checking", "Savings", "Credit Card"],
+          answerIncludes: [/Christopher/i, /statement/i],
+          activeClient: /Christopher/i,
+          executedQuestionIncludes: [/Christopher Bakken/i],
+          executedPlan: {
+            intent: "statement_existence",
+          },
+        },
+      },
+    ],
+  },
+  {
     id: "active-client-persistence",
     title: "Active client persistence",
     turns: [

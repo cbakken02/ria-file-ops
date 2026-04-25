@@ -14,6 +14,7 @@ import {
 } from "@/lib/google-drive";
 import { clearPreviewAnalysisCacheForOwner } from "@/lib/preview-analysis-cache";
 import { buildProcessingPreview } from "@/lib/processing-preview";
+import { writePreviewSnapshot } from "@/lib/preview-snapshot";
 import { requireSession } from "@/lib/session";
 import {
   getVerifiedActiveStorageConnectionForSession,
@@ -183,7 +184,64 @@ export async function refreshIntakeAction(formData: FormData) {
     );
   }
 
+  const clientMemoryRules = getClientMemoryRulesByOwnerEmail(ownerEmail);
+  let sourceFiles: GoogleDriveFile[] = [];
+  try {
+    sourceFiles = await listFilesInFolder(
+      activeConnection.accessToken,
+      settings.sourceFolderId,
+    );
+  } catch (error) {
+    redirect(
+      `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
+        error instanceof Error
+          ? `Google Drive could not load the source folder: ${error.message}`
+          : "Google Drive could not load the source folder.",
+      )}`,
+    );
+  }
+
+  let destinationChildren: GoogleDriveFile[] = [];
+  if (settings.destinationFolderId) {
+    try {
+      destinationChildren = await listFilesInFolder(
+        activeConnection.accessToken,
+        settings.destinationFolderId,
+      );
+    } catch (error) {
+      redirect(
+        `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
+          error instanceof Error
+            ? `Google Drive could not load the destination root: ${error.message}`
+            : "Google Drive could not load the destination root.",
+        )}`,
+      );
+    }
+  }
+
+  const existingClientFolders = destinationChildren
+    .filter((file) => file.mimeType === "application/vnd.google-apps.folder")
+    .map((file) => file.name);
+
   await clearPreviewAnalysisCacheForOwner(ownerEmail);
+  const preview = await buildProcessingPreview(
+    sourceFiles,
+    settings,
+    async (fileId) => downloadDriveFile(activeConnection.accessToken, fileId),
+    existingClientFolders,
+    clientMemoryRules,
+    { analysisMode: "preview" },
+  );
+
+  await writePreviewSnapshot({
+    ownerEmail,
+    sourceFolder: settings.sourceFolderName ?? null,
+    destinationRoot: settings.destinationFolderName ?? null,
+    reviewPosture: preview.reviewRule.title,
+    readyCount: preview.readyCount,
+    reviewCount: preview.reviewCount,
+    items: preview.items,
+  });
 
   revalidatePath("/preview");
   const refreshedAt = new Intl.DateTimeFormat("en-US", {
@@ -192,7 +250,7 @@ export async function refreshIntakeAction(formData: FormData) {
 
   redirect(
     `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
-      `Intake refreshed at ${refreshedAt}`,
+      `Intake refreshed at ${refreshedAt}. ${preview.items.length} files checked.`,
     )}`,
   );
 }

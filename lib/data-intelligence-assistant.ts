@@ -215,7 +215,16 @@ function buildStateAwareFallbackQuestion(
   question: string,
   state: DataIntelligenceConversationState | null,
 ) {
-  if (!state?.activeClientName) {
+  if (!state) {
+    return null;
+  }
+
+  const clarifiedClientName = extractClientClarificationAnswer(question, state);
+  if (clarifiedClientName) {
+    return buildReplacementClientFollowUpQuestion(clarifiedClientName, state);
+  }
+
+  if (!state.activeClientName) {
     return null;
   }
 
@@ -492,6 +501,39 @@ function buildReplacementClientFollowUpQuestion(
   }
 
   return null;
+}
+
+function extractClientClarificationAnswer(
+  question: string,
+  state: DataIntelligenceConversationState,
+) {
+  if (
+    state.activeClientName ||
+    state.lastTurnKind !== "ambiguous" ||
+    !state.lastIntent
+  ) {
+    return null;
+  }
+
+  const normalized = normalizeFollowUpText(question);
+  if (!normalized) {
+    return null;
+  }
+
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  if (
+    tokens.length < 2 ||
+    tokens.length > 4 ||
+    tokens.some((token) => token.length <= 1 || isDomainOrStopToken(token))
+  ) {
+    return null;
+  }
+
+  return tokens.map(capitalizeNameToken).join(" ");
+}
+
+function capitalizeNameToken(token: string) {
+  return token.charAt(0).toUpperCase() + token.slice(1);
 }
 
 function describePriorStatementScope(

@@ -12,34 +12,11 @@ export type PreviewSnapshot = {
   reviewPosture: string;
   readyCount: number;
   reviewCount: number;
-  items: Array<{
-    sourceName: string;
-    contentSource: PreviewItem["contentSource"];
-    detectedDocumentType: string;
-    detectedDocumentSubtype: string | null;
-    detectedClient: string | null;
-    resolvedClientFolder: string | null;
-    suggestedClientFolder: string | null;
-    clientMatchReason: string;
-    proposedTopLevelFolder: string;
-    proposedFilename: string;
-    pdfFields: Array<{ name: string; value: string }>;
-    debug: PreviewItem["debug"];
-    extractedAccountLast4: string | null;
-    extractedAccountType: string | null;
-    extractedCustodian: string | null;
-    extractedDocumentDate: string | null;
-    extractedEntityName: string | null;
-    extractedIdType: string | null;
-    extractedTaxYear: string | null;
-    phase1ReviewFlags: PreviewItem["phase1ReviewFlags"];
-    phase1ReviewPriority: PreviewItem["phase1ReviewPriority"];
-    confidenceLabel: PreviewItem["confidenceLabel"];
-    confidenceScore: number;
-    status: PreviewItem["status"];
-    reasons: string[];
-    textExcerpt: string | null;
-  }>;
+  items: PreviewSnapshotItem[];
+};
+
+export type PreviewSnapshotItem = Omit<PreviewItem, "diagnosticText"> & {
+  diagnosticText?: null;
 };
 
 type PreviewSnapshotRow = {
@@ -73,18 +50,43 @@ export async function writePreviewSnapshot(input: {
     readyCount: input.readyCount,
     reviewCount: input.reviewCount,
     items: input.items.map((item) => ({
+      id: item.id,
       sourceName: item.sourceName,
-      contentSource: item.contentSource,
+      mimeType: item.mimeType,
+      modifiedTime: item.modifiedTime,
+      driveSize: item.driveSize,
+      downloadByteLength: item.downloadByteLength,
+      downloadSha1: item.downloadSha1,
+      previewSnapshotId: item.previewSnapshotId,
+      parserConflictSummary: item.parserConflictSummary,
+      proposedTopLevelFolder: item.proposedTopLevelFolder,
+      proposedFilename: item.proposedFilename,
+      confidenceLabel: item.confidenceLabel,
+      confidenceScore: item.confidenceScore,
+      status: item.status,
+      reasons: item.reasons,
       detectedDocumentType: item.detectedDocumentType,
       detectedDocumentSubtype: item.detectedDocumentSubtype,
       detectedClient: item.detectedClient,
+      detectedClient2: item.detectedClient2,
+      ownershipType: item.ownershipType,
+      resolvedHouseholdFolder: item.resolvedHouseholdFolder,
+      suggestedHouseholdFolder: item.suggestedHouseholdFolder,
+      householdMatchReason: item.householdMatchReason,
+      householdResolutionStatus: item.householdResolutionStatus,
+      contentSource: item.contentSource,
       resolvedClientFolder: item.resolvedClientFolder,
       suggestedClientFolder: item.suggestedClientFolder,
       clientMatchReason: item.clientMatchReason,
-      proposedTopLevelFolder: item.proposedTopLevelFolder,
-      proposedFilename: item.proposedFilename,
+      clientResolutionStatus: item.clientResolutionStatus,
+      analysisSource: item.analysisSource,
+      analysisRanAt: item.analysisRanAt,
+      cacheWrittenAt: item.cacheWrittenAt,
+      textExcerpt: item.textExcerpt,
+      diagnosticText: null,
       pdfFields: item.pdfFields,
       debug: item.debug,
+      documentTypeId: item.documentTypeId,
       extractedAccountLast4: item.extractedAccountLast4,
       extractedAccountType: item.extractedAccountType,
       extractedCustodian: item.extractedCustodian,
@@ -94,11 +96,6 @@ export async function writePreviewSnapshot(input: {
       extractedTaxYear: item.extractedTaxYear,
       phase1ReviewFlags: item.phase1ReviewFlags,
       phase1ReviewPriority: item.phase1ReviewPriority,
-      confidenceLabel: item.confidenceLabel,
-      confidenceScore: item.confidenceScore,
-      status: item.status,
-      reasons: item.reasons,
-      textExcerpt: item.textExcerpt,
     })),
   };
 
@@ -198,6 +195,30 @@ export async function readPreviewSnapshot(ownerEmail?: string | null) {
   );
 
   return normalizeSnapshotValue(result.rows[0]?.snapshotJson);
+}
+
+export function restorePreviewItemsFromSnapshot(
+  snapshot: PreviewSnapshot | null,
+): PreviewItem[] {
+  return (snapshot?.items ?? [])
+    .map((item) => {
+      const candidate = item as Partial<PreviewItem>;
+      if (
+        !candidate.id ||
+        !candidate.sourceName ||
+        !candidate.mimeType ||
+        !candidate.debug ||
+        !candidate.documentTypeId
+      ) {
+        return null;
+      }
+
+      return {
+        ...candidate,
+        diagnosticText: null,
+      } as PreviewItem;
+    })
+    .filter((item): item is PreviewItem => Boolean(item));
 }
 
 function normalizeSnapshotValue(value: unknown): PreviewSnapshot | null {

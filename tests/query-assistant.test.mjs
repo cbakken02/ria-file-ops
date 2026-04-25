@@ -3,6 +3,9 @@ import test from "node:test";
 
 import { answerDataIntelligenceQuestion } from "../lib/data-intelligence-assistant.ts";
 import {
+  deriveDataIntelligenceConversationStateFromResult,
+} from "../lib/data-intelligence-conversation.ts";
+import {
   askFirmDocumentAssistant,
   buildQueryAssistantRetrievalPlan,
 } from "../lib/query-assistant.ts";
@@ -633,6 +636,44 @@ test("assistant asks a natural client clarification when no active client is ava
     assert.equal(result.answer, "Which client do you want me to check?");
     assert.equal(result.presentation.mode, "ambiguity_prompt");
     assert.doesNotMatch(result.answer, /firm-document store/i);
+  } finally {
+    tempDb.cleanup();
+  }
+});
+
+test("hybrid assistant treats a client-name-only reply as the prior client clarification", async () => {
+  const tempDb = makeTempDbEnv("query-assistant-client-clarification-follow-up-");
+  const ownerEmail = "query-assistant-client-clarification-follow-up@example.com";
+
+  try {
+    seedAssistantFixtures(ownerEmail);
+
+    const clarification = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "Do we have a statement uploaded?",
+    });
+    const conversationState = deriveDataIntelligenceConversationStateFromResult({
+      previousState: null,
+      result: clarification,
+    });
+    const result = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "christopher bakken",
+      conversationState,
+      includeDebug: true,
+    });
+    const debug = result.debug?.dataIntelligenceHybrid;
+
+    assert.equal(clarification.status, "ambiguous");
+    assert.equal(clarification.intent, "statement_existence");
+    assert.equal(result.status, "answered");
+    assert.equal(result.intent, "statement_existence");
+    assert.match(result.answer, /Christopher/i);
+    assert.ok(debug);
+    assert.equal(debug.executedPlan.intent, "statement_existence");
+    assert.match(debug.executedQuestion, /Christopher Bakken/i);
   } finally {
     tempDb.cleanup();
   }

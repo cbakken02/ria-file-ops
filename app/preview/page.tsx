@@ -1,24 +1,24 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { ProductShell } from "@/components/product-shell";
+import { StorageStatusPanel } from "@/components/storage-status-panel";
 import { StorageSwitcher } from "@/components/storage-switcher";
 import {
-  getClientMemoryRulesByOwnerEmail,
   getFilingEventsByOwnerEmail,
   getFirmSettingsByOwnerEmail,
   getReviewDecisionsByOwnerEmail,
 } from "@/lib/db";
-import { downloadDriveFile, listFilesInFolder } from "@/lib/google-drive";
-import { buildProcessingPreview } from "@/lib/processing-preview";
-import { writePreviewSnapshot } from "@/lib/preview-snapshot";
+import {
+  summarizePreviewNormalizationChanges,
+  summarizePreviewPhase1Evaluation,
+} from "@/lib/processing-preview";
+import {
+  readPreviewSnapshot,
+  restorePreviewItemsFromSnapshot,
+} from "@/lib/preview-snapshot";
 import { requireSession } from "@/lib/session";
 import { getReviewRuleOption, normalizeFolderTemplate } from "@/lib/setup-config";
 import { parseNamingRules } from "@/lib/naming-rules";
-import {
-  getStorageConnectionsForSession,
-  getVerifiedActiveStorageConnectionForSession,
-  storageConnectionHasWriteAccess,
-} from "@/lib/storage-connections";
+import { getStorageConnectionsForSession } from "@/lib/storage-connections";
 import { IntakeQueue } from "./intake-queue";
 import { RefreshIntakeButton } from "./refresh-intake-button";
 import styles from "./page.module.css";
@@ -33,12 +33,10 @@ export default async function PreviewPage({
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
   const session = await requireSession();
   const ownerEmail = session.user?.email;
-  const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
   const storageConnections = await getStorageConnectionsForSession(session);
   const displayConnection =
     storageConnections.find((connection) => connection.isPrimary) ?? null;
-  const activeStorageProvider =
-    displayConnection?.provider ?? activeConnection?.provider ?? null;
+  const activeStorageProvider = displayConnection?.provider ?? null;
   const settings = ownerEmail ? getFirmSettingsByOwnerEmail(ownerEmail) ?? null : null;
   const namingRules = parseNamingRules(
     settings?.namingRulesJson,
@@ -46,114 +44,37 @@ export default async function PreviewPage({
   );
   const savedDecisions = ownerEmail ? getReviewDecisionsByOwnerEmail(ownerEmail) : [];
   const filingEvents = ownerEmail ? getFilingEventsByOwnerEmail(ownerEmail) : [];
-  const clientMemoryRules = ownerEmail ? getClientMemoryRulesByOwnerEmail(ownerEmail) : [];
   const savedDecisionMap = new Map(savedDecisions.map((decision) => [decision.fileId, decision]));
+  const snapshot = await readPreviewSnapshot(ownerEmail);
+  const snapshotItems = restorePreviewItemsFromSnapshot(snapshot);
 
-  const canPreview =
-    Boolean(activeConnection) &&
-    Boolean(settings?.sourceFolderId);
-
-  let sourceFiles: Awaited<ReturnType<typeof listFilesInFolder>> = [];
-  let sourceFolderError: string | null = null;
-
-  if (canPreview && activeConnection && settings?.sourceFolderId) {
-    try {
-      sourceFiles = await listFilesInFolder(
-        activeConnection.accessToken,
-        settings.sourceFolderId,
-      );
-    } catch (error) {
-      sourceFolderError =
-        error instanceof Error
-          ? error.message
-          : "The intake folder could not be loaded from Google Drive.";
-    }
-  }
-
-  let destinationChildren: Awaited<ReturnType<typeof listFilesInFolder>> = [];
-  let destinationFolderError: string | null = null;
-
-  if (canPreview && activeConnection && settings?.destinationFolderId) {
-    try {
-      destinationChildren = await listFilesInFolder(
-        activeConnection.accessToken,
-        settings.destinationFolderId,
-      );
-    } catch (error) {
-      destinationFolderError =
-        error instanceof Error
-          ? error.message
-          : "The destination root could not be loaded from Google Drive.";
-    }
-  }
-
-  const storageUnavailableMessage = displayConnection
-    ? "Reconnect the active storage connection to load this workspace."
-    : "Connect a storage to begin.";
+  const canRefreshIntake =
+    Boolean(settings?.sourceFolderId) &&
+    Boolean(displayConnection) &&
+    displayConnection?.status === "connected";
+  const storageStatusTitle = displayConnection
+    ? "Reconnect storage"
+    : "Connect storage";
+  const storageStatusSummary = displayConnection
+    ? "Intake can show the last cached refresh, but storage must be reconnected before scanning Drive again."
+    : "Connect storage to use Intake.";
   const liveQueueError =
-    (!activeConnection && settings?.sourceFolderId
-      ? storageUnavailableMessage
-      : null) ??
-    sourceFolderError ??
-    destinationFolderError ??
-    (session.authError
+    (settings?.sourceFolderId && !canRefreshIntake ? storageStatusSummary : null) ??
+    (session.driveConnected && session.authError
       ? "Your storage connection needs to be refreshed. Reconnect it if this keeps happening."
       : null);
-  const hasVerifiedStorageAccess = Boolean(activeConnection) && !liveQueueError;
-  const existingClientFolders = destinationChildren
-    .filter((file) => file.mimeType === "application/vnd.google-apps.folder")
-    .map((file) => file.name);
-
-  const preview = liveQueueError
-    ? {
-        items: [],
-        readyCount: 0,
-        reviewCount: 0,
-        folderTemplate: normalizeFolderTemplate(settings?.folderTemplate ?? ""),
-        reviewRule: getReviewRuleOption(settings?.reviewInstruction),
-      }
-    : await buildProcessingPreview(
-        sourceFiles,
-        settings,
-        async (fileId) => {
-          if (!activeConnection) {
-            throw new Error("Missing active storage connection.");
-          }
-
-          return downloadDriveFile(activeConnection.accessToken, fileId);
-        },
-        existingClientFolders,
-        clientMemoryRules,
-        { analysisMode: "preview" },
-      );
+  const existingClientFolders: string[] = [];
+  const preview = {
+    items: snapshotItems,
+    readyCount: snapshotItems.filter((item) => item.status === "Ready to stage").length,
+    reviewCount: snapshotItems.filter((item) => item.status === "Needs review").length,
+    normalizationSummary: summarizePreviewNormalizationChanges(snapshotItems),
+    phase1Summary: summarizePreviewPhase1Evaluation(snapshotItems),
+    folderTemplate: normalizeFolderTemplate(settings?.folderTemplate ?? ""),
+    reviewRule: getReviewRuleOption(settings?.reviewInstruction),
+  };
 
   const readyItems = preview.items.filter((item) => item.status === "Ready to stage");
-
-  if (
-    !liveQueueError &&
-    !notice &&
-    ownerEmail &&
-    activeConnection &&
-    storageConnectionHasWriteAccess(activeConnection) &&
-    settings?.destinationFolderId &&
-    preview.reviewRule.value === "auto_file_high_confidence" &&
-    readyItems.length > 0
-  ) {
-    redirect("/preview/auto-file");
-  }
-
-  if (!liveQueueError) {
-    await writePreviewSnapshot({
-      ownerEmail,
-      sourceFolder: settings?.sourceFolderName ?? null,
-      destinationRoot: settings?.destinationFolderName ?? null,
-      reviewPosture: preview.reviewRule.title,
-      readyCount: preview.readyCount,
-      reviewCount: preview.reviewCount,
-      items: preview.items,
-    });
-  }
-
   const reviewItems = preview.items.filter(
     (item) =>
       item.status === "Needs review" ||
@@ -161,7 +82,7 @@ export default async function PreviewPage({
         savedDecisionMap.get(item.id)?.status !== "filed"),
   );
   const filedItems =
-    hasVerifiedStorageAccess && activeStorageProvider
+    activeStorageProvider
       ? filingEvents.filter(
           (event) =>
             event.outcome === "succeeded" &&
@@ -184,7 +105,7 @@ export default async function PreviewPage({
         <div className={styles.headerActions}>
           <RefreshIntakeButton
             activeTab={activeTab}
-            disabled={!canPreview || Boolean(liveQueueError)}
+            disabled={!canRefreshIntake}
           />
           <StorageSwitcher
             activeConnection={
@@ -222,15 +143,33 @@ export default async function PreviewPage({
 
       {liveQueueError ? (
         <section className={styles.noteCard}>
-          <strong>Storage access could not be verified</strong>
+          <strong>{storageStatusTitle}</strong>
           <p>{liveQueueError}</p>
+        </section>
+      ) : null}
+
+      {preview.items.length > 0 ? (
+        <section className={styles.noteCard}>
+          <strong>Phase 1 evaluation</strong>
           <p>
-            Intake counts and filed-item details stay hidden until storage access is
-            restored.
+            AI succeeded: {preview.phase1Summary.aiSucceededCount}.
+            {" "}
+            AI failed and fell back: {preview.phase1Summary.aiFailedFallbackCount}.
+            {" "}
+            AI skipped: {preview.phase1Summary.aiSkippedCount}.
+            {" "}
+            High priority: {preview.phase1Summary.highPriorityCount}.
+            {" "}
+            Medium priority: {preview.phase1Summary.mediumPriorityCount}.
+            {" "}
+            Low priority: {preview.phase1Summary.lowPriorityCount}.
+            {" "}
+            Custodian normalization changes: {preview.phase1Summary.custodianNormalizedCount}.
+            {" "}
+            Account-type normalization changes: {preview.phase1Summary.accountTypeNormalizedCount}.
+            {" "}
+            Files with Phase 1 review flags: {preview.phase1Summary.flaggedFileCount}.
           </p>
-          <Link className={styles.secondaryAction} href="/setup?section=storage">
-            Check storage connection
-          </Link>
         </section>
       ) : null}
 
@@ -244,6 +183,20 @@ export default async function PreviewPage({
           <Link className={styles.primaryAction} href="/setup">
             Open settings
           </Link>
+        </section>
+      ) : null}
+
+      {settings?.sourceFolderId && preview.items.length === 0 ? (
+        <section className={styles.noteCard}>
+          <strong>
+            {snapshot
+              ? "Cached intake preview needs a refresh"
+              : "Refresh intake when you are ready"}
+          </strong>
+          <p>
+            Sidebar navigation no longer scans Drive. Use Refresh Intake to
+            read the source folder and update this queue.
+          </p>
         </section>
       ) : null}
 
@@ -284,19 +237,24 @@ export default async function PreviewPage({
               </div>
             ) : null}
 
+            {liveQueueError && preview.items.length === 0 ? (
+              <StorageStatusPanel
+                title={storageStatusTitle}
+                message={storageStatusSummary}
+              />
+            ) : (
         <IntakeQueue
           activeTab={activeTab}
           existingClientFolders={existingClientFolders}
           filedItems={filedItems}
           folderTemplate={folderTemplate}
-          hasVerifiedStorage={hasVerifiedStorageAccess}
           namingRules={namingRules}
           readyItems={readyItems}
           reviewItems={reviewItems}
           savedDecisions={savedDecisions}
-          storageUnavailableMessage={storageUnavailableMessage}
               sourceFolderName={settings.sourceFolderName ?? null}
             />
+            )}
           </section>
         </>
       ) : null}

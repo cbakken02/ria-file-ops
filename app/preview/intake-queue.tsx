@@ -23,12 +23,10 @@ type IntakeQueueProps = {
   reviewItems: PreviewItem[];
   readyItems: PreviewItem[];
   filedItems: FilingEvent[];
-  hasVerifiedStorage: boolean;
   savedDecisions: ReviewDecision[];
   folderTemplate: string[];
   namingRules: NamingRulesConfig;
   existingClientFolders: string[];
-  storageUnavailableMessage: string;
   sourceFolderName: string | null;
 };
 
@@ -42,12 +40,10 @@ export function IntakeQueue({
   reviewItems,
   readyItems,
   filedItems,
-  hasVerifiedStorage,
   savedDecisions,
   folderTemplate,
   namingRules,
   existingClientFolders,
-  storageUnavailableMessage,
   sourceFolderName,
 }: IntakeQueueProps) {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
@@ -81,14 +77,7 @@ export function IntakeQueue({
 
   let rows: ReactNode;
 
-  if (!hasVerifiedStorage) {
-    rows = (
-      <article className={styles.noteCard}>
-        <strong>{storageUnavailableMessage}</strong>
-        <p>No intake or filing details are shown until storage access is restored.</p>
-      </article>
-    );
-  } else if (activeTab === "review") {
+  if (activeTab === "review") {
     rows = reviewItems.length ? (
       reviewItems.map((item) =>
         renderPreviewRow(item, savedDecisionMap.get(item.id), setActiveModal),

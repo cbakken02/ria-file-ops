@@ -1962,7 +1962,30 @@ function questionAppearsToOmitClient(question: string) {
     }
   }
 
+  if (questionContainsNameLikePhrase(normalized)) {
+    return false;
+  }
+
   return true;
+}
+
+function questionContainsNameLikePhrase(normalizedQuestion: string) {
+  const tokens = normalizedQuestion.split(/\s+/).filter(Boolean);
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    const pair = [tokens[index]!, tokens[index + 1]!];
+    if (
+      pair.every(
+        (token) =>
+          token.length > 1 &&
+          !isClientlessQuestionStopToken(token) &&
+          !isAdditionalClientlessQuestionStopToken(token),
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isClientlessQuestionStopToken(token: string) {
@@ -1999,6 +2022,32 @@ function isClientlessQuestionStopToken(token: string) {
     "the",
     "we",
     "what",
+  ]).has(token);
+}
+
+function isAdditionalClientlessQuestionStopToken(token: string) {
+  return new Set([
+    "about",
+    "account",
+    "balance",
+    "customer",
+    "does",
+    "employer",
+    "from",
+    "has",
+    "is",
+    "market",
+    "number",
+    "plan",
+    "retirement",
+    "routing",
+    "service",
+    "sponsored",
+    "there",
+    "uploaded",
+    "value",
+    "was",
+    "with",
   ]).has(token);
 }
 
