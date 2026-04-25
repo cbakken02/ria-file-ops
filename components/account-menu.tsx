@@ -226,6 +226,7 @@ export function AccountMenu({
               }
               href="/setup"
               onClick={() => setOpen(false)}
+              prefetch={false}
               role="menuitem"
             >
               <span className={styles.accountRowIcon}>

@@ -650,6 +650,11 @@ test("assistant treats uploaded/list phrasing and latest bank statement question
       dbPath: tempDb.dbPath,
       question: "What statements has Christopher Bakken uploaded?",
     });
+    const singularUploaded = askFirmDocumentAssistant({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "Does Christopher Bakken have a statement uploaded?",
+    });
     const latestBank = askFirmDocumentAssistant({
       ownerEmail,
       dbPath: tempDb.dbPath,
@@ -668,6 +673,11 @@ test("assistant treats uploaded/list phrasing and latest bank statement question
     assert.ok(uploaded.details.some((detail) => /Checking/i.test(detail)));
     assert.ok(uploaded.details.some((detail) => /Savings/i.test(detail)));
     assert.ok(uploaded.details.some((detail) => /401\(k\)/i.test(detail)));
+
+    assert.equal(singularUploaded.status, "answered");
+    assert.equal(singularUploaded.intent, "statement_existence");
+    assert.match(singularUploaded.answer, /statement/i);
+    assert.doesNotMatch(singularUploaded.answer, /Which client/i);
 
     assert.equal(latestBank.status, "answered");
     assert.equal(latestBank.intent, "latest_account_document");

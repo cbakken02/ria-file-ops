@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { PDFParse } from "pdf-parse";
 import {
   parseAccountStatementWithAI,
   type AIPrimaryParseContext,
@@ -446,6 +445,7 @@ async function extractPdfData(buffer: Buffer) {
 }
 
 async function extractPdfTextWithPdfParse(buffer: Buffer) {
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
 
   try {

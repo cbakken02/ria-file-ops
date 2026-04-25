@@ -383,11 +383,11 @@ export function buildQueryAssistantRetrievalPlan(
     question,
   );
   const asksExistence =
-    /\bdo we have\b|\bon file\b|\bany\b|\bhave\b.*\b(on file|available)\b|\bexists?\b/i.test(
+    /\bdo we have\b|\bon file\b|\bany\b|\bhave\b.*\b(on file|available)\b|\b(?:does|has|have)\b.*\bstatements?\b.*\buploaded\b|\bexists?\b/i.test(
       question,
     );
   const asksCountList =
-    /\bhow many\b|\blist\b|\bshow\b|\bwhich\b.*\bstatements?\b|\bwhat\b.*\bstatements\b|\bstatements?\b.*\buploaded\b/i.test(
+    /\bhow many\b|\blist\b|\bshow\b|\bwhich\b.*\bstatements?\b|\bwhat\b.*\bstatements\b|\bstatements\b.*\buploaded\b/i.test(
       question,
     );
   const mentionsStatement =

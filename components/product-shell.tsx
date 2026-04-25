@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { Session } from "next-auth";
 import { AccountMenu } from "@/components/account-menu";
-import { getFirmSettingsByOwnerEmail } from "@/lib/db";
 import { PRODUCT_NAV_ITEMS, type ProductNavPath } from "@/lib/product-navigation";
 import styles from "./product-shell.module.css";
 
@@ -17,13 +16,10 @@ export async function ProductShell({
   session,
 }: ProductShellProps) {
   const email = session.user?.email ?? "";
-  const firmSettings = email ? getFirmSettingsByOwnerEmail(email) : null;
-  const firmName = firmSettings?.firmName?.trim() || null;
   const displayName = resolveDisplayName(session.user?.name, email);
   const initials = resolveInitials(displayName, email);
   const profileImage = session.user?.image?.trim() || null;
-  const accountSubtitle = firmName ?? email;
-  const accountMeta = firmName ? email : null;
+  const accountSubtitle = email;
 
   return (
     <div className={styles.shell}>
@@ -47,6 +43,7 @@ export async function ProductShell({
                 aria-current={isActive ? "page" : undefined}
                 className={isActive ? styles.activeNavLink : styles.navLink}
                 href={item.href}
+                prefetch={false}
               >
                 <span>{item.label}</span>
                 <span className={styles.navHint}>{item.hint}</span>
@@ -58,7 +55,7 @@ export async function ProductShell({
         <div className={styles.sidebarSpacer} />
 
         <AccountMenu
-          accountMeta={accountMeta}
+          accountMeta={null}
           accountSubtitle={accountSubtitle}
         currentPath={currentPath}
         displayName={displayName}

@@ -1,6 +1,5 @@
 import type { Session } from "next-auth";
 import {
-  getPrimaryStorageConnectionByOwnerEmail,
   getStorageConnectionsByOwnerEmail,
   saveStorageConnectionForOwner,
   type StorageConnection,
@@ -28,12 +27,8 @@ export async function getActiveStorageConnectionForSession(
     return null;
   }
 
-  syncSessionGoogleConnection(session);
-
-  const primary =
-    getPrimaryStorageConnectionByOwnerEmail(ownerEmail) ??
-    getStorageConnectionsByOwnerEmail(ownerEmail)[0] ??
-    null;
+  const connections = getSessionStorageConnections(session);
+  const primary = getPrimaryConnection(connections);
 
   if (!primary) {
     return null;
@@ -84,14 +79,44 @@ export async function getStorageConnectionsForSession(session: Session) {
     return [];
   }
 
-  syncSessionGoogleConnection(session);
-
-  const connections = getStorageConnectionsByOwnerEmail(ownerEmail);
-  const primary = await getActiveStorageConnectionForSession(session);
+  const connections = getSessionStorageConnections(session);
+  const primaryConnection = getPrimaryConnection(connections);
+  const primary = primaryConnection
+    ? await resolveUsableStorageConnection(primaryConnection, session)
+    : null;
 
   return connections.map((connection) =>
     primary && connection.id === primary.id ? primary : connection,
   );
+}
+
+function getSessionStorageConnections(session: Session) {
+  return (
+    syncSessionGoogleConnection(session) ??
+    getStorageConnectionsByOwnerEmail(session.user?.email ?? "")
+  );
+}
+
+function getPrimaryConnection(connections: StorageConnection[]) {
+  return connections.find((connection) => connection.isPrimary) ?? connections[0] ?? null;
+}
+
+async function resolveUsableStorageConnection(
+  connection: StorageConnection,
+  session: Session,
+) {
+  const sessionAccessToken = session.accessToken;
+
+  if (shouldUseSessionStorageAccess(connection, session) && sessionAccessToken) {
+    return {
+      ...connection,
+      accessToken: sessionAccessToken,
+      grantedScopes: getSessionDriveScopes(session),
+      status: session.authError ? "needs_reauth" : "connected",
+    } satisfies StorageConnection;
+  }
+
+  return refreshStorageConnectionIfNeeded(connection);
 }
 
 async function refreshStorageConnectionIfNeeded(connection: StorageConnection) {
@@ -205,11 +230,24 @@ function syncSessionGoogleConnection(session: Session) {
     return null;
   }
 
-  const existingConnection = getStorageConnectionsByOwnerEmail(ownerEmail).find((connection) =>
+  const connections = getStorageConnectionsByOwnerEmail(ownerEmail);
+  const existingConnection = connections.find((connection) =>
     matchesCurrentSession(connection, session),
   );
+  const sessionDriveScopes = getSessionDriveScopes(session);
+  const nextStatus = session.authError ? "needs_reauth" : "connected";
+  const hasPrimaryConnection = connections.some((connection) => connection.isPrimary);
 
-  return saveStorageConnectionForOwner({
+  if (
+    existingConnection &&
+    existingConnection.status === nextStatus &&
+    (hasPrimaryConnection || existingConnection.isPrimary) &&
+    haveSameScopes(existingConnection.grantedScopes, sessionDriveScopes)
+  ) {
+    return connections;
+  }
+
+  const savedConnection = saveStorageConnectionForOwner({
     ownerEmail,
     provider: "google_drive",
     accountEmail: session.user?.email ?? null,
@@ -219,13 +257,16 @@ function syncSessionGoogleConnection(session: Session) {
     accessToken: session.accessToken,
     refreshToken: null,
     expiresAt: null,
-    grantedScopes: session.grantedScopes.filter(
-      (scope) =>
-        scope === GOOGLE_DRIVE_READ_SCOPE || scope === GOOGLE_DRIVE_WRITE_SCOPE,
-    ),
-    status: session.authError ? "needs_reauth" : "connected",
-    makePrimary: !getPrimaryStorageConnectionByOwnerEmail(ownerEmail),
+    grantedScopes: sessionDriveScopes,
+    status: nextStatus,
+    makePrimary: !hasPrimaryConnection,
   });
+
+  if (!savedConnection) {
+    return connections;
+  }
+
+  return getStorageConnectionsByOwnerEmail(ownerEmail);
 }
 
 export function markStorageConnectionNeedsReauth(connection: StorageConnection) {
@@ -280,4 +321,13 @@ function getSessionDriveScopes(session: Session) {
     (scope) =>
       scope === GOOGLE_DRIVE_READ_SCOPE || scope === GOOGLE_DRIVE_WRITE_SCOPE,
   );
+}
+
+function haveSameScopes(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const rightScopes = new Set(right);
+  return left.every((scope) => rightScopes.has(scope));
 }
