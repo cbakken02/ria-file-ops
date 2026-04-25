@@ -56,6 +56,9 @@ export async function saveReviewDecisionAction(formData: FormData) {
     mimeType,
     modifiedTime: normalizeOptionalValue(formData.get("modifiedTime")),
     detectedDocumentType: normalizeOptionalValue(formData.get("detectedDocumentType")),
+    detectedDocumentSubtype: normalizeOptionalValue(
+      formData.get("detectedDocumentSubtype"),
+    ),
     originalClientName: normalizeOptionalValue(formData.get("originalClientName")),
     originalClientName2: normalizeOptionalValue(formData.get("originalClientName2")),
     originalOwnershipType:
@@ -75,6 +78,9 @@ export async function saveReviewDecisionAction(formData: FormData) {
         | "single"
         | "joint"
         | null) ?? "single",
+    reviewedDocumentSubtype: normalizeOptionalValue(
+      formData.get("reviewedDocumentSubtype"),
+    ),
     reviewedClientFolder: normalizeOptionalValue(formData.get("reviewedClientFolder")),
     reviewedTopLevelFolder: normalizeOptionalValue(
       formData.get("reviewedTopLevelFolder"),
