@@ -228,6 +228,10 @@ function buildStateAwareFallbackQuestion(
     return null;
   }
 
+  if (isClientNameOnlyReply(question, state.activeClientName)) {
+    return buildReplacementClientFollowUpQuestion(state.activeClientName, state);
+  }
+
   const replacementClientName = findReplacementClientName(
     question,
     state.activeClientName,
@@ -541,6 +545,14 @@ function describePriorStatementScope(
   accountType: string | null,
   plural = false,
 ) {
+  if (
+    (state.lastIntent === "statement_existence" ||
+      state.lastIntent === "statement_list") &&
+    hasMultiplePriorStatementAccountTypes(state)
+  ) {
+    return `statement${plural ? "s" : ""}`;
+  }
+
   if (accountType) {
     return `${accountType.toLowerCase()} statement${plural ? "s" : ""}`;
   }
@@ -554,6 +566,16 @@ function describePriorStatementScope(
   }
 
   return `statement${plural ? "s" : ""}`;
+}
+
+function hasMultiplePriorStatementAccountTypes(state: DataIntelligenceConversationState) {
+  const accountTypes = new Set(
+    state.lastSources
+      .map((source) => source.accountType)
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  return accountTypes.size > 1;
 }
 
 function detectFollowUpAccountType(question: string) {
@@ -596,6 +618,28 @@ function questionMentionsActiveClient(question: string, activeClientName: string
   }
 
   return normalizedQuestion.includes(normalizedName);
+}
+
+function isClientNameOnlyReply(question: string, activeClientName: string) {
+  const normalizedQuestion = normalizeFollowUpText(question);
+  const normalizedName = normalizeFollowUpText(activeClientName);
+
+  if (!normalizedQuestion || !normalizedName) {
+    return false;
+  }
+
+  if (normalizedQuestion === normalizedName) {
+    return true;
+  }
+
+  const questionTokens = normalizedQuestion.split(/\s+/).filter(Boolean);
+  const nameTokens = new Set(normalizedName.split(/\s+/).filter(Boolean));
+
+  return (
+    questionTokens.length >= 2 &&
+    questionTokens.length <= 4 &&
+    questionTokens.every((token) => nameTokens.has(token))
+  );
 }
 
 function questionMentionsActiveClientLoosely(

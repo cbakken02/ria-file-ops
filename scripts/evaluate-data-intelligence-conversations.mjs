@@ -194,6 +194,21 @@ const scenarios = [
           },
         },
       },
+      {
+        question: "christopher bakken",
+        expect: {
+          status: "answered",
+          intent: "statement_existence",
+          sourceCount: 3,
+          sourceAccountTypes: ["Checking", "Savings", "Credit Card"],
+          answerIncludes: [/Christopher/i, /statement/i],
+          activeClient: /Christopher/i,
+          executedQuestionIncludes: [/Christopher Bakken/i],
+          executedPlan: {
+            intent: "statement_existence",
+          },
+        },
+      },
     ],
   },
   {

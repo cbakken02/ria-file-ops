@@ -19,6 +19,23 @@ export function storageConnectionHasWriteAccess(connection: StorageConnection | 
   return connection.grantedScopes.includes(GOOGLE_DRIVE_WRITE_SCOPE);
 }
 
+export function getCachedActiveStorageConnectionForSession(
+  session: Session,
+): StorageConnection | null {
+  return getPrimaryConnection(getCachedStorageConnectionsForSession(session));
+}
+
+export function getCachedStorageConnectionsForSession(
+  session: Session,
+): StorageConnection[] {
+  const ownerEmail = session.user?.email ?? "";
+  if (!ownerEmail) {
+    return [];
+  }
+
+  return getStorageConnectionsByOwnerEmail(ownerEmail);
+}
+
 export async function getActiveStorageConnectionForSession(
   session: Session,
 ): Promise<StorageConnection | null> {

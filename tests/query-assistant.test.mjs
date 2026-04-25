@@ -679,6 +679,43 @@ test("hybrid assistant treats a client-name-only reply as the prior client clari
   }
 });
 
+test("hybrid assistant treats a repeated client-name-only reply as current-client continuity", async () => {
+  const tempDb = makeTempDbEnv("query-assistant-client-name-repeat-");
+  const ownerEmail = "query-assistant-client-name-repeat@example.com";
+
+  try {
+    const initial = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "Does Christopher Bakken have a statement uploaded?",
+    });
+    const conversationState = deriveDataIntelligenceConversationStateFromResult({
+      previousState: null,
+      result: initial,
+    });
+    const result = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "christopher bakken",
+      conversationState,
+      includeDebug: true,
+    });
+    const debug = result.debug?.dataIntelligenceHybrid;
+
+    assert.equal(initial.status, "not_found");
+    assert.equal(initial.intent, "statement_existence");
+    assert.equal(conversationState.activeClientName, "Christopher Bakken");
+    assert.notEqual(result.status, "unsupported");
+    assert.equal(result.status, "not_found");
+    assert.equal(result.intent, "statement_existence");
+    assert.ok(debug);
+    assert.equal(debug.executedPlan.intent, "statement_existence");
+    assert.match(debug.executedQuestion, /Christopher Bakken/i);
+  } finally {
+    tempDb.cleanup();
+  }
+});
+
 test("assistant treats uploaded/list phrasing and latest bank statement questions as statement-family retrieval", () => {
   const tempDb = makeTempDbEnv("query-assistant-statement-family-");
   const ownerEmail = "query-assistant-statement-family@example.com";

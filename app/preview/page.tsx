@@ -18,7 +18,7 @@ import {
 import { requireSession } from "@/lib/session";
 import { getReviewRuleOption, normalizeFolderTemplate } from "@/lib/setup-config";
 import { parseNamingRules } from "@/lib/naming-rules";
-import { getStorageConnectionsForSession } from "@/lib/storage-connections";
+import { getCachedStorageConnectionsForSession } from "@/lib/storage-connections";
 import { IntakeQueue } from "./intake-queue";
 import { RefreshIntakeButton } from "./refresh-intake-button";
 import styles from "./page.module.css";
@@ -33,7 +33,7 @@ export default async function PreviewPage({
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
   const session = await requireSession();
   const ownerEmail = session.user?.email;
-  const storageConnections = await getStorageConnectionsForSession(session);
+  const storageConnections = getCachedStorageConnectionsForSession(session);
   const displayConnection =
     storageConnections.find((connection) => connection.isPrimary) ?? null;
   const activeStorageProvider = displayConnection?.provider ?? null;
@@ -52,17 +52,10 @@ export default async function PreviewPage({
     Boolean(settings?.sourceFolderId) &&
     Boolean(displayConnection) &&
     displayConnection?.status === "connected";
-  const storageStatusTitle = displayConnection
-    ? "Reconnect storage"
-    : "Connect storage";
-  const storageStatusSummary = displayConnection
-    ? "Intake can show the last cached refresh, but storage must be reconnected before scanning Drive again."
-    : "Connect storage to use Intake.";
+  const storageStatusTitle = getIntakeStorageStatusTitle(displayConnection);
+  const storageStatusSummary = getIntakeStorageStatusSummary(displayConnection);
   const liveQueueError =
-    (settings?.sourceFolderId && !canRefreshIntake ? storageStatusSummary : null) ??
-    (session.driveConnected && session.authError
-      ? "Your storage connection needs to be refreshed. Reconnect it if this keeps happening."
-      : null);
+    settings?.sourceFolderId && !canRefreshIntake ? storageStatusSummary : null;
   const existingClientFolders: string[] = [];
   const preview = {
     items: snapshotItems,
@@ -173,14 +166,33 @@ export default async function PreviewPage({
         </section>
       ) : null}
 
-      {!settings?.sourceFolderId ? (
+      {!displayConnection ? (
         <section className={styles.noteCard}>
-          <strong>Choose a source folder first</strong>
+          <strong>Connect storage</strong>
+          <p>Connect Google Drive in Settings before choosing an intake folder.</p>
+          <Link className={styles.primaryAction} href="/setup?section=storage">
+            Open storage settings
+          </Link>
+        </section>
+      ) : displayConnection.status !== "connected" ? (
+        <section className={styles.noteCard}>
+          <strong>Reconnect storage</strong>
           <p>
-            Go back to settings and select the intake folder you want this intake queue
-            to read from.
+            Storage is linked, but it needs to be reconnected before Intake can
+            refresh from Drive.
           </p>
-          <Link className={styles.primaryAction} href="/setup">
+          <Link className={styles.primaryAction} href="/setup?section=storage">
+            Open storage settings
+          </Link>
+        </section>
+      ) : !settings?.sourceFolderId ? (
+        <section className={styles.noteCard}>
+          <strong>Storage connected. Choose an intake folder.</strong>
+          <p>
+            Choose an intake/source folder in Settings. Page navigation will keep
+            using cached state until you click Refresh Intake.
+          </p>
+          <Link className={styles.primaryAction} href="/setup?section=intake">
             Open settings
           </Link>
         </section>
@@ -269,4 +281,28 @@ function normalizeTab(value?: string) {
   }
 
   return "all";
+}
+
+function getIntakeStorageStatusTitle(
+  connection: { status: "connected" | "needs_reauth" } | null,
+) {
+  if (!connection) {
+    return "Connect storage";
+  }
+
+  return connection.status === "connected" ? "Storage connected" : "Reconnect storage";
+}
+
+function getIntakeStorageStatusSummary(
+  connection: { status: "connected" | "needs_reauth" } | null,
+) {
+  if (!connection) {
+    return "Connect storage to use Intake.";
+  }
+
+  if (connection.status !== "connected") {
+    return "Intake can show the last cached refresh, but storage must be reconnected before scanning Drive again.";
+  }
+
+  return "Storage is connected. Choose an intake/source folder in Settings before refreshing Intake.";
 }

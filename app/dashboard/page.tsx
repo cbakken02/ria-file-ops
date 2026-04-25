@@ -7,30 +7,26 @@ import {
   getFirmSettingsByOwnerEmail,
   getReviewDecisionsByOwnerEmail,
 } from "@/lib/db";
-import { listFilesInFolder } from "@/lib/google-drive";
 import { readPreviewSnapshot } from "@/lib/preview-snapshot";
 import { requireSession } from "@/lib/session";
 import {
-  getStorageConnectionsForSession,
-  getVerifiedActiveStorageConnectionForSession,
+  getCachedStorageConnectionsForSession,
 } from "@/lib/storage-connections";
 import styles from "./page.module.css";
 
 export default async function DashboardPage() {
   const session = await requireSession();
   const ownerEmail = session.user?.email ?? "";
-  const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
-  const storageConnections = await getStorageConnectionsForSession(session);
+  const storageConnections = getCachedStorageConnectionsForSession(session);
   const displayConnection =
     storageConnections.find((connection) => connection.isPrimary) ?? null;
-  const hasVerifiedStorageAccess = Boolean(activeConnection);
-  const activeStorageProvider =
-    displayConnection?.provider ?? activeConnection?.provider ?? null;
+  const hasCachedStorageAccess = displayConnection?.status === "connected";
+  const activeStorageProvider = displayConnection?.provider ?? null;
   const storageStatusTitle = displayConnection
     ? "Reconnect storage"
     : "Connect storage";
   const storageStatusSummary = displayConnection
-    ? "Dashboard is unavailable until storage access is restored."
+    ? "Dashboard can show cached app state, but live storage actions need a reconnect."
     : "Connect storage to use Dashboard.";
 
   const [settings, previewSnapshot, reviewDecisions, filingEvents] = await Promise.all([
@@ -46,19 +42,11 @@ export default async function DashboardPage() {
       : Promise.resolve([]),
   ]);
 
-  const destinationChildren =
-    hasVerifiedStorageAccess &&
-    activeConnection &&
-    settings?.destinationFolderId
-      ? await listFilesInFolder(activeConnection.accessToken, settings.destinationFolderId).catch(
-          () => [],
-        )
-      : [];
-  const visiblePreviewSnapshot = hasVerifiedStorageAccess ? previewSnapshot : null;
-  const visibleReviewDecisions = hasVerifiedStorageAccess ? reviewDecisions : [];
+  const visiblePreviewSnapshot = hasCachedStorageAccess ? previewSnapshot : null;
+  const visibleReviewDecisions = hasCachedStorageAccess ? reviewDecisions : [];
 
   const scopedFilingEvents =
-    hasVerifiedStorageAccess && activeStorageProvider
+    hasCachedStorageAccess && activeStorageProvider
       ? filingEvents.filter((event) => event.storageProvider === activeStorageProvider)
       : [];
   const successfulEvents = scopedFilingEvents.filter((event) => event.outcome === "succeeded");
@@ -75,12 +63,8 @@ export default async function DashboardPage() {
   const queueTotal = readyCount + reviewCount;
   const processedFilesCount = successfulEvents.length + queueTotal + failedEvents.length;
 
-  const destinationClientFolders = destinationChildren.filter(
-    (file) => file.mimeType === "application/vnd.google-apps.folder",
-  );
   const clientFolderNames = new Set(
     [
-      ...destinationClientFolders.map((folder) => folder.name),
       ...successfulEvents
         .map((event) => event.clientFolderName)
         .filter((value): value is string => Boolean(value)),
@@ -166,7 +150,7 @@ export default async function DashboardPage() {
           </div>
         </header>
 
-        {hasVerifiedStorageAccess ? (
+        {hasCachedStorageAccess ? (
           <>
             <section className={styles.heroGrid}>
               <section className={styles.impactSection}>

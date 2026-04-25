@@ -194,6 +194,9 @@ export function CleanupPlanner({
   const [browserItems, setBrowserItems] = useState<CleanupBrowserItem[]>(
     () => (Array.isArray(initialBrowserItems) ? initialBrowserItems : []),
   );
+  const [browserLoaded, setBrowserLoaded] = useState(
+    () => initialBrowserItems.length > 0 || initialFolderTrail.length > 0,
+  );
   const [storageAvailable, setStorageAvailable] = useState(hasActiveStorage);
   const [browserError, setBrowserError] = useState<string | null>(null);
   const [browserLoading, setBrowserLoading] = useState(false);
@@ -450,6 +453,7 @@ export function CleanupPlanner({
       }
 
       setBrowserItems(data.items ?? []);
+      setBrowserLoaded(true);
       setCurrentFolderId(folderId);
       setFolderTrail(
         Array.isArray(data.trail)
@@ -459,6 +463,7 @@ export function CleanupPlanner({
             : [],
       );
     } catch (error) {
+      setBrowserLoaded(true);
       if (
         error instanceof Error &&
         "storageUnavailable" in error &&
@@ -664,6 +669,17 @@ export function CleanupPlanner({
           <div className={styles.selectionList}>
             {browserLoading ? (
               <div className={styles.placeholder}>Loading folder contents...</div>
+            ) : !browserLoaded ? (
+              <div className={styles.placeholder}>
+                <p>Folder contents are not loaded yet.</p>
+                <button
+                  className={styles.browserActionPrimary}
+                  onClick={() => void openFolder(currentFolderId, folderTrail)}
+                  type="button"
+                >
+                  Browse this folder
+                </button>
+              </div>
             ) : safeBrowserItems.length === 0 ? (
               <div className={styles.placeholder}>
                 Nothing was returned from this folder yet.

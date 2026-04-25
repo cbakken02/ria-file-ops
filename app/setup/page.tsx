@@ -1,5 +1,4 @@
 import { getFirmSettingsByOwnerEmail } from "@/lib/db";
-import { getDriveConnectionContext, listDriveFolders } from "@/lib/google-drive";
 import { ProductShell } from "@/components/product-shell";
 import {
   DEFAULT_NAMING_CONVENTION,
@@ -9,9 +8,8 @@ import {
 import { parseNamingRules } from "@/lib/naming-rules";
 import { requireSession } from "@/lib/session";
 import {
-  getActiveStorageConnectionForSession,
-  getStorageConnectionsForSession,
-  getVerifiedActiveStorageConnectionForSession,
+  getCachedActiveStorageConnectionForSession,
+  getCachedStorageConnectionsForSession,
   storageConnectionHasWriteAccess,
 } from "@/lib/storage-connections";
 import { SetupForm } from "./setup-form";
@@ -48,31 +46,10 @@ export default async function SetupPage({
       : null;
   const session = await requireSession();
   const ownerEmail = session.user?.email;
-  const verifiedActiveConnection =
-    await getVerifiedActiveStorageConnectionForSession(session);
-  const [activeConnection, storageConnections] = await Promise.all([
-    getActiveStorageConnectionForSession(session),
-    getStorageConnectionsForSession(session),
-  ]);
-  const driveConnected = Boolean(verifiedActiveConnection);
-
-  const [settings, driveFolders] = await Promise.all([
-    ownerEmail
-      ? Promise.resolve(getFirmSettingsByOwnerEmail(ownerEmail) ?? null)
-      : Promise.resolve(null),
-    verifiedActiveConnection
-      ? listDriveFolders(verifiedActiveConnection.accessToken).catch(() => [])
-      : Promise.resolve([]),
-  ]);
-  const driveContext = verifiedActiveConnection
-    ? await getDriveConnectionContext({
-        accessToken: verifiedActiveConnection.accessToken,
-        destinationFolderId: settings?.destinationFolderId ?? null,
-        sourceFolderId: settings?.sourceFolderId ?? null,
-        fallbackDisplayName:
-          verifiedActiveConnection.accountName ?? session.user?.name ?? null,
-      }).catch(() => null)
-    : null;
+  const activeConnection = getCachedActiveStorageConnectionForSession(session);
+  const storageConnections = getCachedStorageConnectionsForSession(session);
+  const driveConnected = activeConnection?.status === "connected";
+  const settings = ownerEmail ? getFirmSettingsByOwnerEmail(ownerEmail) ?? null : null;
 
   const sourceFolderValue =
     settings?.sourceFolderId && settings?.sourceFolderName
@@ -95,7 +72,7 @@ export default async function SetupPage({
           initialSection={initialSection}
           notice={notice}
           driveConnected={driveConnected}
-          driveFolders={driveFolders}
+          driveFolders={[]}
           initialSettings={{
             firmName: settings?.firmName ?? "",
             namingRules,
@@ -110,7 +87,6 @@ export default async function SetupPage({
                   accountEmail: activeConnection.accountEmail,
                   accountName: activeConnection.accountName,
                   connectedDriveLabel:
-                    driveContext?.connectedDriveLabel ??
                     activeConnection.accountName ??
                     activeConnection.accountEmail ??
                     "Connected storage",

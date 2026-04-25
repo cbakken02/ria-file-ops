@@ -22,8 +22,7 @@ import {
 } from "@/lib/history-view";
 import { requireSession } from "@/lib/session";
 import {
-  getStorageConnectionsForSession,
-  getVerifiedActiveStorageConnectionForSession,
+  getCachedStorageConnectionsForSession,
 } from "@/lib/storage-connections";
 import styles from "./page.module.css";
 
@@ -48,21 +47,19 @@ export default async function HistoryPage({
   const sort = normalizeHistorySortOption(resolvedSearchParams?.sort);
   const session = await requireSession();
   const ownerEmail = session.user?.email ?? "";
-  const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
-  const storageConnections = await getStorageConnectionsForSession(session);
+  const storageConnections = getCachedStorageConnectionsForSession(session);
   const displayConnection =
     storageConnections.find((connection) => connection.isPrimary) ?? null;
-  const activeStorageProvider =
-    displayConnection?.provider ?? activeConnection?.provider ?? null;
-  const hasVerifiedStorageAccess = Boolean(activeConnection);
+  const activeStorageProvider = displayConnection?.provider ?? null;
+  const hasCachedStorageAccess = displayConnection?.status === "connected";
   const historyStatusTitle = displayConnection
     ? "Reconnect storage"
     : "Connect storage";
   const historyStatusSummary = displayConnection
-    ? "Filing history is unavailable until storage access is restored."
+    ? "Filing history can show cached events, but live exports need a reconnect."
     : "Connect storage to use Filing History.";
   const allEvents =
-    ownerEmail && hasVerifiedStorageAccess && activeStorageProvider
+    ownerEmail && hasCachedStorageAccess && activeStorageProvider
       ? getFilingEventsByOwnerEmail(ownerEmail).filter(
           (event) => event.storageProvider === activeStorageProvider,
         )
@@ -108,7 +105,7 @@ export default async function HistoryPage({
             <h1>Filing history</h1>
           </div>
           <div className={styles.headerActions}>
-            {hasVerifiedStorageAccess ? (
+            {hasCachedStorageAccess ? (
               <Link className={styles.exportButton} href={exportHref}>
                 Export CSV
               </Link>
@@ -319,11 +316,11 @@ export default async function HistoryPage({
           </Link>
         </section>
 
-        {hasVerifiedStorageAccess && mode === "events" && events.length ? (
+        {hasCachedStorageAccess && mode === "events" && events.length ? (
           <HistoryEventsList events={events} />
         ) : null}
 
-        {hasVerifiedStorageAccess && mode === "batches" && batchGroups.length ? (
+        {hasCachedStorageAccess && mode === "batches" && batchGroups.length ? (
           <section className={styles.historyList}>
             {batchGroups.map((group) => (
               <details className={styles.historyRow} key={group.batchId}>
@@ -402,7 +399,7 @@ export default async function HistoryPage({
           </section>
         ) : null}
 
-        {!hasVerifiedStorageAccess ? (
+        {!hasCachedStorageAccess ? (
           <StorageStatusPanel
             className={styles.contentState}
             title={historyStatusTitle}

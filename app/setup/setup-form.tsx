@@ -79,6 +79,8 @@ const initialActionState: SaveSettingsState = {
   message: "",
 };
 
+type FolderLoadState = "idle" | "loading" | "loaded" | "error";
+
 const sectionDefinitions: Array<{
   id: SettingsSectionId;
   label: string;
@@ -122,6 +124,11 @@ export function SetupForm({
   const [folderTemplate, setFolderTemplate] = useState(
     initialSettings.folderTemplate,
   );
+  const [folderOptions, setFolderOptions] = useState<GoogleDriveFile[]>(driveFolders);
+  const [folderLoadState, setFolderLoadState] = useState<FolderLoadState>(
+    driveFolders.length > 0 ? "loaded" : "idle",
+  );
+  const [folderLoadError, setFolderLoadError] = useState<string | null>(null);
   const [reviewRule, setReviewRule] = useState<ReviewRuleValue>(
     initialSettings.reviewRule,
   );
@@ -238,6 +245,35 @@ export function SetupForm({
     }
 
     router.push("/dashboard");
+  }
+
+  async function loadDriveFolders() {
+    if (!driveConnected || folderLoadState === "loading") {
+      return;
+    }
+
+    setFolderLoadState("loading");
+    setFolderLoadError(null);
+
+    try {
+      const response = await fetch("/api/storage/folders");
+      const payload = (await response.json()) as {
+        error?: string;
+        folders?: GoogleDriveFile[];
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Drive folders could not be loaded.");
+      }
+
+      setFolderOptions(Array.isArray(payload.folders) ? payload.folders : []);
+      setFolderLoadState("loaded");
+    } catch (error) {
+      setFolderLoadState("error");
+      setFolderLoadError(
+        error instanceof Error ? error.message : "Drive folders could not be loaded.",
+      );
+    }
   }
 
   useEffect(() => {
@@ -478,8 +514,11 @@ export function SetupForm({
           <FolderSelectionEditorModal
             description="Choose where organized client records should live."
             emptyLabel="No destination root selected yet"
-            folders={driveFolders}
+            folderLoadError={folderLoadError}
+            folderLoadState={folderLoadState}
+            folders={folderOptions}
             label="Destination root"
+            onLoadFolders={loadDriveFolders}
             onApply={setDestinationFolderValue}
             onClose={() => setActiveEditor(null)}
             selectedValue={destinationFolderValue}
@@ -492,8 +531,11 @@ export function SetupForm({
           <FolderSelectionEditorModal
             description="Choose the folder where new client uploads arrive."
             emptyLabel="No source folder selected yet"
-            folders={driveFolders}
+            folderLoadError={folderLoadError}
+            folderLoadState={folderLoadState}
+            folders={folderOptions}
             label="Source folder"
+            onLoadFolders={loadDriveFolders}
             onApply={setSourceFolderValue}
             onClose={() => setActiveEditor(null)}
             selectedValue={sourceFolderValue}
@@ -561,8 +603,11 @@ export function SetupForm({
 type FolderPickerProps = {
   description: string;
   emptyLabel: string;
+  folderLoadError: string | null;
+  folderLoadState: FolderLoadState;
   folders: GoogleDriveFile[];
   label: string;
+  onLoadFolders: () => void;
   onSelect: (value: string) => void;
   selectedValue: string;
   showDisabledState: boolean;
@@ -572,8 +617,11 @@ type FolderPickerProps = {
 function FolderPicker({
   description,
   emptyLabel,
+  folderLoadError,
+  folderLoadState,
   folders,
   label,
+  onLoadFolders,
   onSelect,
   selectedValue,
   showDisabledState,
@@ -609,6 +657,24 @@ function FolderPicker({
         {showDisabledState ? (
           <div className={styles.disabledPicker}>
             Connect storage first to browse folders here.
+          </div>
+        ) : folderLoadState !== "loaded" && folders.length === 0 ? (
+          <div className={styles.disabledPicker}>
+            <p>
+              Folder browsing is loaded only when you ask for it, so opening
+              Settings stays fast.
+            </p>
+            {folderLoadError ? (
+              <p className={styles.errorMessage}>{folderLoadError}</p>
+            ) : null}
+            <button
+              className={styles.primaryAction}
+              disabled={folderLoadState === "loading"}
+              onClick={onLoadFolders}
+              type="button"
+            >
+              {folderLoadState === "loading" ? "Loading folders..." : "Load folders"}
+            </button>
           </div>
         ) : (
           <>
@@ -878,8 +944,11 @@ function FirmNameEditorModal({
 function FolderSelectionEditorModal({
   description,
   emptyLabel,
+  folderLoadError,
+  folderLoadState,
   folders,
   label,
+  onLoadFolders,
   onApply,
   onClose,
   selectedValue,
@@ -896,8 +965,11 @@ function FolderSelectionEditorModal({
       <FolderPicker
         description={description}
         emptyLabel={emptyLabel}
+        folderLoadError={folderLoadError}
+        folderLoadState={folderLoadState}
         folders={folders}
         label={label}
+        onLoadFolders={onLoadFolders}
         onSelect={setDraftValue}
         selectedValue={draftValue}
         showDisabledState={showDisabledState}

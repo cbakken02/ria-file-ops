@@ -200,6 +200,7 @@ export function deriveDataIntelligenceConversationStateFromResult(input: {
   result: {
     status: string;
     intent: string | null;
+    question?: string | null;
     sources: unknown[];
     presentation?: { mode?: string | null };
   };
@@ -222,6 +223,7 @@ export function deriveDataIntelligenceConversationStateFromResult(input: {
     firstPresentString(
       sources.map((source) => source.partyDisplayName),
     ) ??
+    extractClientNameFromQuestion(input.result.question) ??
     previous?.activeClientName ??
     null;
   const activeAccountType =
@@ -514,6 +516,77 @@ function readEnum<T extends string>(
 
 function firstPresentString(values: Array<string | null | undefined>) {
   return values.find((value): value is string => Boolean(value)) ?? null;
+}
+
+function extractClientNameFromQuestion(question: string | null | undefined) {
+  if (!question) {
+    return null;
+  }
+
+  const normalized = question
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const candidate =
+    readClientNameMatch(
+      normalized.match(
+        /\b(?:does|did|has|is)\s+([a-z]+(?:\s+[a-z]+){1,3}?)(?=\s+(?:have|has|uploaded|own|need|get|show|latest|statement|statements|id|license|dob|address|account)\b)/,
+      ),
+    ) ??
+    readClientNameMatch(
+      normalized.match(/\b(?:for|about)\s+([a-z]+(?:\s+[a-z]+){1,3})\b/),
+    ) ??
+    readClientNameMatch(
+      normalized.match(/\b([a-z]+(?:\s+[a-z]+){1,3})\s*(?:s|has)?\s+latest\b/),
+    );
+
+  return candidate;
+}
+
+function readClientNameMatch(match: RegExpMatchArray | null) {
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const tokens = match[1].split(/\s+/).filter(Boolean);
+  const nameTokens = tokens.filter((token) => !isClientNameStopToken(token));
+  if (nameTokens.length < 2 || nameTokens.length > 4) {
+    return null;
+  }
+
+  return nameTokens.map(capitalizeNameToken).join(" ");
+}
+
+function isClientNameStopToken(token: string) {
+  return new Set([
+    "a",
+    "an",
+    "any",
+    "bank",
+    "card",
+    "client",
+    "credit",
+    "document",
+    "documents",
+    "driver",
+    "file",
+    "id",
+    "latest",
+    "license",
+    "statement",
+    "statements",
+    "the",
+    "we",
+  ]).has(token);
+}
+
+function capitalizeNameToken(token: string) {
+  return token.charAt(0).toUpperCase() + token.slice(1);
 }
 
 function dedupeConversationSources(

@@ -2,21 +2,19 @@ import { ProductShell } from "@/components/product-shell";
 import { StorageStatusPanel } from "@/components/storage-status-panel";
 import { StorageSwitcher } from "@/components/storage-switcher";
 import { getFirmSettingsByOwnerEmail } from "@/lib/db";
-import { getDriveFolderTrail, listDriveBrowserItems } from "@/lib/google-drive";
 import { parseNamingRules } from "@/lib/naming-rules";
 import { requireSession } from "@/lib/session";
 import {
-  getStorageConnectionsForSession,
-  getVerifiedActiveStorageConnectionForSession,
+  getCachedStorageConnectionsForSession,
 } from "@/lib/storage-connections";
+import type { CleanupBrowserItem } from "@/lib/cleanup-types";
 import { CleanupPlanner } from "./cleanup-planner";
 import styles from "./page.module.css";
 
 export default async function CleanupPage() {
   const session = await requireSession();
   const ownerEmail = session.user?.email ?? "";
-  const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
-  const storageConnections = await getStorageConnectionsForSession(session);
+  const storageConnections = getCachedStorageConnectionsForSession(session);
   const displayConnection =
     storageConnections.find((connection) => connection.isPrimary) ?? null;
   const settings = ownerEmail ? getFirmSettingsByOwnerEmail(ownerEmail) ?? null : null;
@@ -27,30 +25,14 @@ export default async function CleanupPage() {
   const rootBrowserFolderId = "root";
   const rootBrowserFolderName = "My Drive";
   const initialCurrentFolderId = settings?.destinationFolderId ?? rootBrowserFolderId;
-  let initialFolderTrail: Array<{ id: string; name: string }> = [];
-  let initialBrowserItems: Awaited<ReturnType<typeof listDriveBrowserItems>> = [];
-  let initialStorageError: string | null = null;
-
-  if (activeConnection?.accessToken) {
-    try {
-      [initialFolderTrail, initialBrowserItems] = await Promise.all([
-        getDriveFolderTrail(activeConnection.accessToken, initialCurrentFolderId),
-        listDriveBrowserItems(activeConnection.accessToken, initialCurrentFolderId),
-      ]);
-    } catch (error) {
-      initialStorageError =
-        error instanceof Error
-          ? error.message
-          : "The selected storage folder could not be loaded.";
-    }
-  }
-
-  const hasVerifiedStorageAccess = Boolean(activeConnection) && !initialStorageError;
+  const initialFolderTrail: Array<{ id: string; name: string }> = [];
+  const initialBrowserItems: CleanupBrowserItem[] = [];
+  const hasCachedStorageAccess = displayConnection?.status === "connected";
   const inactiveStorageTitle = displayConnection
     ? "Reconnect storage"
     : "Connect storage";
   const inactiveStorageMessage = displayConnection
-    ? "Cleanup is unavailable until storage access is restored."
+    ? "Cleanup can browse Drive after storage is reconnected."
     : "Connect storage to use Cleanup.";
 
   return (
@@ -90,7 +72,7 @@ export default async function CleanupPage() {
           />
         </header>
 
-        {!hasVerifiedStorageAccess ? (
+        {!hasCachedStorageAccess ? (
           <div className={styles.cleanupLayout}>
             <section className={styles.selectionSection}>
               <StorageStatusPanel
@@ -101,7 +83,7 @@ export default async function CleanupPage() {
           </div>
         ) : (
           <CleanupPlanner
-            hasActiveStorage={hasVerifiedStorageAccess}
+            hasActiveStorage={hasCachedStorageAccess}
             inactiveStorageMessage={inactiveStorageMessage}
             inactiveStorageTitle={inactiveStorageTitle}
             rootBrowserFolderId={rootBrowserFolderId}
