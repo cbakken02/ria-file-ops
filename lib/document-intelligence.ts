@@ -109,7 +109,7 @@ export type DocumentInsight = {
 };
 
 const execFileAsync = promisify(execFile);
-const PARSER_VERSION = "2026-04-14-ai-primary-account-statement-preview-1";
+const PARSER_VERSION = "2026-04-24-vercel-pdf-text-fallback-1";
 export const DOCUMENT_ANALYSIS_VERSION = PARSER_VERSION;
 
 type AnalysisExecutionOptions = {
@@ -333,6 +333,7 @@ export async function analyzeDocumentWithEnvelope(
         extraReasons: [
           "PDF text extraction and OCR did not return enough usable content, so this file fell back to metadata-only classification.",
         ],
+        metadataOnlyDiagnosticText: buildPdfMetadataOnlyDiagnostic(),
       }),
     };
   }
@@ -396,7 +397,15 @@ async function extractPdfData(buffer: Buffer) {
     try {
       text = await extractPdfTextWithPdfParse(buffer);
     } catch {
-      // Keep going. pypdf or OCR may still recover usable content.
+      // Keep going. Direct pdf.js, pypdf, or OCR may still recover usable content.
+    }
+
+    if (!hasUsefulText(text)) {
+      try {
+        text = await extractPdfTextWithPdfJs(buffer);
+      } catch {
+        // Keep going. pypdf or OCR may still recover usable content.
+      }
     }
 
     try {
@@ -453,6 +462,38 @@ async function extractPdfTextWithPdfParse(buffer: Buffer) {
     return result.text ?? "";
   } finally {
     await parser.destroy().catch(() => {});
+  }
+}
+
+async function extractPdfTextWithPdfJs(buffer: Buffer) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+    isEvalSupported: false,
+  });
+  const pdf = await loadingTask.promise;
+
+  try {
+    const pageTexts: string[] = [];
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map((item) => ("str" in item && typeof item.str === "string" ? item.str : ""))
+        .filter(Boolean)
+        .join(" ");
+
+      if (text) {
+        pageTexts.push(text);
+      }
+
+      page.cleanup();
+    }
+
+    return pageTexts.join("\n");
+  } finally {
+    await pdf.destroy();
   }
 }
 
@@ -4546,6 +4587,7 @@ function analyzeFromMetadata(
   options?: {
     downloadFingerprint?: DownloadFingerprint | null;
     extraReasons?: string[];
+    metadataOnlyDiagnosticText?: string | null;
   },
 ) {
   const name = file.name;
@@ -4651,8 +4693,8 @@ function analyzeFromMetadata(
   }
 
   return {
-    textExcerpt: null,
-    diagnosticText: null,
+    textExcerpt: options?.metadataOnlyDiagnosticText?.slice(0, 260) ?? null,
+    diagnosticText: options?.metadataOnlyDiagnosticText ?? null,
     pdfFields: [],
     detectedClient,
     detectedClient2,
@@ -4705,6 +4747,18 @@ function analyzeFromMetadata(
       taxYear: extractTaxYear(name, name),
     },
   } satisfies DocumentInsight;
+}
+
+function buildPdfMetadataOnlyDiagnostic() {
+  const runtimeDetail = process.env.VERCEL
+    ? "OCR is not available in this Vercel staging runtime, so scanned or image-only PDFs cannot be read yet."
+    : "The local OCR fallback did not return usable text for this PDF.";
+
+  return [
+    "No selectable PDF text was extracted from this file.",
+    runtimeDetail,
+    "This preview is using the filename and Google Drive metadata only. If the PDF is scanned or image-based, fields like client, account type, and statement date may stay undetected until OCR is added for staging.",
+  ].join("\n");
 }
 
 function describeDownloadedBuffer(buffer: Buffer): DownloadFingerprint {
