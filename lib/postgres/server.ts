@@ -1,9 +1,7 @@
 import "server-only";
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   Pool,
   type PoolClient,
@@ -19,7 +17,6 @@ declare global {
   var __riaFileOpsPostgresPool: Pool | undefined;
 }
 
-const nodeRequire = createRequire(import.meta.url);
 const POSTGRES_SYNC_TIMEOUT_MS = 15_000;
 
 if (typeof window !== "undefined") {
@@ -134,7 +131,7 @@ export function runPostgresStatementsSync<Row extends QueryResultRow = QueryResu
     eval: true,
     workerData: {
       connectionString: normalizeConnectionStringForPg(connectionString),
-      pgModuleUrl: pathToFileURL(nodeRequire.resolve("pg")).href,
+      pgModuleSpecifier: "pg",
       ssl: shouldUseSsl(connectionString),
       statements: statements.map((statement) => ({
         text: statement.text,
@@ -231,7 +228,7 @@ async function main() {
       import("node:fs"),
     ]);
     signal = new Int32Array(workerData.signalBuffer);
-    const pgModule = await import(workerData.pgModuleUrl || "pg");
+    const pgModule = await import(workerData.pgModuleSpecifier || "pg");
     const Pool = pgModule.Pool || pgModule.default?.Pool;
 
     if (!Pool) {
