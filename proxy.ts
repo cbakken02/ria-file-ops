@@ -1,17 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
-
-const CANONICAL_PRODUCTION_HOST = "ria-file-ops.vercel.app";
+import {
+  CANONICAL_PRODUCTION_HOST,
+  normalizeRequestHost,
+  shouldRedirectToCanonicalProductionHost,
+} from "@/lib/vercel-canonical-host";
 
 export function proxy(request: NextRequest) {
   const forwardedHost = request.headers.get("x-forwarded-host");
-  const host = (forwardedHost ?? request.headers.get("host") ?? "")
-    .toLowerCase()
-    .split(":")[0];
+  const host = normalizeRequestHost(forwardedHost ?? request.headers.get("host"));
 
   if (
-    process.env.NODE_ENV === "production" &&
-    host.endsWith(".vercel.app") &&
-    host !== CANONICAL_PRODUCTION_HOST
+    shouldRedirectToCanonicalProductionHost({
+      host,
+      vercelEnv: process.env.VERCEL_ENV,
+    })
   ) {
     const url = request.nextUrl.clone();
     url.protocol = "https:";
