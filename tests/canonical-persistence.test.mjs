@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { setAIPrimaryCompletionAdapterForTests } from "../lib/ai-primary-parser.ts";
@@ -39,8 +42,23 @@ function withEnv(overrides) {
   };
 }
 
+function makeTempPreviewCacheEnv(prefix = "canonical-preview-cache-") {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const restoreEnv = withEnv({
+    RIA_PREVIEW_ANALYSIS_CACHE_DIR: tempDir,
+  });
+
+  return {
+    cleanup() {
+      restoreEnv();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    },
+  };
+}
+
 test("preview analysis cache persists canonical plus redacted canonical debug for AI statement path", async () => {
   const ownerEmail = "canonical-cache-test@example.com";
+  const tempCache = makeTempPreviewCacheEnv();
   const restoreEnv = withEnv({
     AI_PRIMARY_PARSER: "true",
     AI_PRIMARY_ACCOUNT_STATEMENT_ONLY: "true",
@@ -150,6 +168,7 @@ Statement Period Sep 13, 2025 through Oct 14, 2025
     setAIPrimaryCompletionAdapterForTests(null);
     restoreEnv();
     await clearPreviewAnalysisCacheForOwner(ownerEmail);
+    tempCache.cleanup();
   }
 });
 
@@ -515,6 +534,7 @@ test("preview-safe and redacted canonical projections enforce the sensitive-fiel
 
 test("legacy-only cache entries remain stable and do not persist canonical", async () => {
   const ownerEmail = "canonical-cache-legacy@example.com";
+  const tempCache = makeTempPreviewCacheEnv("canonical-preview-cache-legacy-");
   const file = {
     id: "canonical-cache-legacy",
     name: "canonical-cache-legacy.pdf",
@@ -568,5 +588,6 @@ Tax year 2025
     assert.ok(cachedEntry.insight.detectedClient);
   } finally {
     await clearPreviewAnalysisCacheForOwner(ownerEmail);
+    tempCache.cleanup();
   }
 });

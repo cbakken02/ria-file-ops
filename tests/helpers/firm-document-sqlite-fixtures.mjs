@@ -33,8 +33,10 @@ export function withEnv(overrides) {
 export function makeTempDbEnv(prefix = "firm-document-sqlite-") {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   const dbPath = path.join(tempDir, ".firm-owned-documents.sqlite");
+  const previewCacheDir = path.join(tempDir, "preview-analysis-cache");
   const restoreEnv = withEnv({
     RIA_FIRM_DOCUMENT_DB_PATH: dbPath,
+    RIA_PREVIEW_ANALYSIS_CACHE_DIR: previewCacheDir,
   });
 
   return {
