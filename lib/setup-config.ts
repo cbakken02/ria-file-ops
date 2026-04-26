@@ -36,7 +36,7 @@ export const REVIEW_RULE_OPTIONS = [
     value: "manual_only",
     title: "Manual",
     description:
-      "Do not rename or move files automatically. Send every file to review with a proposed name and location.",
+      "Do not rename or move files automatically. Still separate confident matches into Ready to File and keep uncertain items in review.",
   },
   {
     value: "auto_file_high_confidence",

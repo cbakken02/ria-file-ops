@@ -1,3 +1,5 @@
+import { getDocumentTypeIdFromLabel } from "@/lib/naming-rules";
+
 export const CLEANUP_DOCUMENT_PRESETS = [
   {
     label: "Account statement",
@@ -17,12 +19,12 @@ export const CLEANUP_DOCUMENT_PRESETS = [
   {
     label: "Tax return",
     filenameToken: "Tax_Return",
-    topLevelFolder: "Planning",
+    topLevelFolder: "Tax",
   },
   {
     label: "Tax document",
     filenameToken: "Tax_Document",
-    topLevelFolder: "Planning",
+    topLevelFolder: "Tax",
   },
   {
     label: "Planning / advice document",
@@ -56,17 +58,42 @@ export function getCleanupDocumentTypeOptions() {
 }
 
 export function getCleanupFilenameTokenForDocumentType(label: string) {
-  return (
-    CLEANUP_DOCUMENT_PRESETS.find((preset) => preset.label === label)?.filenameToken ??
-    "Document"
-  );
+  const exact = CLEANUP_DOCUMENT_PRESETS.find((preset) => preset.label === label);
+  if (exact) {
+    return exact.filenameToken;
+  }
+
+  if (getDocumentTypeIdFromLabel(label) === "tax_document") {
+    return sanitizeCleanupFilenameToken(label || "Tax Document");
+  }
+
+  return "Document";
 }
 
 export function getCleanupTopLevelFolderForDocumentType(label: string) {
-  return (
-    CLEANUP_DOCUMENT_PRESETS.find((preset) => preset.label === label)?.topLevelFolder ??
-    "Review"
-  );
+  const exact = CLEANUP_DOCUMENT_PRESETS.find((preset) => preset.label === label);
+  if (exact) {
+    return exact.topLevelFolder;
+  }
+
+  const documentTypeId = getDocumentTypeIdFromLabel(label);
+  if (documentTypeId === "account_statement") {
+    return "Accounts";
+  }
+  if (documentTypeId === "money_movement_form") {
+    return "Money Movement";
+  }
+  if (documentTypeId === "identity_document") {
+    return "Client Info";
+  }
+  if (documentTypeId === "tax_return" || documentTypeId === "tax_document") {
+    return "Tax";
+  }
+  if (documentTypeId === "planning_document" || documentTypeId === "legal_document") {
+    return "Planning";
+  }
+
+  return "Review";
 }
 
 export function buildCleanupFilename(input: {
@@ -86,6 +113,17 @@ export function buildCleanupFilename(input: {
 function detectExtension(filename: string) {
   const match = filename.match(/(\.[A-Za-z0-9]+)$/);
   return match?.[1] ?? "";
+}
+
+function sanitizeCleanupFilenameToken(label: string) {
+  const normalized = label
+    .trim()
+    .replace(/&/g, " and ")
+    .replace(/[^A-Za-z0-9\s'-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalized ? normalized.replace(/\s+/g, "_") : "Document";
 }
 
 function extractDateToken(filename: string) {

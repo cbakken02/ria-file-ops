@@ -1,4 +1,8 @@
 import { createRequire } from "node:module";
+import type {
+  CleanupFileState,
+  CleanupFileStateUpsertInput,
+} from "@/lib/cleanup-types";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
 import * as supabaseAppStateStore from "@/lib/persistence/supabase-app-state-store";
 
@@ -255,6 +259,30 @@ export function setReviewDecisionStatusForOwner(input: {
   return getActiveAppStateStore().setReviewDecisionStatusForOwner(input);
 }
 
+export function getCleanupFileStatesByOwnerAndFileIds(
+  ownerEmail: string,
+  fileIds: string[],
+): CleanupFileState[] {
+  return getActiveAppStateStore()
+    .getCleanupFileStatesByOwnerAndFileIds(ownerEmail, fileIds)
+    .filter((state): state is CleanupFileState => Boolean(state));
+}
+
+export function upsertCleanupFileStateForOwner(
+  input: CleanupFileStateUpsertInput,
+): CleanupFileState | null {
+  return getActiveAppStateStore().upsertCleanupFileStateForOwner(input);
+}
+
+export function markCleanupFileStateComplete(input: {
+  ownerEmail: string;
+  fileId: string;
+  appliedFilingEventId: string | null;
+  completedAt?: string | null;
+}): CleanupFileState | null {
+  return getActiveAppStateStore().markCleanupFileStateComplete(input);
+}
+
 export function getFilingEventsByOwnerEmail(ownerEmail: string): FilingEvent[] {
   return getActiveAppStateStore().getFilingEventsByOwnerEmail(ownerEmail);
 }
@@ -317,7 +345,7 @@ export function createFilingEvent(input: {
   classifierExcerpt?: string | null;
   outcome: FilingEventOutcome;
   errorMessage: string | null;
-}): void {
+}): FilingEvent {
   return getActiveAppStateStore().createFilingEvent(input);
 }
 

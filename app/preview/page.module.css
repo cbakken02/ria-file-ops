@@ -76,6 +76,7 @@
   font-weight: 650;
   font: inherit;
   text-decoration: none;
+  cursor: pointer;
   transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 
@@ -176,16 +177,49 @@
 }
 
 .queueActionBar {
-  margin-bottom: 10px;
-  padding-bottom: 10px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
 
 .actionGroup {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.queueActionBar .secondaryAction,
+.queueActionBar .primaryAction {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.queueActionBar .secondaryAction {
+  background: var(--surface-subtle);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.queueActionBar .primaryAction {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-contrast);
+}
+
+.queueActionBar .secondaryAction:hover {
+  background: var(--surface-muted);
+  border-color: var(--border-strong);
+}
+
+.queueActionBar .primaryAction:hover {
+  background: var(--primary);
+  border-color: var(--primary);
 }
 
 .tabLink,
@@ -249,6 +283,7 @@
   border-bottom: 0;
 }
 
+.rowContent,
 .rowButton {
   appearance: none;
   width: 100%;
@@ -257,6 +292,31 @@
   align-items: flex-start;
   gap: 18px;
   padding: 14px 0;
+}
+
+.rowContent {
+  align-items: center;
+}
+
+.selectionControl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 22px;
+  min-width: 22px;
+  color: var(--text-muted);
+}
+
+.selectionControl input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--foreground);
+  cursor: pointer;
+}
+
+.rowButton {
   border: 0;
   background: transparent;
   color: inherit;
@@ -276,6 +336,10 @@
   word-break: break-word;
 }
 
+.originalFileName {
+  font-weight: 400;
+}
+
 .fileTitleRow,
 .modalTitleRow {
   display: flex;
@@ -283,6 +347,54 @@
   gap: 10px;
   margin-top: 4px;
   min-width: 0;
+}
+
+.fileComparisonGrid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.92fr) minmax(260px, 1.08fr);
+  gap: 14px 28px;
+  align-items: start;
+  margin-top: 4px;
+}
+
+.fileComparisonBlock {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.comparisonLabel {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.proposedFileName {
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.94rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.locationFact {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: 0.87rem;
+  line-height: 1.35;
+}
+
+.locationFact strong {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .modalTitleRow {
@@ -359,6 +471,58 @@
   gap: 14px;
   flex-wrap: wrap;
   min-width: 180px;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 190px;
+}
+
+.inlineActionForm {
+  margin: 0;
+}
+
+.rowActionButton {
+  --row-action-bg: var(--surface-subtle);
+  --row-action-border: var(--border);
+  --row-action-color: var(--foreground);
+  --row-action-hover-bg: var(--surface-muted);
+  --row-action-hover-border: var(--border-strong);
+  min-height: 34px;
+  padding: 0 14px;
+  border-color: var(--row-action-border);
+  border-radius: 12px;
+  background: var(--row-action-bg);
+  color: var(--row-action-color);
+  font-size: 0.76rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.rowActionButton:hover:not(:disabled) {
+  background: var(--row-action-hover-bg);
+  border-color: var(--row-action-hover-border);
+}
+
+.rowActionReview {
+  --row-action-bg: #fff4df;
+  --row-action-border: #ecd39f;
+  --row-action-color: #644713;
+  --row-action-hover-bg: #f8e8c6;
+  --row-action-hover-border: #d7b86f;
+}
+
+.rowActionApprove {
+  --row-action-bg: #eef6ef;
+  --row-action-border: #cfe5d4;
+  --row-action-color: #2f6943;
+  --row-action-hover-bg: #e2f0e5;
+  --row-action-hover-border: #b6d7bf;
 }
 
 .sourceTag,
@@ -658,9 +822,20 @@
   }
 
   .header,
+  .rowContent,
   .rowButton,
   .intakeModalHeader {
     flex-direction: column;
+  }
+
+  .fileComparisonGrid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .rowActions {
+    min-width: 0;
+    justify-content: flex-start;
   }
 
   .rowStatusCluster {

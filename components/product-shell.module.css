@@ -106,6 +106,10 @@
   flex: 1;
 }
 
+.bottomNavSection {
+  margin-top: 16px;
+}
+
 .accountMenu {
   position: relative;
   margin-top: 16px;

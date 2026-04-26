@@ -23,14 +23,14 @@ export const PRODUCT_NAV_ITEMS: Array<{
     hint: "New Files",
   },
   {
-    href: "/data-intelligence",
-    label: "Data Intelligence",
-    hint: "Firm Docs",
-  },
-  {
     href: "/cleanup",
     label: "Cleanup",
     hint: "Existing Files",
+  },
+  {
+    href: "/data-intelligence",
+    label: "Data Intelligence",
+    hint: "AI Chat",
   },
   {
     href: "/history",

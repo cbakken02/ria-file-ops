@@ -53,6 +53,7 @@ export async function writePreviewSnapshot(input: {
       id: item.id,
       sourceName: item.sourceName,
       mimeType: item.mimeType,
+      createdTime: item.createdTime,
       modifiedTime: item.modifiedTime,
       driveSize: item.driveSize,
       downloadByteLength: item.downloadByteLength,
