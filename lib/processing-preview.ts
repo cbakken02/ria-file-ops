@@ -46,6 +46,7 @@ export type PreviewItem = {
   id: string;
   sourceName: string;
   mimeType: string;
+  createdTime?: string;
   modifiedTime?: string;
   driveSize?: string;
   downloadByteLength: number | null;
@@ -436,23 +437,16 @@ async function buildPreviewItem(
 
   const confidenceLabel =
     confidenceScore >= 0.8 ? "High" : confidenceScore >= 0.6 ? "Medium" : "Low";
-  const canAutoFile =
-    reviewRule === "auto_file_high_confidence" &&
+  const isReadyToStage =
     confidenceScore >= 0.72 &&
     resolvedClientFolder &&
     clientMatch.status === "matched_existing";
-  const status = canAutoFile ? "Ready to stage" : "Needs review";
+  const status = isReadyToStage ? "Ready to stage" : "Needs review";
   const reasons = [clientMatch.matchReason, ...insight.reasons];
 
   if (!resolvedClientFolder && suggestedClientFolder) {
     reasons.unshift(
       `Possible new household candidate: ${suggestedClientFolder}. Review before creating a new household folder.`,
-    );
-  }
-
-  if (reviewRule === "manual_only") {
-    reasons.unshift(
-      "Manual review only is enabled, so this file stays in review even if the match looks confident.",
     );
   }
 
@@ -476,6 +470,7 @@ async function buildPreviewItem(
     id: file.id,
     sourceName: file.name,
     mimeType: file.mimeType,
+    createdTime: file.createdTime,
     modifiedTime: file.modifiedTime,
     driveSize: file.size,
     downloadByteLength: insight.debug.downloadByteLength,

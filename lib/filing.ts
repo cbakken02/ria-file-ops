@@ -46,6 +46,14 @@ export type FilingCandidate = {
   targetParentLabelOverride?: string | null;
 };
 
+export type FilingCandidateSuccess = {
+  eventId: string;
+  fileId: string;
+  finalFilename: string | null;
+  destinationPath: string | null;
+  completedAt: string;
+};
+
 export async function executeFilingBatch(input: {
   accessToken: string;
   ownerEmail: string;
@@ -59,6 +67,7 @@ export async function executeFilingBatch(input: {
   let succeededCount = 0;
   let failedCount = 0;
   const successfulReviewDecisionIds: string[] = [];
+  const successfulFiles: FilingCandidateSuccess[] = [];
 
   for (const candidate of input.candidates) {
     const missingStandardDestination =
@@ -173,7 +182,7 @@ export async function executeFilingBatch(input: {
         itemName: candidate.finalFilename,
       });
 
-      createFilingEvent({
+      const event = createFilingEvent({
         ownerEmail: input.ownerEmail,
         actorEmail: input.actorEmail,
         actorType: input.actorType,
@@ -223,6 +232,14 @@ export async function executeFilingBatch(input: {
         classifierExcerpt: candidate.classifierExcerpt,
         outcome: "succeeded",
         errorMessage: null,
+      });
+
+      successfulFiles.push({
+        completedAt: event.createdAt,
+        destinationPath,
+        eventId: event.id,
+        fileId: candidate.fileId,
+        finalFilename: candidate.finalFilename,
       });
 
       if (candidate.reviewDecisionId) {
@@ -293,6 +310,7 @@ export async function executeFilingBatch(input: {
     batchId,
     succeededCount,
     failedCount,
+    successfulFiles,
     successfulReviewDecisionIds,
   };
 }

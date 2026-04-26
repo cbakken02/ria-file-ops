@@ -39,13 +39,10 @@ export default async function CleanupPage() {
     <ProductShell currentPath="/cleanup" session={session}>
       <main className={styles.page}>
         <header className={styles.header}>
-        <div className={styles.headerIntro}>
-          <p className={styles.eyebrow}>Cleanup</p>
-          <h1>Clean up existing files and folders.</h1>
-          <p className={styles.subhead}>
-            Select a file or folder to make a change.
-          </p>
-        </div>
+          <div className={styles.headerIntro}>
+            <p className={styles.eyebrow}>Cleanup</p>
+            <h1>Rename and reorganize existing files and folders</h1>
+          </div>
           <StorageSwitcher
             activeConnection={
               displayConnection

@@ -7,7 +7,11 @@ import {
   listFilesInFolder,
   type GoogleDriveFile,
 } from "@/lib/google-drive";
-import { getClientDisplayName, getClientDisplayNameSecondary } from "@/lib/naming-rules";
+import {
+  getClientDisplayName,
+  getClientDisplayNameSecondary,
+  getNamingDocumentTypeLabel,
+} from "@/lib/naming-rules";
 import { buildProcessingPreview } from "@/lib/processing-preview";
 import type {
   CleanupMode,
@@ -434,9 +438,11 @@ function buildCleanupRow(input: {
     detectedClient: input.item.detectedClient,
     detectedClient2: input.item.detectedClient2,
     detectedDocumentType: input.item.detectedDocumentType,
+    detectedDocumentSubtype: input.item.detectedDocumentSubtype,
     driveSize: input.item.driveSize,
     diagnosticText: input.item.diagnosticText,
     pdfFields: input.item.pdfFields,
+    debug: input.item.debug,
     documentTypeId: input.item.documentTypeId,
     extractedAccountLast4: input.item.extractedAccountLast4,
     extractedAccountType: input.item.extractedAccountType,
@@ -459,7 +465,8 @@ function buildCleanupRow(input: {
       }) || null,
     proposedHouseholdFolder: targetClientFolder,
     proposedClientFolder: targetClientFolder,
-    proposedDocumentType: input.item.detectedDocumentType,
+    proposedDocumentType: getNamingDocumentTypeLabel(input.item.documentTypeId),
+    proposedDocumentSubtype: input.item.detectedDocumentSubtype,
     proposedFilename,
     proposedLocation,
     ownershipType: input.item.ownershipType,
@@ -496,7 +503,8 @@ function buildCleanupRow(input: {
           ? input.candidate.currentLocation
           : input.item.proposedTopLevelFolder,
       finalFilename: proposedFilename,
-      detectedDocumentType: input.item.detectedDocumentType,
+    detectedDocumentType: input.item.detectedDocumentType,
+    detectedDocumentSubtype: input.item.detectedDocumentSubtype,
       detectedClient: input.item.detectedClient,
       detectedClient2: input.item.detectedClient2,
       detectedOwnershipType: input.item.ownershipType,

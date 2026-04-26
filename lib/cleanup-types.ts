@@ -9,12 +9,83 @@ export type CleanupMode =
   | "reorganize_only"
   | "rename_and_reorganize";
 
+export type CleanupFileStatus =
+  | "needs_analysis"
+  | "suggestion_ready"
+  | "needs_review"
+  | "complete";
+
+export type CleanupFileState = {
+  id: string;
+  ownerEmail: string;
+  fileId: string;
+  sourceName: string;
+  mimeType: string;
+  modifiedTime: string | null;
+  driveSize: string | null;
+  currentLocation: string | null;
+  proposedFilename: string | null;
+  proposedLocation: string | null;
+  recognizedFileType: string | null;
+  documentTypeId: string | null;
+  confidenceLabel: "High" | "Medium" | "Low" | null;
+  reasons: string[];
+  status: CleanupFileStatus;
+  analysisProfile: string | null;
+  analysisVersion: string | null;
+  parserVersion: string | null;
+  analyzedAt: string | null;
+  completedAt: string | null;
+  appliedFilingEventId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CleanupFileStateUpsertInput = {
+  ownerEmail: string;
+  fileId: string;
+  sourceName: string;
+  mimeType: string;
+  modifiedTime: string | null;
+  driveSize: string | null;
+  currentLocation: string | null;
+  proposedFilename: string | null;
+  proposedLocation: string | null;
+  recognizedFileType: string | null;
+  documentTypeId: string | null;
+  confidenceLabel: "High" | "Medium" | "Low" | null;
+  reasons: string[];
+  status: CleanupFileStatus;
+  analysisProfile: string | null;
+  analysisVersion: string | null;
+  parserVersion: string | null;
+  analyzedAt?: string | null;
+  completedAt?: string | null;
+  appliedFilingEventId?: string | null;
+};
+
+export type CleanupBrowserFileState = {
+  status: CleanupFileStatus;
+  currentLocation: string | null;
+  proposedFilename?: string | null;
+  proposedLocation?: string | null;
+  recognizedFileType?: string | null;
+  documentTypeId?: string | null;
+  confidenceLabel?: "High" | "Medium" | "Low" | null;
+  reasons?: string[];
+  analyzedAt?: string | null;
+  completedAt?: string | null;
+  appliedFilingEventId?: string | null;
+};
+
 export type CleanupBrowserItem = {
   id: string;
   name: string;
   mimeType: string;
+  createdTime?: string;
   modifiedTime?: string;
   size?: string;
+  cleanup?: CleanupBrowserFileState;
 };
 
 export type CleanupPreviewFileRow = {
@@ -31,6 +102,16 @@ export type CleanupPreviewFileRow = {
   textExcerpt: string | null;
   diagnosticText: string | null;
   pdfFields: Array<{ name: string; value: string }>;
+  debug: {
+    parserVersion: string;
+    parserConflictSummary: string | null;
+    documentSignal: string | null;
+    ownershipClientCandidate: string | null;
+    accountContextCandidate: string | null;
+    accountLooseCandidate: string | null;
+    taxKeywordDetected: boolean;
+    yearCandidates: string[];
+  };
   reasons: string[];
   currentLocation: string;
   proposedLocation: string;
@@ -41,7 +122,9 @@ export type CleanupPreviewFileRow = {
   ownershipType: "single" | "joint";
   proposedClientFolder: string | null;
   proposedDocumentType: string;
+  proposedDocumentSubtype: string | null;
   detectedDocumentType: string;
+  detectedDocumentSubtype: string | null;
   confidenceLabel: "High" | "Medium" | "Low";
   statusLabel: "Ready to clean" | "Needs review";
   reason: string;

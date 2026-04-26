@@ -14,6 +14,14 @@ import type {
   StorageConnection,
   StorageConnectionStatus,
 } from "@/lib/db";
+import type {
+  CleanupFileState,
+  CleanupFileStateUpsertInput,
+} from "@/lib/cleanup-types";
+
+type CleanupFileStateRow = Omit<CleanupFileState, "reasons"> & {
+  reasonsJson: string | null;
+};
 
 function ensureTableColumn(
   tableName: string,
@@ -187,6 +195,48 @@ database.exec(`
     message TEXT NOT NULL,
     created_at TEXT NOT NULL
   )
+`);
+
+database.exec(`
+  CREATE TABLE IF NOT EXISTS cleanup_file_states (
+    id TEXT PRIMARY KEY,
+    owner_email TEXT NOT NULL,
+    file_id TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    modified_time TEXT,
+    drive_size TEXT,
+    current_location TEXT,
+    proposed_filename TEXT,
+    proposed_location TEXT,
+    recognized_file_type TEXT,
+    document_type_id TEXT,
+    confidence_label TEXT,
+    reasons_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL,
+    analysis_profile TEXT,
+    analysis_version TEXT,
+    parser_version TEXT,
+    analyzed_at TEXT,
+    completed_at TEXT,
+    applied_filing_event_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(owner_email, file_id)
+  )
+`);
+
+database.exec(`
+  CREATE INDEX IF NOT EXISTS cleanup_file_states_owner_email_idx
+    ON cleanup_file_states (owner_email);
+  CREATE INDEX IF NOT EXISTS cleanup_file_states_owner_email_file_id_idx
+    ON cleanup_file_states (owner_email, file_id);
+  CREATE INDEX IF NOT EXISTS cleanup_file_states_file_id_idx
+    ON cleanup_file_states (file_id);
+  CREATE INDEX IF NOT EXISTS cleanup_file_states_status_idx
+    ON cleanup_file_states (status);
+  CREATE INDEX IF NOT EXISTS cleanup_file_states_applied_filing_event_id_idx
+    ON cleanup_file_states (applied_filing_event_id);
 `);
 
 ensureTableColumn(
@@ -540,6 +590,97 @@ const updateReviewDecisionStatus = database.prepare(`
   UPDATE review_decisions
   SET
     status = ?,
+    updated_at = ?
+  WHERE owner_email = ? AND file_id = ?
+`);
+
+const cleanupFileStateSelectColumns = `
+  id,
+  owner_email AS ownerEmail,
+  file_id AS fileId,
+  source_name AS sourceName,
+  mime_type AS mimeType,
+  modified_time AS modifiedTime,
+  drive_size AS driveSize,
+  current_location AS currentLocation,
+  proposed_filename AS proposedFilename,
+  proposed_location AS proposedLocation,
+  recognized_file_type AS recognizedFileType,
+  document_type_id AS documentTypeId,
+  confidence_label AS confidenceLabel,
+  reasons_json AS reasonsJson,
+  status,
+  analysis_profile AS analysisProfile,
+  analysis_version AS analysisVersion,
+  parser_version AS parserVersion,
+  analyzed_at AS analyzedAt,
+  completed_at AS completedAt,
+  applied_filing_event_id AS appliedFilingEventId,
+  created_at AS createdAt,
+  updated_at AS updatedAt
+`;
+
+const selectCleanupFileStateByOwnerAndFile = database.prepare(`
+  SELECT ${cleanupFileStateSelectColumns}
+  FROM cleanup_file_states
+  WHERE owner_email = ? AND file_id = ?
+`);
+
+const upsertCleanupFileState = database.prepare(`
+  INSERT INTO cleanup_file_states (
+    id,
+    owner_email,
+    file_id,
+    source_name,
+    mime_type,
+    modified_time,
+    drive_size,
+    current_location,
+    proposed_filename,
+    proposed_location,
+    recognized_file_type,
+    document_type_id,
+    confidence_label,
+    reasons_json,
+    status,
+    analysis_profile,
+    analysis_version,
+    parser_version,
+    analyzed_at,
+    completed_at,
+    applied_filing_event_id,
+    created_at,
+    updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(owner_email, file_id)
+  DO UPDATE SET
+    source_name = excluded.source_name,
+    mime_type = excluded.mime_type,
+    modified_time = excluded.modified_time,
+    drive_size = excluded.drive_size,
+    current_location = excluded.current_location,
+    proposed_filename = excluded.proposed_filename,
+    proposed_location = excluded.proposed_location,
+    recognized_file_type = excluded.recognized_file_type,
+    document_type_id = excluded.document_type_id,
+    confidence_label = excluded.confidence_label,
+    reasons_json = excluded.reasons_json,
+    status = excluded.status,
+    analysis_profile = excluded.analysis_profile,
+    analysis_version = excluded.analysis_version,
+    parser_version = excluded.parser_version,
+    analyzed_at = excluded.analyzed_at,
+    completed_at = excluded.completed_at,
+    applied_filing_event_id = excluded.applied_filing_event_id,
+    updated_at = excluded.updated_at
+`);
+
+const updateCleanupFileStateComplete = database.prepare(`
+  UPDATE cleanup_file_states
+  SET
+    status = 'complete',
+    completed_at = ?,
+    applied_filing_event_id = ?,
     updated_at = ?
   WHERE owner_email = ? AND file_id = ?
 `);
@@ -1111,6 +1252,96 @@ export function setReviewDecisionStatusForOwner(input: {
   return getReviewDecisionByOwnerAndFile(input.ownerEmail, input.fileId) ?? null;
 }
 
+export function getCleanupFileStatesByOwnerAndFileIds(
+  ownerEmail: string,
+  fileIds: string[],
+) {
+  const uniqueFileIds = Array.from(new Set(fileIds.filter(Boolean)));
+  if (uniqueFileIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = uniqueFileIds.map(() => "?").join(", ");
+  const rows = database
+    .prepare(
+      `
+        SELECT ${cleanupFileStateSelectColumns}
+        FROM cleanup_file_states
+        WHERE owner_email = ? AND file_id IN (${placeholders})
+      `,
+    )
+    .all(ownerEmail, ...uniqueFileIds) as CleanupFileStateRow[];
+
+  return rows.map(mapCleanupFileStateRow);
+}
+
+export function upsertCleanupFileStateForOwner(
+  input: CleanupFileStateUpsertInput,
+) {
+  const now = new Date().toISOString();
+  const existing = selectCleanupFileStateByOwnerAndFile.get(
+    input.ownerEmail,
+    input.fileId,
+  ) as CleanupFileStateRow | undefined;
+
+  upsertCleanupFileState.run(
+    existing?.id ?? crypto.randomUUID(),
+    input.ownerEmail,
+    input.fileId,
+    input.sourceName,
+    input.mimeType,
+    input.modifiedTime,
+    input.driveSize,
+    input.currentLocation,
+    input.proposedFilename,
+    input.proposedLocation,
+    input.recognizedFileType,
+    input.documentTypeId,
+    input.confidenceLabel,
+    JSON.stringify(input.reasons ?? []),
+    input.status,
+    input.analysisProfile,
+    input.analysisVersion,
+    input.parserVersion,
+    input.analyzedAt ?? now,
+    input.completedAt ?? null,
+    input.appliedFilingEventId ?? null,
+    existing?.createdAt ?? now,
+    now,
+  );
+
+  const row = selectCleanupFileStateByOwnerAndFile.get(
+    input.ownerEmail,
+    input.fileId,
+  ) as CleanupFileStateRow | undefined;
+
+  return row ? mapCleanupFileStateRow(row) : null;
+}
+
+export function markCleanupFileStateComplete(input: {
+  ownerEmail: string;
+  fileId: string;
+  appliedFilingEventId: string | null;
+  completedAt?: string | null;
+}) {
+  const now = new Date().toISOString();
+  const completedAt = input.completedAt ?? now;
+  updateCleanupFileStateComplete.run(
+    completedAt,
+    input.appliedFilingEventId,
+    now,
+    input.ownerEmail,
+    input.fileId,
+  );
+
+  const row = selectCleanupFileStateByOwnerAndFile.get(
+    input.ownerEmail,
+    input.fileId,
+  ) as CleanupFileStateRow | undefined;
+
+  return row ? mapCleanupFileStateRow(row) : null;
+}
+
 export function getFilingEventsByOwnerEmail(ownerEmail: string) {
   return selectFilingEventsByOwnerEmail.all(ownerEmail) as FilingEvent[];
 }
@@ -1172,8 +1403,10 @@ export function createFilingEvent(input: {
   outcome: FilingEventOutcome;
   errorMessage: string | null;
 }) {
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
   insertFilingEvent.run(
-    crypto.randomUUID(),
+    id,
     input.ownerEmail,
     input.actorEmail,
     input.actorType ?? "user",
@@ -1224,8 +1457,15 @@ export function createFilingEvent(input: {
     input.classifierExcerpt ?? null,
     input.outcome,
     input.errorMessage,
-    new Date().toISOString(),
+    createdAt,
   );
+
+  const event = getFilingEventByOwnerAndId(input.ownerEmail, id);
+  if (!event) {
+    throw new Error("Filing event was created but could not be reloaded.");
+  }
+
+  return event;
 }
 
 function normalizeClientMemoryKey(value: string) {
@@ -1234,6 +1474,49 @@ function normalizeClientMemoryKey(value: string) {
     .replace(/[^a-z\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function mapCleanupFileStateRow(row: CleanupFileStateRow): CleanupFileState {
+  return {
+    analyzedAt: row.analyzedAt,
+    analysisProfile: row.analysisProfile,
+    analysisVersion: row.analysisVersion,
+    appliedFilingEventId: row.appliedFilingEventId,
+    completedAt: row.completedAt,
+    confidenceLabel: row.confidenceLabel,
+    createdAt: row.createdAt,
+    currentLocation: row.currentLocation,
+    documentTypeId: row.documentTypeId,
+    driveSize: row.driveSize,
+    fileId: row.fileId,
+    id: row.id,
+    mimeType: row.mimeType,
+    modifiedTime: row.modifiedTime,
+    ownerEmail: row.ownerEmail,
+    parserVersion: row.parserVersion,
+    proposedFilename: row.proposedFilename,
+    proposedLocation: row.proposedLocation,
+    reasons: parseStringArray(row.reasonsJson),
+    recognizedFileType: row.recognizedFileType,
+    sourceName: row.sourceName,
+    status: row.status,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function parseStringArray(value: string | null | undefined) {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 function mapStorageConnectionRow(row: {

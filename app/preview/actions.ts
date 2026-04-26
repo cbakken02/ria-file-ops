@@ -5,16 +5,22 @@ import { redirect } from "next/navigation";
 import {
   getClientMemoryRulesByOwnerEmail,
   getFirmSettingsByOwnerEmail,
+  getReviewDecisionByOwnerAndFile,
+  setReviewDecisionStatusForOwner,
 } from "@/lib/db";
-import { executeFilingBatch } from "@/lib/filing";
+import { executeFilingBatch, type FilingCandidate } from "@/lib/filing";
 import {
   downloadDriveFile,
   listFilesInFolder,
   type GoogleDriveFile,
 } from "@/lib/google-drive";
-import { clearPreviewAnalysisCacheForOwner } from "@/lib/preview-analysis-cache";
-import { buildProcessingPreview } from "@/lib/processing-preview";
-import { writePreviewSnapshot } from "@/lib/preview-snapshot";
+import { buildProcessingPreview, type PreviewItem } from "@/lib/processing-preview";
+import {
+  readPreviewSnapshot,
+  restorePreviewItemsFromSnapshot,
+  type PreviewSnapshot,
+  writePreviewSnapshot,
+} from "@/lib/preview-snapshot";
 import { requireSession } from "@/lib/session";
 import {
   getVerifiedActiveStorageConnectionForSession,
@@ -22,6 +28,129 @@ import {
 } from "@/lib/storage-connections";
 
 type ReadyItemsFilingMode = "auto" | "manual";
+
+function normalizePreviewTab(value: FormDataEntryValue | null) {
+  const tab = String(value ?? "all");
+  return tab === "review" || tab === "ready" || tab === "filed" ? tab : "all";
+}
+
+function buildPreviewRedirect(tab: string, notice: string) {
+  const params = new URLSearchParams();
+  if (tab !== "all") {
+    params.set("tab", tab);
+  }
+  params.set("notice", notice);
+  return `/preview?${params.toString()}`;
+}
+
+function getApprovedClientFolder(
+  item: PreviewItem,
+  decision: ReturnType<typeof getReviewDecisionByOwnerAndFile>,
+) {
+  return (
+    decision?.reviewedClientFolder ??
+    item.resolvedHouseholdFolder ??
+    item.suggestedHouseholdFolder
+  );
+}
+
+function getApprovedTopLevelFolder(
+  item: PreviewItem,
+  decision: ReturnType<typeof getReviewDecisionByOwnerAndFile>,
+) {
+  return decision?.reviewedTopLevelFolder ?? item.proposedTopLevelFolder;
+}
+
+function getApprovedFilename(
+  item: PreviewItem,
+  decision: ReturnType<typeof getReviewDecisionByOwnerAndFile>,
+) {
+  return decision?.reviewedFilename ?? item.proposedFilename;
+}
+
+function getUniqueFormValues(formData: FormData, name: string) {
+  return Array.from(
+    new Set(
+      formData
+        .getAll(name)
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function buildPreviewFilingCandidate(
+  item: PreviewItem,
+  decision: ReturnType<typeof getReviewDecisionByOwnerAndFile>,
+): FilingCandidate {
+  return {
+    reviewDecisionId: decision?.id ?? null,
+    fileId: item.id,
+    sourceName: item.sourceName,
+    sourceMimeType: item.mimeType,
+    sourceModifiedTime: item.modifiedTime ?? null,
+    sourceDriveSize: item.driveSize ?? null,
+    downloadByteLength: item.downloadByteLength,
+    downloadSha1: item.downloadSha1,
+    parserVersion: item.debug.parserVersion,
+    parserConflictSummary: item.parserConflictSummary,
+    originalClientFolder:
+      item.resolvedHouseholdFolder ?? item.suggestedHouseholdFolder,
+    originalTopLevelFolder: item.proposedTopLevelFolder,
+    originalFilename: item.sourceName,
+    finalClientFolder: getApprovedClientFolder(item, decision),
+    finalTopLevelFolder: getApprovedTopLevelFolder(item, decision),
+    finalFilename: getApprovedFilename(item, decision),
+    detectedDocumentType: item.detectedDocumentType,
+    detectedDocumentSubtype: item.detectedDocumentSubtype,
+    detectedClient: decision?.reviewedClientName ?? item.detectedClient ?? null,
+    detectedClient2: decision?.reviewedClientName2 ?? item.detectedClient2 ?? null,
+    detectedOwnershipType:
+      decision?.reviewedOwnershipType ??
+      decision?.originalOwnershipType ??
+      item.ownershipType ??
+      null,
+    detectedAccountLast4: item.extractedAccountLast4,
+    detectedAccountType: item.extractedAccountType,
+    detectedCustodian: item.extractedCustodian,
+    detectedTaxYear: item.extractedTaxYear,
+    detectedDocumentDate: item.extractedDocumentDate,
+    detectedIdType: item.extractedIdType,
+    detectedEntityName: item.extractedEntityName,
+    classifierConfidence: item.confidenceScore,
+    classifierContentSource: item.contentSource,
+    classifierReasons: item.reasons,
+    classifierExcerpt: item.textExcerpt,
+  };
+}
+
+async function removeFiledItemsFromSnapshot(input: {
+  ownerEmail: string;
+  snapshot: PreviewSnapshot | null;
+  filedItemIds: string[];
+  settingsSourceFolderName: string | null | undefined;
+  settingsDestinationFolderName: string | null | undefined;
+}) {
+  const filedItemIds = new Set(input.filedItemIds);
+  const remainingItems = restorePreviewItemsFromSnapshot(input.snapshot).filter(
+    (item) => !filedItemIds.has(item.id),
+  );
+
+  if (!input.snapshot || remainingItems.length === input.snapshot.items.length) {
+    return;
+  }
+
+  await writePreviewSnapshot({
+    ownerEmail: input.ownerEmail,
+    sourceFolder: input.snapshot.sourceFolder ?? input.settingsSourceFolderName ?? null,
+    destinationRoot:
+      input.snapshot.destinationRoot ?? input.settingsDestinationFolderName ?? null,
+    reviewPosture: input.snapshot.reviewPosture,
+    readyCount: remainingItems.filter((item) => item.status === "Ready to stage").length,
+    reviewCount: remainingItems.filter((item) => item.status === "Needs review").length,
+    items: remainingItems,
+  });
+}
 
 export async function prepareReadyItemsFilingRedirect(
   mode: ReadyItemsFilingMode = "manual",
@@ -154,103 +283,124 @@ export async function fileReadyItemsAction() {
   redirect(await prepareReadyItemsFilingRedirect("manual"));
 }
 
-export async function refreshIntakeAction(formData: FormData) {
-  const requestedTab = String(formData.get("tab") ?? "all");
-  const tab =
-    requestedTab === "review" ||
-    requestedTab === "ready" ||
-    requestedTab === "filed"
-      ? requestedTab
-      : "all";
-  const tabQuery = tab === "all" ? "" : `?tab=${tab}`;
+export async function approvePreviewItemAction(formData: FormData) {
+  const tab = normalizePreviewTab(formData.get("tab"));
+  const fileId = String(formData.get("fileId") ?? "").trim();
+
+  if (!fileId) {
+    redirect(buildPreviewRedirect(tab, "Choose an intake item before approving."));
+  }
+
+  redirect(await approvePreviewItemsForIds({ tab, fileIds: [fileId] }));
+}
+
+export async function approveSelectedPreviewItemsAction(formData: FormData) {
+  const tab = normalizePreviewTab(formData.get("tab"));
+  const fileIds = getUniqueFormValues(formData, "fileId");
+
+  if (fileIds.length === 0) {
+    redirect(buildPreviewRedirect(tab, "Select one or more intake items to approve."));
+  }
+
+  redirect(await approvePreviewItemsForIds({ tab, fileIds }));
+}
+
+async function approvePreviewItemsForIds(input: {
+  tab: string;
+  fileIds: string[];
+}) {
   const session = await requireSession();
   const ownerEmail = session.user?.email;
   const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
 
   if (!ownerEmail || !activeConnection) {
-    redirect(
-      `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
-        "Reconnect storage before refreshing Intake.",
-      )}`,
+    return buildPreviewRedirect(
+      input.tab,
+      "Reconnect storage before approving files.",
+    );
+  }
+
+  if (!storageConnectionHasWriteAccess(activeConnection)) {
+    return buildPreviewRedirect(
+      input.tab,
+      "Reconnect the active storage connection with write access before approving.",
     );
   }
 
   const settings = getFirmSettingsByOwnerEmail(ownerEmail);
-  if (!settings?.sourceFolderId) {
-    redirect(
-      `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
-        "Choose an intake source folder before refreshing Intake.",
-      )}`,
+  if (!settings?.sourceFolderId || !settings.destinationFolderId) {
+    return buildPreviewRedirect(input.tab, "Complete setup before approving files.");
+  }
+
+  const snapshot = await readPreviewSnapshot(ownerEmail);
+  const requestedFileIds = new Set(input.fileIds);
+  const selectedItems = restorePreviewItemsFromSnapshot(snapshot).filter((item) =>
+    requestedFileIds.has(item.id),
+  );
+
+  if (selectedItems.length === 0) {
+    return buildPreviewRedirect(
+      input.tab,
+      "Refresh the browser page before approving files. The cached queue no longer includes the selected items.",
     );
   }
 
-  const clientMemoryRules = getClientMemoryRulesByOwnerEmail(ownerEmail);
-  let sourceFiles: GoogleDriveFile[] = [];
-  try {
-    sourceFiles = await listFilesInFolder(
-      activeConnection.accessToken,
-      settings.sourceFolderId,
-    );
-  } catch (error) {
-    redirect(
-      `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
-        error instanceof Error
-          ? `Google Drive could not load the source folder: ${error.message}`
-          : "Google Drive could not load the source folder.",
-      )}`,
-    );
-  }
+  let succeededCount = 0;
+  let failedCount = 0;
+  const filedItemIds: string[] = [];
+  const filedFilenames: string[] = [];
 
-  let destinationChildren: GoogleDriveFile[] = [];
-  if (settings.destinationFolderId) {
-    try {
-      destinationChildren = await listFilesInFolder(
-        activeConnection.accessToken,
-        settings.destinationFolderId,
-      );
-    } catch (error) {
-      redirect(
-        `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
-          error instanceof Error
-            ? `Google Drive could not load the destination root: ${error.message}`
-            : "Google Drive could not load the destination root.",
-        )}`,
-      );
+  for (const item of selectedItems) {
+    const decision = getReviewDecisionByOwnerAndFile(ownerEmail, item.id);
+    const finalFilename = getApprovedFilename(item, decision);
+    const result = await executeFilingBatch({
+      accessToken: activeConnection.accessToken,
+      ownerEmail,
+      actorEmail: ownerEmail,
+      actorType: "user",
+      initiatedByEmail: ownerEmail,
+      settings,
+      candidates: [buildPreviewFilingCandidate(item, decision)],
+    });
+
+    succeededCount += result.succeededCount;
+    failedCount += result.failedCount;
+
+    if (result.succeededCount > 0) {
+      filedItemIds.push(item.id);
+      filedFilenames.push(finalFilename ?? item.sourceName);
+
+      if (decision) {
+        setReviewDecisionStatusForOwner({
+          ownerEmail,
+          fileId: item.id,
+          status: "filed",
+        });
+      }
     }
   }
 
-  const existingClientFolders = destinationChildren
-    .filter((file) => file.mimeType === "application/vnd.google-apps.folder")
-    .map((file) => file.name);
+  if (filedItemIds.length > 0) {
+    await removeFiledItemsFromSnapshot({
+      ownerEmail,
+      snapshot,
+      filedItemIds,
+      settingsSourceFolderName: settings.sourceFolderName,
+      settingsDestinationFolderName: settings.destinationFolderName,
+    });
+  }
 
-  await clearPreviewAnalysisCacheForOwner(ownerEmail);
-  const preview = await buildProcessingPreview(
-    sourceFiles,
-    settings,
-    async (fileId) => downloadDriveFile(activeConnection.accessToken, fileId),
-    existingClientFolders,
-    clientMemoryRules,
-    { analysisMode: "preview" },
-  );
-
-  await writePreviewSnapshot({
-    ownerEmail,
-    sourceFolder: settings.sourceFolderName ?? null,
-    destinationRoot: settings.destinationFolderName ?? null,
-    reviewPosture: preview.reviewRule.title,
-    readyCount: preview.readyCount,
-    reviewCount: preview.reviewCount,
-    items: preview.items,
-  });
-
+  revalidatePath("/dashboard");
+  revalidatePath("/history");
   revalidatePath("/preview");
-  const refreshedAt = new Intl.DateTimeFormat("en-US", {
-    timeStyle: "short",
-  }).format(new Date());
+  revalidatePath("/review");
 
-  redirect(
-    `/preview${tabQuery ? `${tabQuery}&` : "?"}notice=${encodeURIComponent(
-      `Intake refreshed at ${refreshedAt}. ${preview.items.length} files checked.`,
-    )}`,
-  );
+  const notice =
+    selectedItems.length === 1
+      ? succeededCount > 0
+        ? `Approved and filed ${filedFilenames[0]}.`
+        : `Approval failed for ${selectedItems[0].sourceName}. Check Filing history for details.`
+      : `Approved ${succeededCount} selected file${succeededCount === 1 ? "" : "s"}. ${failedCount} failed.`;
+
+  return buildPreviewRedirect(input.tab, notice);
 }

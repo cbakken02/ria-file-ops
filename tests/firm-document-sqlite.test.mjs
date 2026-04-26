@@ -1295,7 +1295,7 @@ test("fresh preview AI account-statement analysis writes canonical SQLite rows w
       namingConvention: "Last_First_DocType_Date",
       namingRulesJson: null,
       folderTemplate: "Client Info\nAccounts\nMoney Movement\nPlanning\nReview",
-      reviewInstruction: "Manual review",
+      reviewInstruction: "manual_only",
       createdAt: "2026-04-21T18:00:00.000Z",
       updatedAt: "2026-04-21T18:00:00.000Z",
     };
@@ -1304,12 +1304,14 @@ test("fresh preview AI account-statement analysis writes canonical SQLite rows w
       [file],
       settings,
       async () => fs.readFileSync(pdfPath),
-      [],
+      ["Bakken_Christopher"],
       [],
       { analysisMode: "preview" },
     );
 
+    assert.equal(preview.reviewRule.value, "manual_only");
     assert.equal(preview.items.length, 1);
+    assert.equal(preview.items[0].status, "Ready to stage");
     assert.equal(preview.items[0].documentTypeId, "account_statement");
     assert.equal(preview.items[0].detectedClient, "Christopher T Bakken");
     assert.equal(preview.items[0].extractedAccountType, "Checking");

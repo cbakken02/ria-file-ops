@@ -78,14 +78,15 @@ function matchesFile(
   file: GoogleDriveFile,
   analysisProfile: AnalysisProfile,
 ) {
+  const cachedSize = entry.driveSize ?? null;
+  const currentSize = file.size ?? null;
+
   return (
     entry.analysisProfile === analysisProfile &&
     entry.analysisVersion === DOCUMENT_ANALYSIS_VERSION &&
     entry.fileId === file.id &&
-    entry.sourceName === file.name &&
     entry.mimeType === file.mimeType &&
-    (entry.modifiedTime ?? null) === (file.modifiedTime ?? null) &&
-    (entry.driveSize ?? null) === (file.size ?? null)
+    (!cachedSize || !currentSize || cachedSize === currentSize)
   );
 }
 

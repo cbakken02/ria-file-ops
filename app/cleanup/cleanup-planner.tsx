@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileKindIcon } from "@/components/file-kind-icon";
 import {
   getCleanupTopLevelFolderForDocumentType,
@@ -92,6 +92,8 @@ type EditableNamingTokenId = Exclude<
   | "document_type"
 >;
 
+type CleanupRowActionKind = "analyze" | "review" | "apply" | "complete";
+
 type EditableCleanupRow = {
   id: string;
   proposedHouseholdFolder: string;
@@ -110,6 +112,16 @@ type EditableCleanupRow = {
   idType: string;
   entityName: string;
 };
+
+type CleanupFolderTrail = Array<{ id: string; name: string }>;
+
+type BrowserFolderCacheEntry = {
+  items: CleanupBrowserItem[];
+  trail: CleanupFolderTrail;
+  loadedAt: number;
+};
+
+const PREFETCH_FOLDER_LIMIT = 3;
 
 const editableTokenFieldOrder: EditableNamingTokenId[] = [
   "account_type",
@@ -188,39 +200,73 @@ export function CleanupPlanner({
   initialBrowserItems = [],
   namingRules,
 }: CleanupPlannerProps) {
+  const initialBrowserLoaded = initialBrowserItems.length > 0;
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const browserCacheRef = useRef(new Map<string, BrowserFolderCacheEntry>());
+  const folderLoadPromisesRef = useRef(
+    new Map<string, Promise<BrowserFolderCacheEntry>>(),
+  );
+  const seededBrowserCacheRef = useRef(false);
+  const currentBrowserRequestRef = useRef(0);
+  const initialFolderLoadStartedRef = useRef(false);
+  const normalizedInitialFolderId = initialCurrentFolderId || rootBrowserFolderId;
+  const normalizedInitialFolderTrail = Array.isArray(initialFolderTrail)
+    ? initialFolderTrail
+    : [];
+
+  if (!seededBrowserCacheRef.current) {
+    seededBrowserCacheRef.current = true;
+    if (initialBrowserLoaded) {
+      browserCacheRef.current.set(normalizedInitialFolderId, {
+        items: initialBrowserItems,
+        trail: normalizedInitialFolderTrail,
+        loadedAt: Date.now(),
+      });
+    }
+  }
+
   const [scope, setScope] = useState<CleanupScope>("client_folder");
   const [mode, setMode] = useState<CleanupMode>("rename_and_reorganize");
   const [browserItems, setBrowserItems] = useState<CleanupBrowserItem[]>(
     () => (Array.isArray(initialBrowserItems) ? initialBrowserItems : []),
   );
-  const [browserLoaded, setBrowserLoaded] = useState(
-    () => initialBrowserItems.length > 0 || initialFolderTrail.length > 0,
-  );
+  const [browserLoaded, setBrowserLoaded] = useState(() => initialBrowserLoaded);
   const [storageAvailable, setStorageAvailable] = useState(hasActiveStorage);
   const [browserError, setBrowserError] = useState<string | null>(null);
-  const [browserLoading, setBrowserLoading] = useState(false);
+  const [browserLoading, setBrowserLoading] = useState(
+    () => hasActiveStorage && !initialBrowserLoaded,
+  );
   const [currentFolderId, setCurrentFolderId] = useState(
-    () => initialCurrentFolderId || rootBrowserFolderId,
+    () => normalizedInitialFolderId,
   );
   const [folderTrail, setFolderTrail] = useState<Array<{ id: string; name: string }>>(
-    () => (Array.isArray(initialFolderTrail) ? initialFolderTrail : []),
+    () => normalizedInitialFolderTrail,
   );
   const [preview, setPreview] = useState<CleanupPreviewData | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [runLoading, setRunLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [activeRowAction, setActiveRowAction] = useState<{
+    itemId: string;
+    kind: CleanupRowActionKind;
+  } | null>(null);
   const [runNotice, setRunNotice] = useState<string | null>(null);
   const [plannerOpen, setPlannerOpen] = useState(false);
   const [selectedTargets, setSelectedTargets] = useState<CleanupBrowserItem[]>([]);
   const [editableRows, setEditableRows] = useState<EditableCleanupRow[]>([]);
   const [activePreviewFileId, setActivePreviewFileId] = useState<string | null>(null);
 
-  const selectionKey = selectedTargets.map((item) => item.id).join(",");
   const selectedItem = selectedTargets[0] ?? null;
-  const safeFolderTrail = Array.isArray(folderTrail) ? folderTrail : [];
-  const safeBrowserItems = Array.isArray(browserItems) ? browserItems : [];
+  const safeFolderTrail = useMemo(
+    () => (Array.isArray(folderTrail) ? folderTrail : []),
+    [folderTrail],
+  );
+  const safeBrowserItems = useMemo(
+    () => (Array.isArray(browserItems) ? browserItems : []),
+    [browserItems],
+  );
   const rootSegmentOffset =
     safeFolderTrail[0]?.name === rootBrowserFolderName ? 1 : 0;
   const visibleFolderTrail =
@@ -230,6 +276,24 @@ export function CleanupPlanner({
       ? scopeOptions.filter((option) => option.value !== "single_file")
       : scopeOptions.filter((option) => option.value === "single_file")
     : scopeOptions;
+  const currentFolderLabel =
+    safeFolderTrail.at(-1)?.name ?? rootBrowserFolderName ?? "My Drive";
+  const selectedFileTargets = selectedTargets.filter((item) => !isFolder(item));
+  const selectedFolderTargets = selectedTargets.filter((item) => isFolder(item));
+  const hasMixedSelection =
+    selectedFileTargets.length > 0 && selectedFolderTargets.length > 0;
+  const selectedSuggestionTargets = selectedFileTargets.filter((item) =>
+    item.cleanup?.status === "suggestion_ready" ||
+    item.cleanup?.status === "needs_review",
+  );
+  const selectedReadySuggestions = selectedFileTargets.filter(
+    (item) => item.cleanup?.status === "suggestion_ready",
+  );
+  const allVisibleSelected =
+    safeBrowserItems.length > 0 &&
+    safeBrowserItems.every((item) =>
+      selectedTargets.some((selected) => selected.id === item.id),
+    );
 
   useEffect(() => {
     setStorageAvailable(hasActiveStorage);
@@ -283,85 +347,6 @@ export function CleanupPlanner({
     );
   }, [preview]);
 
-  useEffect(() => {
-    if (!storageAvailable || selectedTargets.length === 0) {
-      setPreview(null);
-      setPreviewError(null);
-      setPreviewLoading(false);
-      setRunError(null);
-      return;
-    }
-
-    let ignore = false;
-
-    async function loadPreview() {
-      setPreviewLoading(true);
-      setPreviewError(null);
-
-      try {
-        const response = await fetch("/api/cleanup/preview", {
-          body: JSON.stringify({
-            mode,
-            scope,
-            selectedIds: selectedTargets.map((item) => item.id),
-          }),
-          headers: {
-            "Content-Type": "application/json",
-          },
-          method: "POST",
-        });
-
-        const data = (await response.json()) as CleanupPreviewData & {
-          error?: string;
-        };
-
-        if (!response.ok) {
-          const error = new Error(
-            data.error || "Cleanup preview could not be generated.",
-          ) as Error & { storageUnavailable?: boolean };
-          if (response.status === 401 || response.status === 403) {
-            error.storageUnavailable = true;
-          }
-          throw error;
-        }
-
-        if (!ignore) {
-          setPreview(data);
-          setRunError(null);
-        }
-      } catch (error) {
-        if (!ignore) {
-          if (
-            error instanceof Error &&
-            "storageUnavailable" in error &&
-            error.storageUnavailable
-          ) {
-            setStorageAvailable(false);
-            setBrowserItems([]);
-            setSelectedTargets([]);
-            setPlannerOpen(false);
-          }
-          setPreview(null);
-          setPreviewError(
-            error instanceof Error
-              ? error.message
-              : "Cleanup preview could not be generated.",
-          );
-        }
-      } finally {
-        if (!ignore) {
-          setPreviewLoading(false);
-        }
-      }
-    }
-
-    void loadPreview();
-
-    return () => {
-      ignore = true;
-    };
-  }, [mode, scope, selectionKey, selectedTargets, storageAvailable]);
-
   async function runCleanup() {
     if (!storageAvailable || !preview?.canRun || runLoading || selectedTargets.length === 0) {
       return;
@@ -404,7 +389,7 @@ export function CleanupPlanner({
       setPreview(null);
       setSelectedTargets([]);
       setPlannerOpen(false);
-      await openFolder(currentFolderId, folderTrail);
+      await openFolder(currentFolderId, folderTrail, { forceRefresh: true });
     } catch (error) {
       if (
         error instanceof Error &&
@@ -425,21 +410,261 @@ export function CleanupPlanner({
     }
   }
 
-  async function openFolder(
-    folderId: string,
-    fallbackTrail: Array<{ id: string; name: string }>,
-  ) {
-    setBrowserLoading(true);
-    setBrowserError(null);
+  async function requestPreviewForTargets(targets: CleanupBrowserItem[]) {
+    const cleanTargets = targets.filter(Boolean);
+    if (!storageAvailable || cleanTargets.length === 0) {
+      return;
+    }
+
+    const nextScope = cleanTargets.every((item) => isFolder(item))
+      ? cleanTargets.length > 1
+        ? "multiple_client_folders"
+        : "client_folder"
+      : "single_file";
+
+    setScope(nextScope);
+    setSelectedTargets(cleanTargets);
+    setPlannerOpen(true);
+    setActiveRowAction(
+      cleanTargets.length === 1 && !isFolder(cleanTargets[0] as CleanupBrowserItem)
+        ? {
+            itemId: (cleanTargets[0] as CleanupBrowserItem).id,
+            kind: "review",
+          }
+        : null,
+    );
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setRunError(null);
+    setRunNotice(null);
 
     try {
-      const response = await fetch(
-        `/api/cleanup/browser?folderId=${encodeURIComponent(folderId)}`,
+      const response = await fetch("/api/cleanup/preview", {
+        body: JSON.stringify({
+          mode,
+          scope: nextScope,
+          selectedIds: cleanTargets.map((item) => item.id),
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      const data = (await response.json()) as CleanupPreviewData & {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        const error = new Error(
+          data.error || "Cleanup preview could not be generated.",
+        ) as Error & { storageUnavailable?: boolean };
+        if (response.status === 401 || response.status === 403) {
+          error.storageUnavailable = true;
+        }
+        throw error;
+      }
+
+      setPreview(data);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "storageUnavailable" in error &&
+        error.storageUnavailable
+      ) {
+        setStorageAvailable(false);
+        setBrowserItems([]);
+        setSelectedTargets([]);
+        setPlannerOpen(false);
+      }
+      setPreview(null);
+      setPreviewError(
+        error instanceof Error
+          ? error.message
+          : "Cleanup preview could not be generated.",
       );
+    } finally {
+      setPreviewLoading(false);
+      setActiveRowAction(null);
+    }
+  }
+
+  async function analyzeTargets(
+    targets: CleanupBrowserItem[],
+    targetKind: "files" | "folders",
+  ) {
+    const cleanTargets = targets.filter(Boolean);
+    if (!storageAvailable || cleanTargets.length === 0 || actionLoading) {
+      return;
+    }
+
+    setActionLoading(true);
+    setActiveRowAction(
+      cleanTargets.length === 1 && targetKind === "files"
+        ? { itemId: (cleanTargets[0] as CleanupBrowserItem).id, kind: "analyze" }
+        : null,
+    );
+    setRunError(null);
+    setRunNotice(null);
+
+    try {
+      const response = await fetch("/api/cleanup/analyze", {
+        body: JSON.stringify({
+          mode,
+          selectedIds: cleanTargets.map((item) => item.id),
+          targetKind,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        message?: string;
+      };
+
+      if (!response.ok) {
+        const error = new Error(
+          data.error || "Cleanup analysis could not be completed.",
+        ) as Error & { storageUnavailable?: boolean };
+        if (response.status === 401 || response.status === 403) {
+          error.storageUnavailable = true;
+        }
+        throw error;
+      }
+
+      setRunNotice(data.message || "Cleanup analysis finished.");
+      setPreview(null);
+      setPlannerOpen(false);
+      await openFolder(currentFolderId, safeFolderTrail, { forceRefresh: true });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "storageUnavailable" in error &&
+        error.storageUnavailable
+      ) {
+        setStorageAvailable(false);
+        setBrowserItems([]);
+        setSelectedTargets([]);
+        setPreview(null);
+        setPlannerOpen(false);
+      }
+      setRunError(
+        error instanceof Error
+          ? error.message
+          : "Cleanup analysis could not be completed.",
+      );
+    } finally {
+      setActionLoading(false);
+      setActiveRowAction(null);
+    }
+  }
+
+  async function applySuggestionTargets(targets: CleanupBrowserItem[]) {
+    const readyTargets = targets.filter(
+      (item) => item.cleanup?.status === "suggestion_ready",
+    );
+    if (!storageAvailable || readyTargets.length === 0 || actionLoading) {
+      return;
+    }
+
+    setActionLoading(true);
+    setActiveRowAction(
+      readyTargets.length === 1
+        ? { itemId: (readyTargets[0] as CleanupBrowserItem).id, kind: "apply" }
+        : null,
+    );
+    setRunError(null);
+    setRunNotice(null);
+
+    try {
+      const response = await fetch("/api/cleanup/apply", {
+        body: JSON.stringify({
+          selectedIds: readyTargets.map((item) => item.id),
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        message?: string;
+      };
+
+      if (!response.ok) {
+        const error = new Error(
+          data.error || "Cleanup suggestions could not be applied.",
+        ) as Error & { storageUnavailable?: boolean };
+        if (response.status === 401 || response.status === 403) {
+          error.storageUnavailable = true;
+        }
+        throw error;
+      }
+
+      setRunNotice(data.message || "Cleanup suggestions applied.");
+      setPreview(null);
+      setPlannerOpen(false);
+      setSelectedTargets([]);
+      await openFolder(currentFolderId, safeFolderTrail, { forceRefresh: true });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "storageUnavailable" in error &&
+        error.storageUnavailable
+      ) {
+        setStorageAvailable(false);
+        setBrowserItems([]);
+        setSelectedTargets([]);
+        setPreview(null);
+        setPlannerOpen(false);
+      }
+      setRunError(
+        error instanceof Error
+          ? error.message
+          : "Cleanup suggestions could not be applied.",
+      );
+    } finally {
+      setActionLoading(false);
+      setActiveRowAction(null);
+    }
+  }
+
+  async function applySelectedSuggestions() {
+    await applySuggestionTargets(selectedReadySuggestions);
+  }
+
+  const loadFolderFromApi = useCallback(async function loadFolderFromApi(
+    folderId: string,
+    fallbackTrail: CleanupFolderTrail,
+    options?: { includeTrail?: boolean },
+  ) {
+    const loadKey = `${options?.includeTrail === false ? "items" : "trail"}:${folderId}`;
+    const existingLoad = folderLoadPromisesRef.current.get(loadKey);
+    if (existingLoad) {
+      return existingLoad;
+    }
+
+    const loadPromise = (async () => {
+      const params = new URLSearchParams({ folderId });
+      const fallbackFolderName = fallbackTrail.at(-1)?.name;
+      if (fallbackFolderName) {
+        params.set("folderName", fallbackFolderName);
+      }
+      const fallbackFolderPath = formatCleanupCurrentLocation(fallbackTrail);
+      if (fallbackFolderPath) {
+        params.set("folderPath", fallbackFolderPath);
+      }
+      if (options?.includeTrail === false) {
+        params.set("includeTrail", "0");
+      }
+
+      const response = await fetch(`/api/cleanup/browser?${params.toString()}`);
       const data = (await response.json()) as {
         error?: string;
         items?: CleanupBrowserItem[];
-        trail?: Array<{ id: string; name: string }>;
+        trail?: CleanupFolderTrail;
       };
 
       if (!response.ok) {
@@ -452,18 +677,75 @@ export function CleanupPlanner({
         throw error;
       }
 
-      setBrowserItems(data.items ?? []);
+      const entry: BrowserFolderCacheEntry = {
+        items: data.items ?? [],
+        trail: Array.isArray(data.trail) ? data.trail : fallbackTrail,
+        loadedAt: Date.now(),
+      };
+      browserCacheRef.current.set(folderId, entry);
+
+      return entry;
+    })();
+
+    folderLoadPromisesRef.current.set(loadKey, loadPromise);
+
+    try {
+      return await loadPromise;
+    } finally {
+      folderLoadPromisesRef.current.delete(loadKey);
+    }
+  }, []);
+
+  const openFolder = useCallback(async function openFolder(
+    folderId: string,
+    fallbackTrail: CleanupFolderTrail,
+    options?: { forceRefresh?: boolean; includeTrail?: boolean },
+  ) {
+    const safeFallbackTrail = Array.isArray(fallbackTrail) ? fallbackTrail : [];
+    const cachedEntry = options?.forceRefresh
+      ? null
+      : browserCacheRef.current.get(folderId) ?? null;
+
+    setBrowserError(null);
+    setCurrentFolderId(folderId);
+    setFolderTrail(cachedEntry?.trail ?? safeFallbackTrail);
+    setSelectedTargets([]);
+    setPreview(null);
+    setPlannerOpen(false);
+
+    if (cachedEntry) {
+      setBrowserItems(cachedEntry.items);
       setBrowserLoaded(true);
-      setCurrentFolderId(folderId);
-      setFolderTrail(
-        Array.isArray(data.trail)
-          ? data.trail
-          : Array.isArray(fallbackTrail)
-            ? fallbackTrail
-            : [],
-      );
+      setBrowserLoading(false);
+      return;
+    }
+
+    const requestId = currentBrowserRequestRef.current + 1;
+    currentBrowserRequestRef.current = requestId;
+
+    setBrowserItems([]);
+    setBrowserLoaded(true);
+    setBrowserLoading(true);
+
+    try {
+      const includeTrail =
+        options?.includeTrail ??
+        (folderId !== rootBrowserFolderId && safeFallbackTrail.length === 0);
+      const entry = await loadFolderFromApi(folderId, safeFallbackTrail, {
+        includeTrail,
+      });
+
+      if (currentBrowserRequestRef.current !== requestId) {
+        return;
+      }
+
+      setBrowserItems(entry.items);
+      setFolderTrail(entry.trail);
     } catch (error) {
-      setBrowserLoaded(true);
+      if (currentBrowserRequestRef.current !== requestId) {
+        return;
+      }
+
       if (
         error instanceof Error &&
         "storageUnavailable" in error &&
@@ -481,36 +763,101 @@ export function CleanupPlanner({
           : "That folder could not be loaded.",
       );
     } finally {
-      setBrowserLoading(false);
+      if (currentBrowserRequestRef.current === requestId) {
+        setBrowserLoading(false);
+      }
     }
+  }, [loadFolderFromApi, rootBrowserFolderId]);
+
+  const prefetchFolder = useCallback(async function prefetchFolder(
+    folderId: string,
+    fallbackTrail: CleanupFolderTrail,
+  ) {
+    if (browserCacheRef.current.has(folderId)) {
+      return;
+    }
+
+    try {
+      await loadFolderFromApi(folderId, fallbackTrail, { includeTrail: false });
+    } catch {
+      // Prefetch is opportunistic; explicit folder opens still surface errors.
+    }
+  }, [loadFolderFromApi]);
+
+  useEffect(() => {
+    if (!storageAvailable || initialFolderLoadStartedRef.current) {
+      return;
+    }
+
+    initialFolderLoadStartedRef.current = true;
+    void openFolder(currentFolderId, safeFolderTrail);
+  }, [currentFolderId, openFolder, safeFolderTrail, storageAvailable]);
+
+  useEffect(() => {
+    if (!storageAvailable || browserLoading || safeBrowserItems.length === 0) {
+      return;
+    }
+
+    const foldersToPrefetch = safeBrowserItems
+      .filter((item) => isFolder(item))
+      .slice(0, PREFETCH_FOLDER_LIMIT);
+
+    if (foldersToPrefetch.length === 0) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      foldersToPrefetch.forEach((folder) => {
+        void prefetchFolder(folder.id, [
+          ...safeFolderTrail,
+          { id: folder.id, name: folder.name },
+        ]);
+      });
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [browserLoading, prefetchFolder, safeBrowserItems, safeFolderTrail, storageAvailable]);
+
+  function toggleRowSelection(item: CleanupBrowserItem) {
+    setPreview(null);
+    setPlannerOpen(false);
+    setSelectedTargets((current) => {
+      if (current.some((entry) => entry.id === item.id)) {
+        return current.filter((entry) => entry.id !== item.id);
+      }
+
+      return [...current, item];
+    });
   }
 
-  function toggleSelection(item: CleanupBrowserItem) {
-    if (!isFolder(item)) {
-      setScope("single_file");
-      setSelectedTargets([item]);
-      setPlannerOpen(true);
-      return;
-    }
-
-    if (scope === "multiple_client_folders") {
-      setSelectedTargets((current) => {
-        if (current.some((entry) => entry.id === item.id)) {
-          return current.filter((entry) => entry.id !== item.id);
-        }
-
-        return [...current, item];
-      });
-      setPlannerOpen(true);
-
-      return;
-    }
-
-    if (scope === "single_file") {
-      setScope("folder_of_files");
-    }
+  function selectSingleRow(item: CleanupBrowserItem) {
+    setPreview(null);
+    setPlannerOpen(false);
     setSelectedTargets([item]);
-    setPlannerOpen(true);
+  }
+
+  function toggleAllVisible() {
+    setPreview(null);
+    setPlannerOpen(false);
+    if (allVisibleSelected) {
+      setSelectedTargets([]);
+      return;
+    }
+
+    setSelectedTargets(safeBrowserItems);
+  }
+
+  function openBrowserItem(item: CleanupBrowserItem) {
+    if (isFolder(item)) {
+      const nextTrail = [
+        ...safeFolderTrail,
+        { id: item.id, name: item.name },
+      ];
+      void openFolder(item.id, nextTrail, { includeTrail: false });
+      return;
+    }
+
+    void requestPreviewForTargets([item]);
   }
 
   function updateEditableRow(
@@ -627,19 +974,13 @@ export function CleanupPlanner({
     <div className={styles.cleanupLayout}>
       <section className={styles.selectionSection}>
         <div className={styles.selectionBrowser}>
-          {selectedTargets.length ? (
-            <div className={styles.browserHeader}>
-              <span className={styles.browserSelectionPill}>
-                {selectedTargets.length} selected
-              </span>
-            </div>
-          ) : null}
-
           <div className={styles.browserBreadcrumbs}>
             <button
               className={styles.breadcrumbButton}
               disabled={currentFolderId === rootBrowserFolderId}
-              onClick={() => void openFolder(rootBrowserFolderId, [])}
+              onClick={() =>
+                void openFolder(rootBrowserFolderId, [], { includeTrail: false })
+              }
               type="button"
             >
               {rootBrowserFolderName}
@@ -653,6 +994,7 @@ export function CleanupPlanner({
                     openFolder(
                       segment.id,
                       safeFolderTrail.slice(0, index + 1 + rootSegmentOffset),
+                      { includeTrail: false },
                     )
                   }
                   type="button"
@@ -665,20 +1007,95 @@ export function CleanupPlanner({
 
           {browserError ? <p className={styles.errorBox}>{browserError}</p> : null}
           {runNotice ? <p className={styles.successBox}>{runNotice}</p> : null}
+          {runError ? <p className={styles.errorBox}>{runError}</p> : null}
+
+          <div className={styles.browserActionBar}>
+            <div className={styles.actionGroup}>
+              <button
+                className={styles.browserActionSecondary}
+                disabled={browserLoading || actionLoading}
+                onClick={() =>
+                  void openFolder(currentFolderId, safeFolderTrail, {
+                    forceRefresh: true,
+                  })
+                }
+                type="button"
+              >
+                {browserLoading ? "Reloading..." : "Reload folder list"}
+              </button>
+              {safeBrowserItems.length ? (
+                <button
+                  className={styles.browserActionSecondary}
+                  disabled={actionLoading}
+                  onClick={toggleAllVisible}
+                  type="button"
+                >
+                  {allVisibleSelected ? "Clear selection" : "Select All"}
+                </button>
+              ) : null}
+
+              {hasMixedSelection ? null : selectedFileTargets.length > 0 ? (
+                <>
+                  <button
+                    className={styles.browserActionPrimary}
+                    disabled={actionLoading}
+                    onClick={() =>
+                      void analyzeTargets(selectedFileTargets, "files")
+                    }
+                    type="button"
+                  >
+                    {actionLoading ? "Analyzing..." : "Analyze selected"}
+                  </button>
+                  {selectedSuggestionTargets.length > 0 ? (
+                    <button
+                      className={styles.browserActionSecondary}
+                      disabled={actionLoading}
+                      onClick={() =>
+                        void requestPreviewForTargets([
+                          selectedSuggestionTargets[0] as CleanupBrowserItem,
+                        ])
+                      }
+                      type="button"
+                    >
+                      Review suggestions
+                    </button>
+                  ) : null}
+                  {selectedReadySuggestions.length > 0 ? (
+                    <button
+                      className={styles.browserActionPrimary}
+                      disabled={actionLoading}
+                      onClick={() => void applySelectedSuggestions()}
+                      type="button"
+                    >
+                      {actionLoading
+                        ? "Applying..."
+                        : `Apply suggestions (${selectedReadySuggestions.length})`}
+                    </button>
+                  ) : null}
+                </>
+              ) : selectedFolderTargets.length > 0 ? (
+                <>
+                  <button
+                    className={styles.browserActionPrimary}
+                    disabled={actionLoading}
+                    onClick={() =>
+                      void analyzeTargets(selectedFolderTargets, "folders")
+                    }
+                    type="button"
+                  >
+                    {actionLoading ? "Analyzing..." : "Analyze folder"}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
 
           <div className={styles.selectionList}>
             {browserLoading ? (
-              <div className={styles.placeholder}>Loading folder contents...</div>
+              <div className={styles.placeholder}>Loading Drive folders...</div>
             ) : !browserLoaded ? (
               <div className={styles.placeholder}>
-                <p>Folder contents are not loaded yet.</p>
-                <button
-                  className={styles.browserActionPrimary}
-                  onClick={() => void openFolder(currentFolderId, folderTrail)}
-                  type="button"
-                >
-                  Browse this folder
-                </button>
+                Preparing Drive folders...
               </div>
             ) : safeBrowserItems.length === 0 ? (
               <div className={styles.placeholder}>
@@ -690,6 +1107,13 @@ export function CleanupPlanner({
                 const selected = selectedTargets.some(
                   (entry) => entry.id === item.id,
                 );
+                const cleanup = item.cleanup ?? {
+                  currentLocation: currentFolderLabel,
+                  status: "needs_analysis" as const,
+                };
+                const rowActions = folder
+                  ? []
+                  : getCleanupRowActions(cleanup.status);
 
                 return (
                   <div
@@ -697,56 +1121,189 @@ export function CleanupPlanner({
                     className={
                       selected ? styles.browserRowSelected : styles.browserRow
                     }
-                    onDoubleClick={() => {
+                    onClick={() => selectSingleRow(item)}
+                    onDoubleClick={() => openBrowserItem(item)}
+                    onFocus={() => {
                       if (folder) {
-                        void openFolder(item.id, [
+                        void prefetchFolder(item.id, [
                           ...safeFolderTrail,
                           { id: item.id, name: item.name },
                         ]);
                       }
                     }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openBrowserItem(item);
+                      }
+                    }}
+                    onMouseEnter={() => {
+                      if (folder) {
+                        void prefetchFolder(item.id, [
+                          ...safeFolderTrail,
+                          { id: item.id, name: item.name },
+                        ]);
+                      }
+                    }}
+                    tabIndex={0}
+                    title={
+                      folder
+                        ? "Double-click to open this folder"
+                        : "Double-click to preview this file"
+                    }
                   >
-                    <div className={styles.browserRowMain}>
-                      <div className={styles.browserRowTitle}>
-                        <FileKindIcon
-                          className={styles.browserItemIcon}
-                          mimeType={item.mimeType}
-                          name={item.name}
-                        />
-                        <strong>{item.name}</strong>
-                      </div>
-                      {describeBrowserItem(scope, item) ? (
-                        <p>{describeBrowserItem(scope, item)}</p>
-                      ) : null}
-                    </div>
-
-                    <div className={styles.browserRowActions}>
-                      {folder ? (
-                        <button
-                          className={styles.browserActionSecondary}
-                          onClick={() =>
-                            openFolder(item.id, [
-                              ...safeFolderTrail,
-                              { id: item.id, name: item.name },
-                            ])
-                          }
-                          type="button"
-                        >
-                          Open
-                        </button>
-                      ) : null}
-
-                      <button
-                        className={
-                          selected
-                            ? styles.browserActionActive
-                            : styles.browserActionPrimary
-                        }
-                        onClick={() => toggleSelection(item)}
-                        type="button"
+                    <div className={styles.browserRowInner}>
+                      <label
+                        className={styles.browserCheckboxWrap}
+                        onClick={(event) => event.stopPropagation()}
                       >
-                        {getSelectLabel(scope, selected)}
-                      </button>
+                        <span className={styles.visuallyHidden}>
+                          {selected ? "Deselect" : "Select"} {item.name}
+                        </span>
+                        <input
+                          checked={selected}
+                          className={styles.browserCheckbox}
+                          onChange={() => toggleRowSelection(item)}
+                          type="checkbox"
+                        />
+                      </label>
+
+                      <div className={styles.browserRowMain}>
+                        {folder ? (
+                          <div className={styles.folderRow}>
+                            <div className={styles.browserRowTitle}>
+                              <FileKindIcon
+                                className={styles.browserItemIcon}
+                                mimeType={item.mimeType}
+                                name={item.name}
+                              />
+                              <span className={styles.fileName}>{item.name}</span>
+                            </div>
+                          </div>
+                        ) : cleanup.status === "suggestion_ready" ||
+                          cleanup.status === "needs_review" ? (
+                          <div className={styles.fileComparisonGrid}>
+                            <div className={styles.fileComparisonBlock}>
+                              <span className={styles.rowLabel}>Original name</span>
+                              <div className={styles.fileTitleRow}>
+                                <FileKindIcon
+                                  className={styles.browserItemIcon}
+                                  mimeType={item.mimeType}
+                                  name={item.name}
+                                />
+                                <span className={styles.fileName}>{item.name}</span>
+                              </div>
+                              <div className={styles.inlineFacts}>
+                                <span className={styles.rowLabel}>
+                                  Original location
+                                </span>
+                                <span>
+                                  {cleanup.currentLocation ?? currentFolderLabel}
+                                </span>
+                              </div>
+                              {item.createdTime ? (
+                                <div className={styles.inlineFacts}>
+                                  <span className={styles.rowLabel}>
+                                    Uploaded to Drive
+                                  </span>
+                                  <span>{formatBrowserTimestamp(item.createdTime)}</span>
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className={styles.fileComparisonBlock}>
+                              <span className={styles.rowLabel}>
+                                Proposed file name
+                              </span>
+                              <span className={styles.proposedValue}>
+                                {cleanup.proposedFilename ?? "Needs review"}
+                              </span>
+                              <div className={styles.inlineFacts}>
+                                <span className={styles.rowLabel}>
+                                  Proposed location
+                                </span>
+                                <span>
+                                  {cleanup.proposedLocation ?? "Needs review"}
+                                </span>
+                              </div>
+                              <div className={styles.inlineFacts}>
+                                <span className={styles.rowLabel}>
+                                  Recognized file type
+                                </span>
+                                <span>
+                                  {cleanup.recognizedFileType ?? "Unknown"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={styles.fileSimpleRow}>
+                            <div className={styles.fileTitleRow}>
+                              <FileKindIcon
+                                className={styles.browserItemIcon}
+                                mimeType={item.mimeType}
+                                name={item.name}
+                              />
+                              <span className={styles.fileName}>{item.name}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {rowActions.length > 0 ? (
+                        <div className={styles.rowActionGroup}>
+                          {rowActions.map((rowAction) => {
+                            const rowActionActive =
+                              activeRowAction?.itemId === item.id &&
+                              activeRowAction.kind === rowAction.kind;
+                            const rowActionDisabled =
+                              rowAction.kind !== "complete" &&
+                              (actionLoading ||
+                                (rowAction.kind === "review" && previewLoading));
+
+                            if (rowAction.kind === "complete") {
+                              return (
+                                <span
+                                  className={styles.completeBadge}
+                                  key={rowAction.kind}
+                                >
+                                  {rowAction.label}
+                                </span>
+                              );
+                            }
+
+                            return (
+                              <button
+                                className={`${styles.rowActionButton} ${
+                                  rowAction.kind === "analyze"
+                                    ? styles.rowActionAnalyze
+                                    : rowAction.kind === "review"
+                                      ? styles.rowActionReview
+                                      : styles.rowActionApply
+                                }`}
+                                disabled={rowActionDisabled}
+                                key={rowAction.kind}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (rowAction.kind === "analyze") {
+                                    void analyzeTargets([item], "files");
+                                  } else if (rowAction.kind === "review") {
+                                    void requestPreviewForTargets([item]);
+                                  } else if (rowAction.kind === "apply") {
+                                    void applySuggestionTargets([item]);
+                                  }
+                                }}
+                                onDoubleClick={(event) => event.stopPropagation()}
+                                type="button"
+                              >
+                                {rowActionActive
+                                  ? rowAction.loadingLabel
+                                  : rowAction.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -1150,6 +1707,7 @@ export function CleanupPlanner({
                                   idType: activeEditableRow.idType,
                                   ownershipType: activeEditableRow.ownershipType,
                                   parserConflictSummary: activePreviewRow.parserConflictSummary,
+                                  documentSignal: activePreviewRow.debug.documentSignal,
                                   taxYear: activeEditableRow.taxYear,
                                 }).map((entry) => (
                                   <div key={entry.label} className={styles.planRow}>
@@ -1270,28 +1828,87 @@ function isFolder(item: CleanupBrowserItem) {
   return item.mimeType === "application/vnd.google-apps.folder";
 }
 
-function describeBrowserItem(scope: CleanupScope, item: CleanupBrowserItem) {
-  if (isFolder(item)) {
-    if (scope === "folder_of_files") {
-      return "Use this when the folder mainly contains loose files that need cleanup together.";
-    }
-
-    if (scope === "client_folder") {
-      return "";
-    }
-
-    if (scope === "multiple_client_folders") {
-      return "Include this folder in a batch cleanup across several household folders.";
-    }
-
-    return "Open this folder to browse deeper before selecting a file.";
+function getCleanupRowActions(
+  status: NonNullable<CleanupBrowserItem["cleanup"]>["status"],
+) {
+  if (status === "complete") {
+    return [{
+      kind: "complete" as const,
+      label: "Complete",
+      loadingLabel: "Complete",
+    }];
   }
 
-  if (scope === "single_file") {
-    return "Select this file to preview a one-file cleanup pass.";
+  if (status === "suggestion_ready") {
+    return [
+      {
+        kind: "review" as const,
+        label: "Review",
+        loadingLabel: "Opening...",
+      },
+      {
+        kind: "apply" as const,
+        label: "Approve",
+        loadingLabel: "Approving...",
+      },
+    ];
   }
 
-  return "Choose a folder-based scope if you want to clean up groups of files.";
+  if (status === "needs_review") {
+    return [{
+      kind: "review" as const,
+      label: "Review",
+      loadingLabel: "Opening...",
+    }];
+  }
+
+  return [{
+    kind: "analyze" as const,
+    label: "Analyze",
+    loadingLabel: "Analyzing...",
+  }];
+}
+
+function formatCleanupCurrentLocation(trail: CleanupFolderTrail) {
+  const names = trail
+    .map((segment) => segment.name.trim())
+    .filter(Boolean);
+
+  if (names.length === 0) {
+    return null;
+  }
+
+  const clientsIndex = names.findIndex((name) =>
+    /^(\d+_)?clients$/i.test(name),
+  );
+  if (clientsIndex >= 0 && clientsIndex < names.length - 1) {
+    return names.slice(clientsIndex + 1).join(" / ");
+  }
+
+  const visibleNames = names[0]?.toLowerCase() === "my drive"
+    ? names.slice(1)
+    : names;
+  if (visibleNames.length >= 2) {
+    return visibleNames.slice(-2).join(" / ");
+  }
+
+  return visibleNames[0] ?? names[0] ?? null;
+}
+
+function formatBrowserTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return "Not available";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function labelForContentSource(
@@ -1319,6 +1936,7 @@ function getDiagnosticFieldEntries(input: {
   downloadByteLength?: number | null;
   downloadSha1?: string | null;
   parserConflictSummary?: string | null;
+  documentSignal?: string | null;
   client?: string | null;
   client2?: string | null;
   ownershipType?: string | null;
@@ -1332,6 +1950,7 @@ function getDiagnosticFieldEntries(input: {
 }) {
   return [
     ["Parser conflict", input.parserConflictSummary],
+    ["Document signal", input.documentSignal],
     ["File ID", input.fileId],
     ["Drive modified", formatDiagnosticTimestamp(input.driveModifiedTime)],
     ["Drive size", formatByteCount(input.driveSize)],
@@ -1394,14 +2013,6 @@ function formatHash(value: string | null | undefined) {
   }
 
   return value.length > 16 ? `${value.slice(0, 16)}…` : value;
-}
-
-function getSelectLabel(scope: CleanupScope, selected: boolean) {
-  if (scope === "multiple_client_folders") {
-    return selected ? "Included" : "Include";
-  }
-
-  return selected ? "Selected" : "Select";
 }
 
 function detectExtension(filename: string) {

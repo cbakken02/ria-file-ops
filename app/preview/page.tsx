@@ -7,10 +7,7 @@ import {
   getFirmSettingsByOwnerEmail,
   getReviewDecisionsByOwnerEmail,
 } from "@/lib/db";
-import {
-  summarizePreviewNormalizationChanges,
-  summarizePreviewPhase1Evaluation,
-} from "@/lib/processing-preview";
+import { summarizePreviewNormalizationChanges } from "@/lib/processing-preview";
 import {
   readPreviewSnapshot,
   restorePreviewItemsFromSnapshot,
@@ -19,8 +16,8 @@ import { requireSession } from "@/lib/session";
 import { getReviewRuleOption, normalizeFolderTemplate } from "@/lib/setup-config";
 import { parseNamingRules } from "@/lib/naming-rules";
 import { getCachedStorageConnectionsForSession } from "@/lib/storage-connections";
+import { IntakeAutoRefresh } from "./intake-auto-refresh";
 import { IntakeQueue } from "./intake-queue";
-import { RefreshIntakeButton } from "./refresh-intake-button";
 import styles from "./page.module.css";
 
 export default async function PreviewPage({
@@ -62,7 +59,6 @@ export default async function PreviewPage({
     readyCount: snapshotItems.filter((item) => item.status === "Ready to stage").length,
     reviewCount: snapshotItems.filter((item) => item.status === "Needs review").length,
     normalizationSummary: summarizePreviewNormalizationChanges(snapshotItems),
-    phase1Summary: summarizePreviewPhase1Evaluation(snapshotItems),
     folderTemplate: normalizeFolderTemplate(settings?.folderTemplate ?? ""),
     reviewRule: getReviewRuleOption(settings?.reviewInstruction),
   };
@@ -96,10 +92,6 @@ export default async function PreviewPage({
           </p>
         </div>
         <div className={styles.headerActions}>
-          <RefreshIntakeButton
-            activeTab={activeTab}
-            disabled={!canRefreshIntake}
-          />
           <StorageSwitcher
             activeConnection={
               displayConnection
@@ -134,35 +126,12 @@ export default async function PreviewPage({
         </section>
       ) : null}
 
+      <IntakeAutoRefresh activeTab={activeTab} enabled={canRefreshIntake} />
+
       {liveQueueError ? (
         <section className={styles.noteCard}>
           <strong>{storageStatusTitle}</strong>
           <p>{liveQueueError}</p>
-        </section>
-      ) : null}
-
-      {preview.items.length > 0 ? (
-        <section className={styles.noteCard}>
-          <strong>Phase 1 evaluation</strong>
-          <p>
-            AI succeeded: {preview.phase1Summary.aiSucceededCount}.
-            {" "}
-            AI failed and fell back: {preview.phase1Summary.aiFailedFallbackCount}.
-            {" "}
-            AI skipped: {preview.phase1Summary.aiSkippedCount}.
-            {" "}
-            High priority: {preview.phase1Summary.highPriorityCount}.
-            {" "}
-            Medium priority: {preview.phase1Summary.mediumPriorityCount}.
-            {" "}
-            Low priority: {preview.phase1Summary.lowPriorityCount}.
-            {" "}
-            Custodian normalization changes: {preview.phase1Summary.custodianNormalizedCount}.
-            {" "}
-            Account-type normalization changes: {preview.phase1Summary.accountTypeNormalizedCount}.
-            {" "}
-            Files with Phase 1 review flags: {preview.phase1Summary.flaggedFileCount}.
-          </p>
         </section>
       ) : null}
 
@@ -190,7 +159,7 @@ export default async function PreviewPage({
           <strong>Storage connected. Choose an intake folder.</strong>
           <p>
             Choose an intake/source folder in Settings. Page navigation will keep
-            using cached state until you click Refresh Intake.
+            using cached state until you refresh the browser page.
           </p>
           <Link className={styles.primaryAction} href="/setup?section=intake">
             Open settings
@@ -202,11 +171,11 @@ export default async function PreviewPage({
         <section className={styles.noteCard}>
           <strong>
             {snapshot
-              ? "Cached intake preview needs a refresh"
-              : "Refresh intake when you are ready"}
+              ? "Cached intake preview needs a browser refresh"
+              : "Refresh the browser page when you are ready"}
           </strong>
           <p>
-            Sidebar navigation no longer scans Drive. Use Refresh Intake to
+            Sidebar navigation no longer scans Drive. Refresh this browser page to
             read the source folder and update this queue.
           </p>
         </section>
@@ -264,7 +233,7 @@ export default async function PreviewPage({
           readyItems={readyItems}
           reviewItems={reviewItems}
           savedDecisions={savedDecisions}
-              sourceFolderName={settings.sourceFolderName ?? null}
+          sourceFolderName={settings.sourceFolderName ?? null}
             />
             )}
           </section>
@@ -304,5 +273,5 @@ function getIntakeStorageStatusSummary(
     return "Intake can show the last cached refresh, but storage must be reconnected before scanning Drive again.";
   }
 
-  return "Storage is connected. Choose an intake/source folder in Settings before refreshing Intake.";
+  return "Storage is connected. Choose an intake/source folder in Settings before refreshing the browser page.";
 }

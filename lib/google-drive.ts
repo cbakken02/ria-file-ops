@@ -25,6 +25,7 @@ export type GoogleDriveFile = {
   id: string;
   name: string;
   mimeType: string;
+  createdTime?: string;
   modifiedTime?: string;
   fileExtension?: string;
   parents?: string[];
@@ -36,6 +37,7 @@ type GoogleDriveFileResponse = {
   name?: string;
   driveId?: string;
   mimeType?: string;
+  createdTime?: string;
   modifiedTime?: string;
   fileExtension?: string;
   parents?: string[];
@@ -79,7 +81,7 @@ export async function listRecentDriveFiles(accessToken: string) {
   url.searchParams.set("pageSize", "8");
   url.searchParams.set(
     "fields",
-    "files(id,name,mimeType,modifiedTime,fileExtension,size,parents)",
+    "files(id,name,mimeType,createdTime,modifiedTime,fileExtension,size,parents)",
   );
   url.searchParams.set("orderBy", "modifiedTime desc");
 
@@ -107,7 +109,7 @@ export async function listDriveFolders(accessToken: string) {
   url.searchParams.set("pageSize", "100");
   url.searchParams.set(
     "fields",
-    "files(id,name,modifiedTime,fileExtension,size,parents)",
+    "files(id,name,createdTime,modifiedTime,fileExtension,size,parents)",
   );
   url.searchParams.set("orderBy", "name_natural");
   url.searchParams.set(
@@ -139,7 +141,7 @@ export async function listFilesInFolder(accessToken: string, folderId: string) {
   url.searchParams.set("pageSize", "100");
   url.searchParams.set(
     "fields",
-    "files(id,name,mimeType,modifiedTime,fileExtension,size,parents)",
+    "files(id,name,mimeType,createdTime,modifiedTime,fileExtension,size,parents)",
   );
   url.searchParams.set("orderBy", "modifiedTime desc");
   url.searchParams.set(
@@ -303,7 +305,7 @@ export async function getDriveFileMetadata(accessToken: string, fileId: string) 
   const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}`);
   url.searchParams.set(
     "fields",
-    "id,name,mimeType,modifiedTime,fileExtension,size,parents",
+    "id,name,mimeType,createdTime,modifiedTime,fileExtension,size,parents",
   );
 
   const response = await fetch(url, {
@@ -326,6 +328,7 @@ export async function getDriveFileMetadata(accessToken: string, fileId: string) 
     id: data.id,
     name: data.name,
     mimeType: data.mimeType,
+    createdTime: data.createdTime,
     modifiedTime: data.modifiedTime,
     fileExtension: data.fileExtension,
     size: data.size,

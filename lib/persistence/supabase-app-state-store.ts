@@ -19,6 +19,10 @@ import type {
   StorageConnection,
   StorageConnectionStatus,
 } from "@/lib/db";
+import type {
+  CleanupFileState,
+  CleanupFileStateUpsertInput,
+} from "@/lib/cleanup-types";
 
 type FirmSettingsRow = {
   id: string;
@@ -145,6 +149,32 @@ type ClientMemoryRuleRow = {
   learnedClientFolder: string;
   source: "human_review";
   usageCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CleanupFileStateRow = {
+  id: string;
+  ownerEmail: string;
+  fileId: string;
+  sourceName: string;
+  mimeType: string;
+  modifiedTime: string | null;
+  driveSize: string | null;
+  currentLocation: string | null;
+  proposedFilename: string | null;
+  proposedLocation: string | null;
+  recognizedFileType: string | null;
+  documentTypeId: string | null;
+  confidenceLabel: "High" | "Medium" | "Low" | null;
+  reasonsJson: unknown;
+  status: CleanupFileState["status"];
+  analysisProfile: string | null;
+  analysisVersion: string | null;
+  parserVersion: string | null;
+  analyzedAt: string | null;
+  completedAt: string | null;
+  appliedFilingEventId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -286,6 +316,34 @@ const CLIENT_MEMORY_RULE_SELECT = `
     created_at AS "createdAt",
     updated_at AS "updatedAt"
   FROM public.client_memory_rules
+`;
+
+const CLEANUP_FILE_STATE_SELECT = `
+  SELECT
+    id,
+    owner_email AS "ownerEmail",
+    file_id AS "fileId",
+    source_name AS "sourceName",
+    mime_type AS "mimeType",
+    modified_time AS "modifiedTime",
+    drive_size AS "driveSize",
+    current_location AS "currentLocation",
+    proposed_filename AS "proposedFilename",
+    proposed_location AS "proposedLocation",
+    recognized_file_type AS "recognizedFileType",
+    document_type_id AS "documentTypeId",
+    confidence_label AS "confidenceLabel",
+    reasons_json AS "reasonsJson",
+    status,
+    analysis_profile AS "analysisProfile",
+    analysis_version AS "analysisVersion",
+    parser_version AS "parserVersion",
+    analyzed_at AS "analyzedAt",
+    completed_at AS "completedAt",
+    applied_filing_event_id AS "appliedFilingEventId",
+    created_at AS "createdAt",
+    updated_at AS "updatedAt"
+  FROM public.cleanup_file_states
 `;
 
 export function getFirmSettingsByOwnerEmail(ownerEmail: string) {
@@ -587,6 +645,189 @@ export function setReviewDecisionStatusForOwner(input: {
   return mapReviewDecisionRow(result.rows[0]) ?? null;
 }
 
+export function getCleanupFileStatesByOwnerAndFileIds(
+  ownerEmail: string,
+  fileIds: string[],
+) {
+  const uniqueFileIds = Array.from(new Set(fileIds.filter(Boolean)));
+  if (uniqueFileIds.length === 0) {
+    return [];
+  }
+
+  const result = queryPostgresSync<CleanupFileStateRow>(
+    `${CLEANUP_FILE_STATE_SELECT} WHERE owner_email = $1 AND file_id = ANY($2::text[])`,
+    [ownerEmail, uniqueFileIds],
+  );
+
+  return result.rows
+    .map((row) => mapCleanupFileStateRow(row))
+    .filter((state): state is CleanupFileState => Boolean(state));
+}
+
+export function upsertCleanupFileStateForOwner(
+  input: CleanupFileStateUpsertInput,
+) {
+  const now = new Date().toISOString();
+  const analyzedAt = input.analyzedAt ?? now;
+  const result = queryPostgresSync<CleanupFileStateRow>(
+    `
+      INSERT INTO public.cleanup_file_states (
+        id,
+        owner_email,
+        file_id,
+        source_name,
+        mime_type,
+        modified_time,
+        drive_size,
+        current_location,
+        proposed_filename,
+        proposed_location,
+        recognized_file_type,
+        document_type_id,
+        confidence_label,
+        reasons_json,
+        status,
+        analysis_profile,
+        analysis_version,
+        parser_version,
+        analyzed_at,
+        completed_at,
+        applied_filing_event_id,
+        created_at,
+        updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb,
+        $15, $16, $17, $18, $19, $20, $21, $22, $22
+      )
+      ON CONFLICT (owner_email, file_id)
+      DO UPDATE SET
+        source_name = EXCLUDED.source_name,
+        mime_type = EXCLUDED.mime_type,
+        modified_time = EXCLUDED.modified_time,
+        drive_size = EXCLUDED.drive_size,
+        current_location = EXCLUDED.current_location,
+        proposed_filename = EXCLUDED.proposed_filename,
+        proposed_location = EXCLUDED.proposed_location,
+        recognized_file_type = EXCLUDED.recognized_file_type,
+        document_type_id = EXCLUDED.document_type_id,
+        confidence_label = EXCLUDED.confidence_label,
+        reasons_json = EXCLUDED.reasons_json,
+        status = EXCLUDED.status,
+        analysis_profile = EXCLUDED.analysis_profile,
+        analysis_version = EXCLUDED.analysis_version,
+        parser_version = EXCLUDED.parser_version,
+        analyzed_at = EXCLUDED.analyzed_at,
+        completed_at = EXCLUDED.completed_at,
+        applied_filing_event_id = EXCLUDED.applied_filing_event_id,
+        updated_at = EXCLUDED.updated_at
+      RETURNING
+        id,
+        owner_email AS "ownerEmail",
+        file_id AS "fileId",
+        source_name AS "sourceName",
+        mime_type AS "mimeType",
+        modified_time AS "modifiedTime",
+        drive_size AS "driveSize",
+        current_location AS "currentLocation",
+        proposed_filename AS "proposedFilename",
+        proposed_location AS "proposedLocation",
+        recognized_file_type AS "recognizedFileType",
+        document_type_id AS "documentTypeId",
+        confidence_label AS "confidenceLabel",
+        reasons_json AS "reasonsJson",
+        status,
+        analysis_profile AS "analysisProfile",
+        analysis_version AS "analysisVersion",
+        parser_version AS "parserVersion",
+        analyzed_at AS "analyzedAt",
+        completed_at AS "completedAt",
+        applied_filing_event_id AS "appliedFilingEventId",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+    `,
+    [
+      crypto.randomUUID(),
+      input.ownerEmail,
+      input.fileId,
+      input.sourceName,
+      input.mimeType,
+      input.modifiedTime,
+      input.driveSize,
+      input.currentLocation,
+      input.proposedFilename,
+      input.proposedLocation,
+      input.recognizedFileType,
+      input.documentTypeId,
+      input.confidenceLabel,
+      JSON.stringify(input.reasons ?? []),
+      input.status,
+      input.analysisProfile,
+      input.analysisVersion,
+      input.parserVersion,
+      analyzedAt,
+      input.completedAt ?? null,
+      input.appliedFilingEventId ?? null,
+      now,
+    ],
+  );
+
+  return mapCleanupFileStateRow(result.rows[0]) ?? null;
+}
+
+export function markCleanupFileStateComplete(input: {
+  ownerEmail: string;
+  fileId: string;
+  appliedFilingEventId: string | null;
+  completedAt?: string | null;
+}) {
+  const now = new Date().toISOString();
+  const completedAt = input.completedAt ?? now;
+  const result = queryPostgresSync<CleanupFileStateRow>(
+    `
+      UPDATE public.cleanup_file_states
+      SET
+        status = 'complete',
+        completed_at = $3,
+        applied_filing_event_id = $4,
+        updated_at = $5
+      WHERE owner_email = $1 AND file_id = $2
+      RETURNING
+        id,
+        owner_email AS "ownerEmail",
+        file_id AS "fileId",
+        source_name AS "sourceName",
+        mime_type AS "mimeType",
+        modified_time AS "modifiedTime",
+        drive_size AS "driveSize",
+        current_location AS "currentLocation",
+        proposed_filename AS "proposedFilename",
+        proposed_location AS "proposedLocation",
+        recognized_file_type AS "recognizedFileType",
+        document_type_id AS "documentTypeId",
+        confidence_label AS "confidenceLabel",
+        reasons_json AS "reasonsJson",
+        status,
+        analysis_profile AS "analysisProfile",
+        analysis_version AS "analysisVersion",
+        parser_version AS "parserVersion",
+        analyzed_at AS "analyzedAt",
+        completed_at AS "completedAt",
+        applied_filing_event_id AS "appliedFilingEventId",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+    `,
+    [
+      input.ownerEmail,
+      input.fileId,
+      completedAt,
+      input.appliedFilingEventId,
+      now,
+    ],
+  );
+
+  return mapCleanupFileStateRow(result.rows[0]) ?? null;
+}
+
 export function getFilingEventsByOwnerEmail(ownerEmail: string) {
   const result = queryPostgresSync<FilingEventRow>(
     `${FILING_EVENT_SELECT} WHERE owner_email = $1 ORDER BY created_at DESC`,
@@ -659,6 +900,8 @@ export function createFilingEvent(input: {
   outcome: FilingEventOutcome;
   errorMessage: string | null;
 }) {
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
   queryPostgresSync(
     `
       INSERT INTO public.filing_events (
@@ -722,7 +965,7 @@ export function createFilingEvent(input: {
       )
     `,
     [
-      crypto.randomUUID(),
+      id,
       input.ownerEmail,
       input.actorEmail,
       input.actorType ?? "user",
@@ -773,9 +1016,16 @@ export function createFilingEvent(input: {
       input.classifierExcerpt ?? null,
       input.outcome,
       input.errorMessage,
-      new Date().toISOString(),
+      createdAt,
     ],
   );
+
+  const event = getFilingEventByOwnerAndId(input.ownerEmail, id);
+  if (!event) {
+    throw new Error("Filing event was created but could not be reloaded.");
+  }
+
+  return event;
 }
 
 export function upsertClientMemoryRule(input: {
@@ -1217,6 +1467,40 @@ function mapFilingEventRow(row: FilingEventRow | undefined) {
     classifierReasons:
       row.classifierReasons == null ? null : JSON.stringify(row.classifierReasons),
   } satisfies FilingEvent;
+}
+
+function mapCleanupFileStateRow(
+  row: CleanupFileStateRow | undefined,
+): CleanupFileState | undefined {
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    analyzedAt: row.analyzedAt,
+    analysisProfile: row.analysisProfile,
+    analysisVersion: row.analysisVersion,
+    appliedFilingEventId: row.appliedFilingEventId,
+    completedAt: row.completedAt,
+    confidenceLabel: row.confidenceLabel,
+    createdAt: row.createdAt,
+    currentLocation: row.currentLocation,
+    documentTypeId: row.documentTypeId,
+    driveSize: row.driveSize,
+    fileId: row.fileId,
+    id: row.id,
+    mimeType: row.mimeType,
+    modifiedTime: row.modifiedTime,
+    ownerEmail: row.ownerEmail,
+    parserVersion: row.parserVersion,
+    proposedFilename: row.proposedFilename,
+    proposedLocation: row.proposedLocation,
+    reasons: normalizeStringArray(row.reasonsJson),
+    recognizedFileType: row.recognizedFileType,
+    sourceName: row.sourceName,
+    status: row.status,
+    updatedAt: row.updatedAt,
+  };
 }
 
 function normalizeStringArray(value: unknown) {

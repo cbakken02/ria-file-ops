@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  approvePreviewItemAction,
+  approveSelectedPreviewItemsAction,
+} from "@/app/preview/actions";
 import { saveReviewDecisionAction } from "@/app/review/actions";
 import { FileKindIcon } from "@/components/file-kind-icon";
 import type { FilingEvent, ReviewDecision } from "@/lib/db";
@@ -9,7 +13,10 @@ import { getCleanupTopLevelFolderForDocumentType } from "@/lib/cleanup-presets";
 import {
   buildDocumentFilenamePlan,
   getClientDisplayName,
+  getDetectedDocumentSubtype,
+  getDocumentSubtypeOptions,
   getDocumentTypeIdFromLabel,
+  getNamingDocumentTypeLabel,
   getNamingDocumentTypeOptions,
   type NamingRuleDocumentType,
   type NamingRulesConfig,
@@ -47,6 +54,7 @@ export function IntakeQueue({
   sourceFolderName,
 }: IntakeQueueProps) {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const savedDecisionMap = useMemo(
     () => new Map(savedDecisions.map((decision) => [decision.fileId, decision])),
     [savedDecisions],
@@ -74,13 +82,72 @@ export function IntakeQueue({
     activeModal?.kind === "filed"
       ? filedItemMap.get(activeModal.eventId) ?? null
       : null;
+  const visiblePreviewItems = useMemo(() => {
+    if (activeTab === "review") {
+      return reviewItems;
+    }
+
+    if (activeTab === "ready") {
+      return readyItems;
+    }
+
+    if (activeTab === "filed") {
+      return [];
+    }
+
+    return [...reviewItems, ...readyItems];
+  }, [activeTab, readyItems, reviewItems]);
+  const visiblePreviewItemIds = useMemo(
+    () => new Set(visiblePreviewItems.map((item) => item.id)),
+    [visiblePreviewItems],
+  );
+  const selectedVisibleItemIds = selectedItemIds.filter((id) =>
+    visiblePreviewItemIds.has(id),
+  );
+  const selectedReadyItemIds = selectedVisibleItemIds.filter(
+    (id) => previewItemMap.get(id)?.status === "Ready to stage",
+  );
+  const selectedCount = selectedVisibleItemIds.length;
+  const selectedReadyCount = selectedReadyItemIds.length;
+  const allVisibleItemsSelected =
+    visiblePreviewItems.length > 0 && selectedCount === visiblePreviewItems.length;
+
+  function toggleSelectedItem(itemId: string, selected: boolean) {
+    setSelectedItemIds((current) => {
+      if (selected) {
+        return current.includes(itemId) ? current : [...current, itemId];
+      }
+
+      return current.filter((id) => id !== itemId);
+    });
+  }
+
+  function toggleVisibleSelection() {
+    setSelectedItemIds((current) => {
+      if (allVisibleItemsSelected) {
+        return current.filter((id) => !visiblePreviewItemIds.has(id));
+      }
+
+      const next = new Set(current);
+      visiblePreviewItems.forEach((item) => next.add(item.id));
+      return Array.from(next);
+    });
+  }
 
   let rows: ReactNode;
 
   if (activeTab === "review") {
     rows = reviewItems.length ? (
       reviewItems.map((item) =>
-        renderPreviewRow(item, savedDecisionMap.get(item.id), setActiveModal),
+        renderPreviewRow(
+          item,
+          savedDecisionMap.get(item.id),
+          setActiveModal,
+          sourceFolderName,
+          activeTab,
+          selectedItemIds.includes(item.id),
+          toggleSelectedItem,
+        ),
       )
     ) : (
       <article className={styles.noteCard}>
@@ -91,7 +158,15 @@ export function IntakeQueue({
   } else if (activeTab === "ready") {
     rows = readyItems.length ? (
       readyItems.map((item) =>
-        renderPreviewRow(item, savedDecisionMap.get(item.id), setActiveModal),
+        renderPreviewRow(
+          item,
+          savedDecisionMap.get(item.id),
+          setActiveModal,
+          sourceFolderName,
+          activeTab,
+          selectedItemIds.includes(item.id),
+          toggleSelectedItem,
+        ),
       )
     ) : (
       <article className={styles.noteCard}>
@@ -111,10 +186,26 @@ export function IntakeQueue({
   } else {
     const allRows = [
       ...reviewItems.map((item) =>
-        renderPreviewRow(item, savedDecisionMap.get(item.id), setActiveModal),
+        renderPreviewRow(
+          item,
+          savedDecisionMap.get(item.id),
+          setActiveModal,
+          sourceFolderName,
+          activeTab,
+          selectedItemIds.includes(item.id),
+          toggleSelectedItem,
+        ),
       ),
       ...readyItems.map((item) =>
-        renderPreviewRow(item, savedDecisionMap.get(item.id), setActiveModal),
+        renderPreviewRow(
+          item,
+          savedDecisionMap.get(item.id),
+          setActiveModal,
+          sourceFolderName,
+          activeTab,
+          selectedItemIds.includes(item.id),
+          toggleSelectedItem,
+        ),
       ),
     ];
 
@@ -130,6 +221,35 @@ export function IntakeQueue({
 
   return (
     <>
+      {activeTab !== "filed" ? (
+        <div className={styles.queueActionBar}>
+          <div className={styles.actionGroup}>
+            {visiblePreviewItems.length > 0 ? (
+              <button
+                className={styles.secondaryAction}
+                onClick={toggleVisibleSelection}
+                type="button"
+              >
+                {allVisibleItemsSelected ? "Clear selection" : "Select All"}
+              </button>
+            ) : null}
+            <form
+              action={approveSelectedPreviewItemsAction}
+              className={styles.inlineActionForm}
+            >
+              <input name="tab" type="hidden" value={activeTab} />
+              {selectedReadyItemIds.map((itemId) => (
+                <input key={itemId} name="fileId" type="hidden" value={itemId} />
+              ))}
+              {selectedReadyCount > 0 ? (
+                <button className={styles.primaryAction} type="submit">
+                  {`Approve Selected (${selectedReadyCount})`}
+                </button>
+              ) : null}
+            </form>
+          </div>
+        </div>
+      ) : null}
       <section className={styles.queueList}>{rows}</section>
 
       {activePreviewItem ? (
@@ -160,6 +280,10 @@ function renderPreviewRow(
   item: PreviewItem,
   savedDecision: ReviewDecision | undefined,
   setActiveModal: (value: ActiveModal) => void,
+  sourceFolderName: string | null,
+  activeTab: IntakeQueueProps["activeTab"],
+  isSelected: boolean,
+  onToggleSelected: (itemId: string, selected: boolean) => void,
 ) {
   const displayedClientFolder =
     savedDecision?.reviewedClientFolder ??
@@ -168,69 +292,98 @@ function renderPreviewRow(
   const displayedTopLevelFolder =
     savedDecision?.reviewedTopLevelFolder ?? item.proposedTopLevelFolder;
   const displayedFilename = savedDecision?.reviewedFilename ?? item.proposedFilename;
+  const originalLocation = sourceFolderName ?? "Intake folder";
+  const proposedLocation = displayedClientFolder
+    ? `${displayedClientFolder} / ${displayedTopLevelFolder}`
+    : `Needs review / ${displayedTopLevelFolder}`;
+  const uploadedLabel = item.createdTime
+    ? formatDriveTimestamp(item.createdTime)
+    : "Refresh to load";
+  const canApprove = Boolean(
+    displayedClientFolder && displayedTopLevelFolder && displayedFilename,
+  );
+  const showApprove = item.status === "Ready to stage";
   const isSuggestedNewClient =
     typeof displayedClientFolder === "string" &&
     displayedClientFolder.length > 0 &&
     !savedDecision?.reviewedClientFolder &&
     item.clientResolutionStatus === "created_new";
-  const rowStatusLabel =
-    savedDecision?.status === "approved"
-      ? "Approved"
-      : savedDecision
-        ? "Draft saved"
-        : item.status;
 
   return (
     <article key={item.id} className={styles.queueRow}>
-      <button
-        className={styles.rowButton}
-        onClick={() => setActiveModal({ kind: "preview", itemId: item.id })}
-        type="button"
-      >
+      <div className={styles.rowContent}>
+        <label className={styles.selectionControl}>
+          <input
+            aria-label={`Select ${item.sourceName}`}
+            checked={isSelected}
+            onChange={(event) => onToggleSelected(item.id, event.target.checked)}
+            type="checkbox"
+          />
+        </label>
         <div className={styles.rowIdentity}>
-          <p className={styles.cardEyebrow}>{item.detectedDocumentType}</p>
-          <div className={styles.fileTitleRow}>
-            <FileKindIcon
-              className={styles.fileKindIcon}
-              mimeType={item.mimeType}
-              name={item.sourceName}
-            />
-            <h3 className={styles.fileName}>{item.sourceName}</h3>
-          </div>
-          <div className={styles.inlineFacts}>
-            <span>
-              <strong>Household</strong>
-              {displayedClientFolder ?? "Needs review"}
-            </span>
-            <span>
-              <strong>Folder</strong>
-              {displayedTopLevelFolder}
-            </span>
-            <span>
-              <strong>Filename</strong>
-              <code>{displayedFilename}</code>
-            </span>
-            {isSuggestedNewClient ? (
-              <span className={styles.newClientFlag}>Possible new household</span>
-            ) : null}
+          <div className={styles.fileComparisonGrid}>
+            <div className={styles.fileComparisonBlock}>
+              <span className={styles.comparisonLabel}>Original name</span>
+              <div className={styles.fileTitleRow}>
+                <FileKindIcon
+                  className={styles.fileKindIcon}
+                  mimeType={item.mimeType}
+                  name={item.sourceName}
+                />
+                <h3 className={`${styles.fileName} ${styles.originalFileName}`}>
+                  {item.sourceName}
+                </h3>
+              </div>
+              <span className={styles.locationFact}>
+                <strong>Original location</strong>
+                {originalLocation}
+              </span>
+              <span className={styles.locationFact}>
+                <strong>Uploaded to Drive</strong>
+                {uploadedLabel}
+              </span>
+            </div>
+            <div className={styles.fileComparisonBlock}>
+              <span className={styles.comparisonLabel}>Proposed file name</span>
+              <code className={styles.proposedFileName}>{displayedFilename}</code>
+              <span className={styles.locationFact}>
+                <strong>Proposed location</strong>
+                {proposedLocation}
+              </span>
+              <span className={styles.locationFact}>
+                <strong>Recognized file type</strong>
+                {getNamingDocumentTypeLabel(item.documentTypeId)}
+              </span>
+              {isSuggestedNewClient ? (
+                <span className={styles.newClientFlag}>Possible new household</span>
+              ) : null}
+            </div>
           </div>
         </div>
 
-        <div className={styles.rowStatusCluster}>
-          <span className={styles.sourceTag}>
-            {labelForContentSource(item.contentSource)}
-          </span>
-          <span
-            className={
-              savedDecision?.status === "approved" || item.status === "Ready to stage"
-                ? styles.goodBadge
-                : styles.warnBadge
-            }
+        <div className={styles.rowActions}>
+          <button
+            className={`${styles.secondaryAction} ${styles.rowActionButton} ${styles.rowActionReview}`}
+            onClick={() => setActiveModal({ kind: "preview", itemId: item.id })}
+            type="button"
           >
-            {rowStatusLabel}
-          </span>
+            Review
+          </button>
+          {showApprove ? (
+            <form action={approvePreviewItemAction} className={styles.inlineActionForm}>
+              <input name="fileId" type="hidden" value={item.id} />
+              <input name="tab" type="hidden" value={activeTab} />
+              <button
+                className={`${styles.primaryAction} ${styles.rowActionButton} ${styles.rowActionApprove}`}
+                disabled={!canApprove}
+                type="submit"
+              >
+                Approve
+              </button>
+            </form>
+          ) : null}
         </div>
-      </button>
+      </div>
     </article>
   );
 }
@@ -307,6 +460,7 @@ type PreviewPlanState = {
   clientName2: string;
   ownershipType: "single" | "joint";
   documentType: string;
+  documentSubtype: string;
   topLevelFolder: string;
   proposedFilename: string;
   accountType: string;
@@ -375,13 +529,21 @@ function getVisibleTokenFields(
     }));
 }
 
-function getDocumentTypeOptions(currentLabel: string) {
-  const options = getNamingDocumentTypeOptions().map((option) => option.label);
-  if (currentLabel && !options.includes(currentLabel)) {
-    return [currentLabel, ...options];
-  }
+function getDocumentTypeOptions() {
+  return getNamingDocumentTypeOptions().map((option) => option.label);
+}
 
-  return options;
+function getDocumentSubtype(
+  documentTypeId: NamingRuleDocumentType,
+  detectedDocumentType: string,
+) {
+  return getDetectedDocumentSubtype(documentTypeId, detectedDocumentType) ?? "";
+}
+
+function resolveFilenameDocumentLabel(plan: PreviewPlanState) {
+  return plan.documentSubtype
+    ? plan.documentSubtype
+    : plan.documentType;
 }
 
 function resolveTopLevelFolderForDocumentType(
@@ -410,7 +572,8 @@ function buildPreviewFilename(
     detectedClient: item.detectedClient,
     detectedClient2: item.detectedClient2,
     documentDate: plan.documentDate || null,
-    documentTypeLabel: plan.documentType,
+    documentTypeId: getDocumentTypeIdFromLabel(plan.documentType),
+    documentTypeLabel: resolveFilenameDocumentLabel(plan),
     entityName: plan.entityName || null,
     extension: detectExtension(item.sourceName),
     fallbackName: item.proposedFilename,
@@ -463,7 +626,15 @@ function PreviewItemModal({
       "",
     custodian: item.extractedCustodian ?? "",
     documentDate: item.extractedDocumentDate ?? "",
-    documentType: savedDecision?.detectedDocumentType ?? item.detectedDocumentType,
+    documentType:
+      savedDecision?.detectedDocumentType ??
+      getNamingDocumentTypeLabel(item.documentTypeId),
+    documentSubtype: getDocumentSubtype(
+      item.documentTypeId,
+      savedDecision?.reviewedDocumentSubtype ??
+        savedDecision?.detectedDocumentSubtype ??
+        item.detectedDocumentType,
+    ),
     entityName: item.extractedEntityName ?? "",
     idType: item.extractedIdType ?? "",
     ownershipType: savedDecision?.reviewedOwnershipType ?? item.ownershipType,
@@ -477,10 +648,14 @@ function PreviewItemModal({
     [item.id],
   );
   const documentTypeOptions = useMemo(
-    () => getDocumentTypeOptions(plan.documentType),
-    [plan.documentType],
+    () => getDocumentTypeOptions(),
+    [],
   );
   const activeDocumentTypeId = getDocumentTypeIdFromLabel(plan.documentType);
+  const documentSubtypeOptions = useMemo(
+    () => getDocumentSubtypeOptions(activeDocumentTypeId, plan.documentSubtype),
+    [activeDocumentTypeId, plan.documentSubtype],
+  );
   const visibleTokenFields = useMemo(
     () => getVisibleTokenFields(namingRules, activeDocumentTypeId),
     [activeDocumentTypeId, namingRules],
@@ -614,6 +789,11 @@ function PreviewItemModal({
                   value={plan.documentType}
                 />
                 <input
+                  name="detectedDocumentSubtype"
+                  type="hidden"
+                  value={plan.documentSubtype}
+                />
+                <input
                   name="originalClientFolder"
                   type="hidden"
                   value={
@@ -743,6 +923,32 @@ function PreviewItemModal({
                         </div>
                       </label>
 
+                      {plan.documentSubtype ? (
+                        <label className={styles.planRow}>
+                          <span className={styles.planRowLabel}>Subtype</span>
+                          <div className={styles.planRowControl}>
+                            <select
+                              className={styles.planRowSelect}
+                              disabled={!canEdit}
+                              name="reviewedDocumentSubtype"
+                              onChange={(event) =>
+                                updateDerivedPlan(
+                                  { documentSubtype: event.target.value },
+                                  { deriveFilename: true },
+                                )
+                              }
+                              value={plan.documentSubtype}
+                            >
+                              {documentSubtypeOptions.map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </label>
+                      ) : null}
+
                       <label className={styles.planRow}>
                         <span className={styles.planRowLabel}>Top-level folder</span>
                         <div className={styles.planRowControl}>
@@ -853,8 +1059,24 @@ function PreviewItemModal({
                         {getDiagnosticFieldEntries({
                           accountLast4: plan.accountLast4,
                           accountType: plan.accountType,
+                          analysisRanAt: item.analysisRanAt,
+                          analysisSource: item.analysisSource,
+                          aiAttempted: item.debug.aiAttempted,
+                          aiEnabled: item.debug.aiEnabled,
+                          aiFailureReason: item.debug.aiFailureReason,
+                          aiModel: item.debug.aiModel,
+                          aiPromptVersion: item.debug.aiPromptVersion,
+                          aiRawAccountType: item.debug.aiRawAccountType,
+                          aiRawCustodian: item.debug.aiRawCustodian,
+                          aiRawDetectedClient: item.debug.aiRawDetectedClient,
+                          aiRawDetectedClient2: item.debug.aiRawDetectedClient2,
+                          aiRawSummary: item.debug.aiRawSummary,
+                          aiUsed: item.debug.aiUsed,
+                          accountTypeWasNormalized: item.debug.accountTypeWasNormalized,
+                          cacheWrittenAt: item.cacheWrittenAt,
                           client: item.detectedClient,
                           client2: item.detectedClient2,
+                          custodianWasNormalized: item.debug.custodianWasNormalized,
                           custodian: plan.custodian,
                           downloadByteLength: item.downloadByteLength,
                           downloadSha1: item.downloadSha1,
@@ -862,10 +1084,17 @@ function PreviewItemModal({
                           driveSize: item.driveSize,
                           documentDate: plan.documentDate,
                           entityName: plan.entityName,
+                          fieldOwnership: item.debug.fieldOwnership,
                           fileId: item.id,
                           idType: plan.idType,
                           ownershipType: plan.ownershipType,
+                          parserVersion: item.debug.parserVersion,
                           parserConflictSummary: item.parserConflictSummary,
+                          phase1ReviewPriority: item.phase1ReviewPriority,
+                          phase1ReviewFlags: item.phase1ReviewFlags,
+                          documentSignal: item.debug.documentSignal,
+                          statementClientSource: item.debug.statementClientSource,
+                          statementClientCandidate: item.debug.statementClientCandidate,
                           taxYear: plan.taxYear,
                         }).map((entry) => (
                           <div key={entry.label} className={styles.planRow}>
@@ -1095,7 +1324,30 @@ function getDiagnosticFieldEntries(input: {
   driveSize?: string | null;
   downloadByteLength?: number | null;
   downloadSha1?: string | null;
+  analysisSource?: PreviewItem["analysisSource"] | null;
+  analysisRanAt?: string | null;
+  cacheWrittenAt?: string | null;
+  aiEnabled?: boolean;
+  aiAttempted?: boolean;
+  aiUsed?: boolean;
+  aiFailureReason?: string | null;
+  aiModel?: string | null;
+  aiPromptVersion?: string | null;
+  aiRawSummary?: string | null;
+  aiRawDetectedClient?: string | null;
+  aiRawDetectedClient2?: string | null;
+  aiRawCustodian?: string | null;
+  aiRawAccountType?: string | null;
+  custodianWasNormalized?: boolean | null;
+  accountTypeWasNormalized?: boolean | null;
+  phase1ReviewFlags?: PreviewItem["phase1ReviewFlags"];
+  phase1ReviewPriority?: PreviewItem["phase1ReviewPriority"];
+  parserVersion?: string | null;
   parserConflictSummary?: string | null;
+  documentSignal?: string | null;
+  fieldOwnership?: PreviewItem["debug"]["fieldOwnership"];
+  statementClientSource?: PreviewItem["debug"]["statementClientSource"] | null;
+  statementClientCandidate?: string | null;
   client?: string | null;
   client2?: string | null;
   ownershipType?: string | null;
@@ -1108,7 +1360,44 @@ function getDiagnosticFieldEntries(input: {
   entityName?: string | null;
 }) {
   return [
+    ["Analysis source", formatAnalysisSource(input.analysisSource)],
+    ["Analysis ran", formatDiagnosticTimestamp(input.analysisRanAt)],
+    ["Cache written", formatDiagnosticTimestamp(input.cacheWrittenAt)],
+    [
+      "AI status",
+      formatAIStatus({
+        aiEnabled: input.aiEnabled,
+        aiAttempted: input.aiAttempted,
+        aiUsed: input.aiUsed,
+        aiFailureReason: input.aiFailureReason,
+      }),
+    ],
+    ["AI primary parser", formatBooleanDiagnostic(input.aiEnabled)],
+    ["AI attempted", formatBooleanDiagnostic(input.aiAttempted)],
+    ["AI used", formatBooleanDiagnostic(input.aiUsed)],
+    ["AI failure", input.aiFailureReason],
+    ["AI model", input.aiModel],
+    ["AI prompt version", input.aiPromptVersion],
+    ["AI evidence summary", input.aiRawSummary],
+    ["Raw AI client", input.aiRawDetectedClient],
+    ["Raw AI client 2", input.aiRawDetectedClient2],
+    ["Raw AI custodian", input.aiRawCustodian],
+    ["Final custodian", input.custodian],
+    ["Custodian normalized", formatBooleanDiagnostic(input.custodianWasNormalized)],
+    ["Raw AI account type", input.aiRawAccountType],
+    ["Final account type", input.accountType],
+    [
+      "Account type normalized",
+      formatBooleanDiagnostic(input.accountTypeWasNormalized),
+    ],
+    ["Phase 1 review priority", formatPhase1ReviewPriority(input.phase1ReviewPriority)],
+    ["Phase 1 review flags", formatPhase1ReviewFlags(input.phase1ReviewFlags)],
+    ["Field ownership", formatFieldOwnershipSummary(input.fieldOwnership)],
+    ["Parser version", input.parserVersion],
     ["Parser conflict", input.parserConflictSummary],
+    ["Document signal", input.documentSignal],
+    ["Statement client source", formatStatementClientSource(input.statementClientSource)],
+    ["Statement client candidate", input.statementClientCandidate],
     ["File ID", input.fileId],
     ["Drive modified", formatDiagnosticTimestamp(input.driveModifiedTime)],
     ["Drive size", formatByteCount(input.driveSize)],
@@ -1117,9 +1406,7 @@ function getDiagnosticFieldEntries(input: {
     ["Detected client", input.client],
     ["Detected client 2", input.client2],
     ["Ownership", input.ownershipType],
-    ["Account type", input.accountType],
     ["Account last 4", input.accountLast4],
-    ["Custodian", input.custodian],
     ["Tax year", input.taxYear],
     ["Document date", input.documentDate],
     ["ID type", input.idType],
@@ -1132,6 +1419,176 @@ function getDiagnosticFieldEntries(input: {
 
 function formatDiagnosticValue(value: string | null | undefined) {
   return value && value.trim() ? value : "Not detected";
+}
+
+function formatAnalysisSource(
+  value: PreviewItem["analysisSource"] | null | undefined,
+) {
+  if (value === "fresh_analysis") {
+    return "Fresh analysis";
+  }
+
+  if (value === "loaded_from_cache") {
+    return "Loaded from cache";
+  }
+
+  return null;
+}
+
+function formatBooleanDiagnostic(value: boolean | null | undefined) {
+  if (value === true) {
+    return "Yes";
+  }
+
+  if (value === false) {
+    return "No";
+  }
+
+  return null;
+}
+
+function formatAIStatus(input: {
+  aiEnabled?: boolean;
+  aiAttempted?: boolean;
+  aiUsed?: boolean;
+  aiFailureReason?: string | null;
+}) {
+  if (!input.aiEnabled) {
+    return "AI disabled by feature flag";
+  }
+
+  if (
+    !input.aiAttempted &&
+    input.aiFailureReason &&
+    /provider is not configured/i.test(input.aiFailureReason)
+  ) {
+    return "AI enabled but provider not configured";
+  }
+
+  if (!input.aiAttempted && input.aiFailureReason) {
+    return "AI enabled but skipped for this file";
+  }
+
+  if (input.aiAttempted && input.aiUsed) {
+    return "AI succeeded";
+  }
+
+  if (input.aiAttempted && input.aiFailureReason) {
+    return "AI failed and fell back";
+  }
+
+  if (input.aiAttempted) {
+    return "AI attempted with provider";
+  }
+
+  return "AI enabled but not used";
+}
+
+function formatStatementClientSource(
+  value: PreviewItem["debug"]["statementClientSource"] | null | undefined,
+) {
+  if (!value) {
+    return null;
+  }
+
+  if (value === "fields_or_joint_clients") {
+    return "Fields / joint clients";
+  }
+
+  if (value === "anchored_header") {
+    return "Anchored header";
+  }
+
+  if (value === "owner_address_block_lines") {
+    return "Owner/address block (lines)";
+  }
+
+  if (value === "owner_address_block_inline") {
+    return "Owner/address block (inline)";
+  }
+
+  if (value === "header_block_name") {
+    return "Header block name";
+  }
+
+  if (value === "generic_text_fallback") {
+    return "Generic text fallback";
+  }
+
+  if (value === "generic_first_page_fallback") {
+    return "Generic first-page fallback";
+  }
+
+  if (value === "none") {
+    return "None";
+  }
+
+  return value;
+}
+
+function formatFieldOwnershipSummary(
+  fieldOwnership: PreviewItem["debug"]["fieldOwnership"] | null | undefined,
+) {
+  if (!fieldOwnership) {
+    return null;
+  }
+
+  const entries = Object.entries(fieldOwnership)
+    .map(([field, ownership]) =>
+      ownership?.owner ? `${field}=${ownership.owner}` : null,
+    )
+    .filter((entry): entry is string => Boolean(entry))
+    .sort((left, right) => left.localeCompare(right));
+
+  return entries.length ? entries.join(", ") : null;
+}
+
+function formatPhase1ReviewFlags(
+  flags: PreviewItem["phase1ReviewFlags"] | null | undefined,
+) {
+  if (!flags?.length) {
+    return null;
+  }
+
+  return flags
+    .map((flag) => {
+      if (flag === "document_date_conflict") {
+        return "Conflicting or ambiguous document date signals";
+      }
+      if (flag === "missing_custodian_on_valid_statement") {
+        return "Missing custodian on otherwise valid statement";
+      }
+      if (flag === "missing_account_type_on_valid_statement") {
+        return "Missing account type on otherwise valid statement";
+      }
+      if (flag === "custodian_differs_from_raw_ai") {
+        return "Raw AI custodian differs from final custodian";
+      }
+      if (flag === "account_type_differs_from_raw_ai") {
+        return "Raw AI account type differs from final account type";
+      }
+
+      return flag;
+    })
+    .join(", ");
+}
+
+function formatPhase1ReviewPriority(
+  priority: PreviewItem["phase1ReviewPriority"] | null | undefined,
+) {
+  if (priority === "high") {
+    return "Priority: High";
+  }
+
+  if (priority === "medium") {
+    return "Priority: Medium";
+  }
+
+  if (priority === "low") {
+    return "Priority: Low";
+  }
+
+  return null;
 }
 
 function formatDiagnosticTimestamp(value: string | null | undefined) {
@@ -1147,6 +1604,18 @@ function formatDiagnosticTimestamp(value: string | null | undefined) {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "medium",
+  }).format(parsed);
+}
+
+function formatDriveTimestamp(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(parsed);
 }
 
