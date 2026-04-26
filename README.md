@@ -1,74 +1,116 @@
-This is the first working skeleton for `RIA File Ops`, a product concept for
-organizing advisory-firm document intake.
+# RIA File Ops
 
-## What it includes
+RIA File Ops is a private staging application for advisory-firm document intake,
+preview, cleanup, and Data Intelligence experiments.
 
-- marketing homepage
-- protected dashboard
-- Google sign-in
-- separate Google Drive permission step
-- live Drive metadata preview after connection
-- saved firm settings in a local SQLite database
+## Current Architecture
 
-## Before you run it
+- Next.js App Router application deployed on Vercel
+- GitHub-backed source control and deployments
+- NextAuth Google sign-in
+- Separate Google Drive connection flow for storage access
+- SQLite persistence for normal local development
+- Supabase Postgres persistence for Vercel/staging/production
+- Server-only Supabase/Postgres access through `pg`
+- Optional OpenAI-backed parser and Data Intelligence paths
 
-Create a `.env.local` file in the project root and add:
+The app does not currently use Supabase Auth in the browser.
 
-```bash
-NEXTAUTH_SECRET=replace-this-with-a-long-random-string
-NEXTAUTH_URL=http://localhost:3000
-GOOGLE_CLIENT_ID=your-google-oauth-client-id
-GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
-```
+## Local Development
 
-You will also need a Google OAuth app configured with this redirect URI:
-
-```text
-http://localhost:3000/api/auth/callback/google
-```
-
-For production later, add your real app domain as another redirect URI.
-
-## Getting started
-
-Install dependencies and run the development server:
+Use SQLite for normal local development. Do not use the production Supabase
+database for local tests.
 
 ```bash
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
-## Current user flow
-
-1. Visit `/login`
-2. Sign in with Google
-3. Open `Settings`, then go to `Storage connections`
-4. Grant Google Drive metadata access
-5. Stay in `Settings`
-6. Save firm name, source folder, destination root, naming convention, and folder template
-7. Visit `/dashboard`
-
-## What comes next
-
-- hook in the document processing pipeline
-- add a review queue for uncertain matches
-- add a real folder picker instead of a simple dropdown list
-- connect saved settings to the document renaming and filing engine
-
-## Notes
-
-This prototype currently requests the Google Drive metadata read-only scope:
+Open:
 
 ```text
-https://www.googleapis.com/auth/drive.metadata.readonly
+http://localhost:3000
 ```
 
-That is enough to prove the integration works and preview files. We can expand
-or refine scopes later when we build real folder selection, rename, move, and
-processing actions.
+Common validation commands:
 
-Firm settings are currently stored in a local SQLite file at `data/ria-file-ops.db`.
-That is good for development on your machine. For production later, we would move
-this to a hosted database.
+```bash
+npm run build
+npm run lint
+npm run eval:data-intelligence-conversations
+```
+
+For the full local workflow, persistence modes, and safety notes, see
+[LOCAL_DEV.md](./LOCAL_DEV.md).
+
+## Environment Variables
+
+Start from [.env.example](./.env.example). It groups variables by:
+
+- app/auth
+- Google OAuth / Drive
+- persistence backend
+- SQLite
+- Supabase Postgres
+- encryption
+- OpenAI / AI parser
+- Vercel/deployment
+
+Production `NEXTAUTH_URL` should be the canonical domain:
+
+```text
+https://ria-file-ops.vercel.app
+```
+
+## Google OAuth Redirect URIs
+
+Local development:
+
+```text
+http://localhost:3000/api/auth/callback/google
+http://localhost:3000/api/storage/google/callback
+```
+
+Production:
+
+```text
+https://ria-file-ops.vercel.app/api/auth/callback/google
+https://ria-file-ops.vercel.app/api/storage/google/callback
+```
+
+## Persistence Modes
+
+Normal local development:
+
+```bash
+PERSISTENCE_BACKEND=sqlite
+```
+
+Supabase-backed staging or integration testing:
+
+```bash
+PERSISTENCE_BACKEND=supabase
+SUPABASE_DB_URL_POOLER=postgresql://...
+APP_ENCRYPTION_KEY=...
+```
+
+Use a separate hosted Supabase dev/staging project for local Supabase testing.
+Do not point local testing at production Supabase.
+
+## Intake Processing Rule
+
+Page navigation should read cached state only. It should not scan Drive,
+download PDFs, parse files, or refresh intake.
+
+For now, intake processing is intentionally explicit through the Refresh Intake
+button. Future folder monitoring or webhook work should preserve that separation.
+
+## AI Parser Local Testing
+
+AI parser local testing notes will be documented separately.
+
+The Vercel-safe PDF path supports JavaScript-based text extraction and a clear
+metadata-only fallback. Local macOS development may also use Python/PDFKit/Vision
+helpers for richer extraction, but those native helpers are not assumed to be
+available in Vercel serverless runtime.

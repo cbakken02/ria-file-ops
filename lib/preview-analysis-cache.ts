@@ -51,7 +51,14 @@ type PreviewAnalysisCacheRow = {
   updatedAt: string;
 };
 
-const CACHE_DIR = path.join(process.cwd(), "data", "preview-analysis-cache");
+const PREVIEW_ANALYSIS_CACHE_DIR_ENV = "RIA_PREVIEW_ANALYSIS_CACHE_DIR";
+
+function getPreviewAnalysisCacheDir() {
+  const configured = process.env[PREVIEW_ANALYSIS_CACHE_DIR_ENV]?.trim();
+  return configured
+    ? path.resolve(configured)
+    : path.join(process.cwd(), "data", "preview-analysis-cache");
+}
 
 function getCachePath(ownerEmail: string, fileId: string) {
   const cacheKey = crypto
@@ -59,11 +66,11 @@ function getCachePath(ownerEmail: string, fileId: string) {
     .update(`${ownerEmail}:${fileId}`)
     .digest("hex");
 
-  return path.join(CACHE_DIR, `${cacheKey}.json`);
+  return path.join(getPreviewAnalysisCacheDir(), `${cacheKey}.json`);
 }
 
 async function ensureCacheDir() {
-  await fs.mkdir(CACHE_DIR, { recursive: true });
+  await fs.mkdir(getPreviewAnalysisCacheDir(), { recursive: true });
 }
 
 function matchesFile(
@@ -309,13 +316,14 @@ export async function clearPreviewAnalysisCacheForOwner(ownerEmail: string) {
   if (!isSupabasePersistence()) {
     await ensureCacheDir();
 
-    const entries = await fs.readdir(CACHE_DIR).catch(() => []);
+    const cacheDir = getPreviewAnalysisCacheDir();
+    const entries = await fs.readdir(cacheDir).catch(() => []);
 
     await Promise.all(
       entries
         .filter((entry) => entry.endsWith(".json"))
         .map(async (entry) => {
-          const filePath = path.join(CACHE_DIR, entry);
+          const filePath = path.join(cacheDir, entry);
 
           try {
             const raw = await fs.readFile(filePath, "utf8");
