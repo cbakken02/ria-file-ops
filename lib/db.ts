@@ -3,6 +3,7 @@ import type {
   CleanupFileState,
   CleanupFileStateUpsertInput,
 } from "@/lib/cleanup-types";
+import { ensureCleanupFileStateSchema } from "@/lib/persistence/cleanup-file-state-schema";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
 import * as supabaseAppStateStore from "@/lib/persistence/supabase-app-state-store";
 
@@ -176,6 +177,12 @@ function getActiveAppStateStore() {
     : getSqliteAppStateStore();
 }
 
+function ensureSupabaseCleanupFileStateSchema() {
+  if (isSupabasePersistence()) {
+    ensureCleanupFileStateSchema();
+  }
+}
+
 function unsupportedSupabaseOperation(name: string): never {
   throw new Error(
     `${name} is not supported yet when PERSISTENCE_BACKEND=supabase.`,
@@ -263,6 +270,8 @@ export function getCleanupFileStatesByOwnerAndFileIds(
   ownerEmail: string,
   fileIds: string[],
 ): CleanupFileState[] {
+  ensureSupabaseCleanupFileStateSchema();
+
   return getActiveAppStateStore()
     .getCleanupFileStatesByOwnerAndFileIds(ownerEmail, fileIds)
     .filter((state): state is CleanupFileState => Boolean(state));
@@ -271,6 +280,8 @@ export function getCleanupFileStatesByOwnerAndFileIds(
 export function upsertCleanupFileStateForOwner(
   input: CleanupFileStateUpsertInput,
 ): CleanupFileState | null {
+  ensureSupabaseCleanupFileStateSchema();
+
   return getActiveAppStateStore().upsertCleanupFileStateForOwner(input);
 }
 
@@ -280,6 +291,8 @@ export function markCleanupFileStateComplete(input: {
   appliedFilingEventId: string | null;
   completedAt?: string | null;
 }): CleanupFileState | null {
+  ensureSupabaseCleanupFileStateSchema();
+
   return getActiveAppStateStore().markCleanupFileStateComplete(input);
 }
 
