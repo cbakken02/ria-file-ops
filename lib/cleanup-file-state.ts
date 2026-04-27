@@ -8,7 +8,11 @@ import type {
   CleanupPreviewFileRow,
 } from "@/lib/cleanup-types";
 
-export const CLEANUP_ANALYSIS_PROFILE = "cleanup_explorer";
+export const CLEANUP_ANALYSIS_PROFILE = "cleanup_workflow";
+const CLEANUP_ANALYSIS_PROFILE_COMPATIBILITY = new Set([
+  CLEANUP_ANALYSIS_PROFILE,
+  "cleanup_explorer",
+]);
 
 export function isCleanupStateFreshForFile(
   state: CleanupFileState | undefined,
@@ -23,7 +27,10 @@ export function isCleanupStateFreshForFile(
     state.mimeType === file.mimeType &&
     normalizeNullable(state.modifiedTime) === normalizeNullable(file.modifiedTime) &&
     normalizeNullable(state.driveSize) === normalizeNullable(file.size) &&
-    state.analysisProfile === CLEANUP_ANALYSIS_PROFILE &&
+    Boolean(
+      state.analysisProfile &&
+        CLEANUP_ANALYSIS_PROFILE_COMPATIBILITY.has(state.analysisProfile),
+    ) &&
     state.analysisVersion === DOCUMENT_ANALYSIS_VERSION
   );
 }

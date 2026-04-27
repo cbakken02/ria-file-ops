@@ -107,6 +107,7 @@ export async function buildCleanupPlan(input: {
     (fileId) => downloadDriveFile(input.accessToken, fileId),
     existingClientFolders,
     input.clientMemoryRules ?? [],
+    { analysisMode: "preview" },
   );
 
   const rowPlans = preview.items.map((item, index) =>

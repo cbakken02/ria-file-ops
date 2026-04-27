@@ -151,7 +151,7 @@ test("Vercel PDF extraction uses direct pdfjs text before native fallbacks", asy
     const envelope = await analyzeDocumentWithEnvelope(
       buildPdfFile(buffer),
       async () => buffer,
-      { analysisProfile: "preview_ai_primary" },
+      { analysisProfile: "ai_assisted" },
     );
     const insight = envelope.legacyInsight;
 
@@ -213,7 +213,7 @@ test("Vercel PDF extraction reads AcroForm fields with pdfjs", async () => {
         metadata: {
           custodian: "Fidelity",
           accountType: "Simple IRA",
-          accountLast4: "2222",
+          accountLast4: "0000",
           documentDate: null,
         },
         confidence: {
@@ -236,7 +236,7 @@ test("Vercel PDF extraction reads AcroForm fields with pdfjs", async () => {
     const envelope = await analyzeDocumentWithEnvelope(
       buildPdfFile(buffer, "Fidelity Standing Instructions.pdf"),
       async () => buffer,
-      { analysisProfile: "preview_ai_primary" },
+      { analysisProfile: "ai_assisted" },
     );
     const insight = envelope.legacyInsight;
 
@@ -245,6 +245,9 @@ test("Vercel PDF extraction reads AcroForm fields with pdfjs", async () => {
     assert.equal(insight.debug.aiUsed, true);
     assert.match(insight.detectedClient ?? "", /Christopher/);
     assert.equal(insight.metadata.accountType, "SIMPLE IRA");
+    assert.equal(insight.metadata.accountLast4, "2222");
+    assert.ok(userPrompt.includes("pdfFields"));
+    assert.ok(userPrompt.includes("Account Owner Name"));
     assert.ok(userPrompt.includes("Christopher Bakken Jannis"));
     assert.ok(userPrompt.includes("Simple IRA"));
     assert.ok(insight.debug.pdfFieldReaders.includes("pdfjs"));
@@ -283,7 +286,7 @@ test("Vercel metadata-only fallback records extractor diagnostics when PDF text 
     const envelope = await analyzeDocumentWithEnvelope(
       buildPdfFile(buffer, "Unreadable Statement.pdf"),
       async () => buffer,
-      { analysisProfile: "preview_ai_primary" },
+      { analysisProfile: "ai_assisted" },
     );
     const insight = envelope.legacyInsight;
     const attempts = insight.debug.pdfExtractionAttempts;

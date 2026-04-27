@@ -210,6 +210,7 @@ export async function prepareReadyItemsFilingRedirect(
     async (fileId) => downloadDriveFile(activeConnection.accessToken, fileId),
     existingClientFolders,
     clientMemoryRules,
+    { analysisMode: "preview" },
   );
 
   const readyItems = preview.items.filter((item) => item.status === "Ready to stage");

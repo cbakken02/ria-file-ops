@@ -1051,7 +1051,7 @@ function PreviewItemModal({
                     <div className={styles.planSection}>
                       <div className={styles.planRows}>
                         <div className={styles.planRow}>
-                          <span className={styles.planRowLabel}>Source</span>
+                          <span className={styles.planRowLabel}>Extraction result</span>
                           <div className={styles.planRowValue}>
                             {labelForContentSource(item.contentSource)}
                           </div>
@@ -1364,22 +1364,23 @@ function getDiagnosticFieldEntries(input: {
   entityName?: string | null;
 }) {
   return [
-    ["Analysis profile", formatAnalysisProfile(input.analysisProfile)],
+    ["Analysis", formatAnalysisProfile(input.analysisProfile)],
     ["Analysis source", formatAnalysisSource(input.analysisSource)],
     ["Analysis ran", formatDiagnosticTimestamp(input.analysisRanAt)],
     ["Cache written", formatDiagnosticTimestamp(input.cacheWrittenAt)],
     [
       "AI status",
       formatAIStatus({
+        analysisProfile: input.analysisProfile,
         aiEnabled: input.aiEnabled,
         aiAttempted: input.aiAttempted,
         aiUsed: input.aiUsed,
         aiFailureReason: input.aiFailureReason,
       }),
     ],
-    ["AI primary parser", formatBooleanDiagnostic(input.aiEnabled)],
-    ["AI attempted", formatBooleanDiagnostic(input.aiAttempted)],
-    ["AI used", formatBooleanDiagnostic(input.aiUsed)],
+    ["AI mapping enabled", formatBooleanDiagnostic(input.aiEnabled)],
+    ["AI mapping attempted", formatBooleanDiagnostic(input.aiAttempted)],
+    ["AI mapping used", formatBooleanDiagnostic(input.aiUsed)],
     ["AI failure", input.aiFailureReason],
     ["AI model", input.aiModel],
     ["AI prompt version", input.aiPromptVersion],
@@ -1398,7 +1399,7 @@ function getDiagnosticFieldEntries(input: {
     ["Phase 1 review priority", formatPhase1ReviewPriority(input.phase1ReviewPriority)],
     ["Phase 1 review flags", formatPhase1ReviewFlags(input.phase1ReviewFlags)],
     ["Field ownership", formatFieldOwnershipSummary(input.fieldOwnership)],
-    ["PDF extractors", formatPdfExtractionAttempts(input.pdfExtractionAttempts)],
+    ["Extraction attempts", formatPdfExtractionAttempts(input.pdfExtractionAttempts)],
     ["Parser version", input.parserVersion],
     ["Parser conflict", input.parserConflictSummary],
     ["Document signal", input.documentSignal],
@@ -1444,15 +1445,21 @@ function formatAnalysisSource(
 function formatAnalysisProfile(
   value: PreviewItem["analysisProfile"] | null | undefined,
 ) {
-  if (value === "preview_ai_primary") {
-    return "Preview AI primary";
+  const profile = value as string | null | undefined;
+
+  if (profile === "ai_assisted" || profile === "preview_ai_primary") {
+    return "AI-assisted mapping";
   }
 
-  if (value === "legacy") {
-    return "Legacy deterministic";
+  if (profile === "deterministic_fallback" || profile === "legacy") {
+    return "Deterministic fallback";
   }
 
-  return value ?? null;
+  if (profile === "cleanup_workflow" || profile === "cleanup_explorer") {
+    return "Cleanup workflow state";
+  }
+
+  return profile ?? null;
 }
 
 function formatBooleanDiagnostic(value: boolean | null | undefined) {
@@ -1494,13 +1501,22 @@ function formatPdfExtractionAttempts(
 }
 
 function formatAIStatus(input: {
+  analysisProfile?: PreviewItem["analysisProfile"] | null;
   aiEnabled?: boolean;
   aiAttempted?: boolean;
   aiUsed?: boolean;
   aiFailureReason?: string | null;
 }) {
-  if (!input.aiEnabled) {
-    return "AI disabled by feature flag";
+  const deterministic =
+    input.analysisProfile === "deterministic_fallback" ||
+    input.analysisProfile === "legacy";
+
+  if (input.aiAttempted && input.aiUsed) {
+    return "AI mapping used";
+  }
+
+  if (input.aiAttempted && input.aiFailureReason) {
+    return "AI mapping failed; deterministic fallback used";
   }
 
   if (
@@ -1508,26 +1524,22 @@ function formatAIStatus(input: {
     input.aiFailureReason &&
     /provider is not configured/i.test(input.aiFailureReason)
   ) {
-    return "AI enabled but provider not configured";
+    return "AI mapping unavailable; provider not configured";
   }
 
   if (!input.aiAttempted && input.aiFailureReason) {
-    return "AI enabled but skipped for this file";
-  }
-
-  if (input.aiAttempted && input.aiUsed) {
-    return "AI succeeded";
-  }
-
-  if (input.aiAttempted && input.aiFailureReason) {
-    return "AI failed and fell back";
+    return "Deterministic fallback used";
   }
 
   if (input.aiAttempted) {
-    return "AI attempted with provider";
+    return "AI mapping attempted";
   }
 
-  return "AI enabled but not used";
+  if (!input.aiEnabled || deterministic) {
+    return "Deterministic fallback used";
+  }
+
+  return "AI mapping enabled but not used";
 }
 
 function formatStatementClientSource(
@@ -1535,6 +1547,10 @@ function formatStatementClientSource(
 ) {
   if (!value) {
     return null;
+  }
+
+  if (value === "none") {
+    return "None";
   }
 
   if (value === "fields_or_joint_clients") {
@@ -1565,11 +1581,17 @@ function formatStatementClientSource(
     return "Generic first-page fallback";
   }
 
-  if (value === "none") {
-    return "None";
+  return value;
+}
+
+function formatPhase1ReviewPriority(
+  value: PreviewItem["phase1ReviewPriority"] | null | undefined,
+) {
+  if (!value) {
+    return null;
   }
 
-  return value;
+  return value[0]?.toUpperCase() + value.slice(1);
 }
 
 function formatFieldOwnershipSummary(
@@ -1617,24 +1639,6 @@ function formatPhase1ReviewFlags(
       return flag;
     })
     .join(", ");
-}
-
-function formatPhase1ReviewPriority(
-  priority: PreviewItem["phase1ReviewPriority"] | null | undefined,
-) {
-  if (priority === "high") {
-    return "Priority: High";
-  }
-
-  if (priority === "medium") {
-    return "Priority: Medium";
-  }
-
-  if (priority === "low") {
-    return "Priority: Low";
-  }
-
-  return null;
 }
 
 function formatDiagnosticTimestamp(value: string | null | undefined) {
