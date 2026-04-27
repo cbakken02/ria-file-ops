@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -118,7 +120,9 @@ export type PdfExtractionAttempt = {
 };
 
 const execFileAsync = promisify(execFile);
-const PARSER_VERSION = "2026-04-27-vercel-js-pdf-extraction-2";
+const require = createRequire(import.meta.url);
+
+const PARSER_VERSION = "2026-04-27-vercel-js-pdf-extraction-3";
 export const DOCUMENT_ANALYSIS_VERSION = PARSER_VERSION;
 
 type AnalysisExecutionOptions = {
@@ -568,6 +572,7 @@ async function extractPdfTextWithPdfParse(buffer: Buffer) {
 async function extractPdfTextWithPdfJs(buffer: Buffer) {
   installPdfJsNodePolyfills();
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  await configurePdfJsNodeWorker(pdfjs);
   const documentParams = {
     data: new Uint8Array(buffer),
     disableFontFace: true,
@@ -599,6 +604,28 @@ async function extractPdfTextWithPdfJs(buffer: Buffer) {
     return pageTexts.join("\n");
   } finally {
     await pdf.destroy();
+  }
+}
+
+async function configurePdfJsNodeWorker(
+  pdfjs: typeof import("pdfjs-dist/legacy/build/pdf.mjs"),
+) {
+  if (typeof process !== "object" || process + "" !== "[object process]") {
+    return;
+  }
+
+  const workerPath = require.resolve(
+    "pdfjs-dist/legacy/build/pdf.worker.mjs",
+  );
+  const workerUrl = pathToFileURL(workerPath).href;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+
+  const globalObject = globalThis as typeof globalThis & {
+    pdfjsWorker?: unknown;
+  };
+
+  if (!globalObject.pdfjsWorker) {
+    globalObject.pdfjsWorker = await import(workerUrl);
   }
 }
 
