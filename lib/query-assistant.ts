@@ -1273,16 +1273,20 @@ function resolvePartyFromQuestion(input: {
       .filter((match) => match.score === bestSupportedScore)
       .map((match) => match.party);
 
-    if (bestSupportedMatches.length > 1) {
+    const equivalentSupportedMatches = shouldCollapseEquivalentPartyMatches(input.plan)
+      ? collapseEquivalentPartyMatches(bestSupportedMatches)
+      : bestSupportedMatches;
+
+    if (equivalentSupportedMatches.length > 1) {
       return {
         status: "ambiguous",
-        matches: bestSupportedMatches,
+        matches: equivalentSupportedMatches,
       };
     }
 
     return {
       status: "resolved",
-      party: bestSupportedMatches[0]!,
+      party: equivalentSupportedMatches[0]!,
     };
   }
 
@@ -1302,6 +1306,51 @@ function resolvePartyFromQuestion(input: {
     status: "resolved",
     party: bestMatches[0]!,
   };
+}
+
+function collapseEquivalentPartyMatches(matches: FirmDocumentPartyMatch[]) {
+  if (matches.length <= 1) {
+    return matches;
+  }
+
+  const firstKey = buildEquivalentPartyKey(matches[0]!);
+  if (!firstKey) {
+    return matches;
+  }
+
+  return matches.every((match) => buildEquivalentPartyKey(match) === firstKey)
+    ? [matches[0]!]
+    : matches;
+}
+
+function buildEquivalentPartyKey(party: FirmDocumentPartyMatch) {
+  const nameSignature = extractNameSignature(
+    normalizeQuestion(party.canonicalDisplayName ?? ""),
+  );
+  const addressSignature = normalizePartyAddressSignature(party.addressSignature);
+
+  if (!nameSignature || !addressSignature) {
+    return null;
+  }
+
+  return [party.kind, nameSignature, addressSignature].join("|");
+}
+
+function shouldCollapseEquivalentPartyMatches(plan: QueryAssistantRetrievalPlan) {
+  if (!plan.intent) {
+    return false;
+  }
+
+  return [
+    "statement_existence",
+    "statement_list",
+    "latest_account_document",
+    "latest_account_snapshot",
+    "statement_account_value",
+    "account_routing_number",
+    "account_number",
+    "account_contact",
+  ].includes(plan.intent);
 }
 
 function partySupportsIntent(input: {
@@ -1424,7 +1473,7 @@ function getStatementQueryParties(
   const nameSignature = extractNameSignature(
     normalizeQuestion(party.canonicalDisplayName ?? ""),
   );
-  const addressSignature = party.addressSignature?.trim().toLowerCase() ?? "";
+  const addressSignature = normalizePartyAddressSignature(party.addressSignature);
 
   if (!nameSignature || !addressSignature) {
     return [party];
@@ -1442,7 +1491,7 @@ function getStatementQueryParties(
       return false;
     }
 
-    if ((candidate.addressSignature?.trim().toLowerCase() ?? "") !== addressSignature) {
+    if (normalizePartyAddressSignature(candidate.addressSignature) !== addressSignature) {
       return false;
     }
 
@@ -1453,6 +1502,10 @@ function getStatementQueryParties(
   });
 
   return relatedParties.length > 0 ? relatedParties : [party];
+}
+
+function normalizePartyAddressSignature(value: string | null | undefined) {
+  return normalizeQuestion(value ?? "");
 }
 
 function matchesStatementFamilyScope(
