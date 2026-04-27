@@ -189,46 +189,71 @@ export function findLatestAccountSnapshotsForParty(
 
   const result = queryPostgresSync<FirmDocumentLatestAccountSnapshot>(
     `
-      SELECT DISTINCT
-        latest.account_id AS "accountId",
-        latest.document_account_snapshot_id AS "documentAccountSnapshotId",
-        parties.party_id AS "partyId",
-        parties.canonical_display_name AS "partyDisplayName",
-        account_parties.role AS "partyRole",
-        accounts.primary_institution_id AS "institutionId",
-        institutions.canonical_name AS "institutionName",
-        latest.source_file_id AS "sourceFileId",
-        latest.source_name AS "sourceName",
-        latest.document_id AS "documentId",
-        latest.document_date AS "documentDate",
-        latest.statement_start_date AS "statementStartDate",
-        latest.statement_end_date AS "statementEndDate",
-        latest.analyzed_at AS "analyzedAt",
-        COALESCE(latest.normalized_account_type, accounts.canonical_account_type) AS "normalizedAccountType",
-        latest.observed_account_type_raw AS "observedAccountTypeRaw",
-        COALESCE(accounts.account_last4, latest.observed_account_last4) AS "accountLast4",
-        accounts.masked_account_number AS "maskedAccountNumber",
-        latest.registration_type AS "registrationType",
-        latest.resolver_basis AS "resolverBasis"
-      FROM public.latest_account_snapshot_v AS latest
-      INNER JOIN public.account_parties
-        ON account_parties.account_id = latest.account_id
-      INNER JOIN public.parties
-        ON parties.party_id = account_parties.party_id
-      LEFT JOIN public.accounts
-        ON accounts.account_id = latest.account_id
-      LEFT JOIN public.institutions
-        ON institutions.institution_id = accounts.primary_institution_id
-      WHERE latest.owner_email = $1
-        AND parties.party_id = $2
-        AND (
-          $3::text IS NULL OR
-          LOWER(COALESCE(latest.normalized_account_type, accounts.canonical_account_type, '')) = $3
-        )
+      WITH matching_snapshots AS (
+        SELECT DISTINCT
+          latest.account_id AS "accountId",
+          latest.document_account_snapshot_id AS "documentAccountSnapshotId",
+          parties.party_id AS "partyId",
+          parties.canonical_display_name AS "partyDisplayName",
+          account_parties.role AS "partyRole",
+          accounts.primary_institution_id AS "institutionId",
+          institutions.canonical_name AS "institutionName",
+          latest.source_file_id AS "sourceFileId",
+          latest.source_name AS "sourceName",
+          latest.document_id AS "documentId",
+          latest.document_date AS "documentDate",
+          latest.statement_start_date AS "statementStartDate",
+          latest.statement_end_date AS "statementEndDate",
+          latest.analyzed_at AS "analyzedAt",
+          COALESCE(latest.normalized_account_type, accounts.canonical_account_type) AS "normalizedAccountType",
+          latest.observed_account_type_raw AS "observedAccountTypeRaw",
+          COALESCE(accounts.account_last4, latest.observed_account_last4) AS "accountLast4",
+          accounts.masked_account_number AS "maskedAccountNumber",
+          latest.registration_type AS "registrationType",
+          latest.resolver_basis AS "resolverBasis",
+          COALESCE(latest.statement_end_date, latest.document_date, latest.analyzed_at) AS sort_date
+        FROM public.latest_account_snapshot_v AS latest
+        INNER JOIN public.account_parties
+          ON account_parties.account_id = latest.account_id
+        INNER JOIN public.parties
+          ON parties.party_id = account_parties.party_id
+        LEFT JOIN public.accounts
+          ON accounts.account_id = latest.account_id
+        LEFT JOIN public.institutions
+          ON institutions.institution_id = accounts.primary_institution_id
+        WHERE latest.owner_email = $1
+          AND parties.party_id = $2
+          AND (
+            $3::text IS NULL OR
+            LOWER(COALESCE(latest.normalized_account_type, accounts.canonical_account_type, '')) = $3
+          )
+      )
+      SELECT
+        "accountId",
+        "documentAccountSnapshotId",
+        "partyId",
+        "partyDisplayName",
+        "partyRole",
+        "institutionId",
+        "institutionName",
+        "sourceFileId",
+        "sourceName",
+        "documentId",
+        "documentDate",
+        "statementStartDate",
+        "statementEndDate",
+        "analyzedAt",
+        "normalizedAccountType",
+        "observedAccountTypeRaw",
+        "accountLast4",
+        "maskedAccountNumber",
+        "registrationType",
+        "resolverBasis"
+      FROM matching_snapshots
       ORDER BY
-        COALESCE(latest.statement_end_date, latest.document_date, latest.analyzed_at) DESC,
-        latest.analyzed_at DESC,
-        latest.document_id DESC
+        sort_date DESC,
+        "analyzedAt" DESC,
+        "documentId" DESC
       LIMIT $4
     `,
     [ownerEmail, input.partyId, normalizedAccountType, limit],

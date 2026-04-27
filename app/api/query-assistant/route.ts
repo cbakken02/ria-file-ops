@@ -1,4 +1,8 @@
 import { auth } from "@/auth";
+import {
+  DATA_INTELLIGENCE_GENERIC_ERROR,
+  dataIntelligenceJsonResponse,
+} from "@/lib/data-intelligence-api";
 import { answerDataIntelligenceQuestion } from "@/lib/data-intelligence-assistant";
 import {
   sanitizeDataIntelligenceConversationState,
@@ -9,7 +13,7 @@ export async function POST(request: Request) {
   const session = await auth();
 
   if (!session?.user?.email) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return dataIntelligenceJsonResponse({ error: "Unauthorized" }, { status: 401 });
   }
 
   let body:
@@ -22,14 +26,20 @@ export async function POST(request: Request) {
       conversationState?: unknown;
     };
   } catch {
-    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+    return dataIntelligenceJsonResponse(
+      { error: "Invalid JSON body." },
+      { status: 400 },
+    );
   }
 
   const question =
     typeof body?.question === "string" ? body.question.trim() : "";
 
   if (!question) {
-    return Response.json({ error: "Question is required." }, { status: 400 });
+    return dataIntelligenceJsonResponse(
+      { error: "Question is required." },
+      { status: 400 },
+    );
   }
 
   const history = sanitizeDataIntelligenceConversationHistory(body?.history);
@@ -38,21 +48,32 @@ export async function POST(request: Request) {
   );
   const includeDebug = isDataIntelligenceDebugEnabled();
 
-  const result = await answerDataIntelligenceQuestion({
-    ownerEmail: session.user.email,
-    question,
-    history,
-    conversationState,
-    includeDebug,
-  });
-  if (includeDebug && result.debug?.dataIntelligenceHybrid) {
-    console.info(
-      "[data-intelligence] hybrid-debug",
-      JSON.stringify(result.debug.dataIntelligenceHybrid),
+  try {
+    const result = await answerDataIntelligenceQuestion({
+      ownerEmail: session.user.email,
+      question,
+      history,
+      conversationState,
+      includeDebug,
+    });
+    if (includeDebug && result.debug?.dataIntelligenceHybrid) {
+      console.info(
+        "[data-intelligence] hybrid-debug",
+        JSON.stringify(result.debug.dataIntelligenceHybrid),
+      );
+    }
+
+    return dataIntelligenceJsonResponse(result);
+  } catch (error) {
+    console.error("[data-intelligence] request-failed", {
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+
+    return dataIntelligenceJsonResponse(
+      { error: DATA_INTELLIGENCE_GENERIC_ERROR },
+      { status: 500 },
     );
   }
-
-  return Response.json(result);
 }
 
 function isDataIntelligenceDebugEnabled() {

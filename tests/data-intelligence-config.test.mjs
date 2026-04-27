@@ -11,6 +11,13 @@ import {
   sanitizeDataIntelligenceConversationState,
 } from "../lib/data-intelligence-conversation.ts";
 import {
+  DATA_INTELLIGENCE_GENERIC_ERROR,
+  DATA_INTELLIGENCE_UNREADABLE_RESPONSE_ERROR,
+  parseDataIntelligencePayloadText,
+  readDataIntelligenceApiError,
+  stringifyDataIntelligencePayload,
+} from "../lib/data-intelligence-api.ts";
+import {
   DATA_INTELLIGENCE_EMPTY_SUBTEXT,
   DATA_INTELLIGENCE_EMPTY_TITLE,
   isSubmittableDataIntelligenceQuestion,
@@ -75,11 +82,11 @@ test("query assistant intent routing still supports the current MVP prompt famil
 test("data intelligence UI helpers keep the new page copy and send-button gating stable", () => {
   assert.equal(
     DATA_INTELLIGENCE_EMPTY_TITLE,
-    "What client data do you want to know about?",
+    "Ask the firm's document intelligence assistant",
   );
   assert.equal(
     DATA_INTELLIGENCE_EMPTY_SUBTEXT,
-    "Statements and IDs for now. Ask a narrow, source-aware question.",
+    "I can check indexed statements and IDs, keep context across follow-ups, and show the source I used.",
   );
   assert.equal(isSubmittableDataIntelligenceQuestion(""), false);
   assert.equal(isSubmittableDataIntelligenceQuestion("   "), false);
@@ -87,6 +94,28 @@ test("data intelligence UI helpers keep the new page copy and send-button gating
     isSubmittableDataIntelligenceQuestion("latest IRA for Christopher Bakken"),
     true,
   );
+});
+
+test("data intelligence API helpers keep chatbot errors readable and JSON-safe", () => {
+  const serialized = stringifyDataIntelligencePayload({
+    ok: true,
+    count: BigInt(3),
+  });
+
+  assert.equal(serialized, '{"ok":true,"count":"3"}');
+  assert.deepEqual(parseDataIntelligencePayloadText(serialized), {
+    ok: true,
+    count: "3",
+  });
+  assert.equal(parseDataIntelligencePayloadText(""), null);
+  assert.equal(parseDataIntelligencePayloadText("<html>nope</html>"), null);
+  assert.equal(
+    readDataIntelligenceApiError({ error: "  Friendly failure  " }),
+    "Friendly failure",
+  );
+  assert.equal(readDataIntelligenceApiError({ error: "" }), null);
+  assert.match(DATA_INTELLIGENCE_GENERIC_ERROR, /server issue/);
+  assert.match(DATA_INTELLIGENCE_UNREADABLE_RESPONSE_ERROR, /unreadable response/);
 });
 
 test("data intelligence config prefers assistant-specific env vars when present", () => {
