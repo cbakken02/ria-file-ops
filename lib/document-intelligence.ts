@@ -5,6 +5,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
+  isAIAssistedAnalysisProfile,
   parseAccountStatementWithAI,
   type AIPrimaryParseContext,
 } from "@/lib/ai-primary-parser";
@@ -118,7 +119,7 @@ export type PdfExtractionAttempt = {
 };
 
 const execFileAsync = promisify(execFile);
-const PARSER_VERSION = "2026-04-27-vercel-js-pdf-form-fields-1";
+const PARSER_VERSION = "2026-04-27-unified-ai-assisted-analysis-1";
 export const DOCUMENT_ANALYSIS_VERSION = PARSER_VERSION;
 
 type AnalysisExecutionOptions = {
@@ -1233,7 +1234,7 @@ export async function analyzeTextContentWithEnvelope(
   const legacyExtraction = runTextAnalysisExtraction(context, legacyClassification);
 
   if (
-    options.analysisProfile === "preview_ai_primary" &&
+    isAIAssistedAnalysisProfile(options.analysisProfile) &&
     shouldAttemptAIPrimaryAccountStatement(context, legacyClassification)
   ) {
     const aiAttempt = await parseAccountStatementWithAI(
@@ -1262,7 +1263,7 @@ export async function analyzeTextContentWithEnvelope(
     context,
     legacyClassification,
     legacyExtraction,
-    analysisProfile: options.analysisProfile ?? "legacy",
+    analysisProfile: options.analysisProfile ?? "deterministic_fallback",
   });
 
   if (identityCanonical) {
@@ -1272,7 +1273,7 @@ export async function analyzeTextContentWithEnvelope(
     };
   }
 
-  if (options.analysisProfile === "preview_ai_primary") {
+  if (isAIAssistedAnalysisProfile(options.analysisProfile)) {
     return {
       canonical: null,
       legacyInsight: finalizeTextAnalysisInsight(
@@ -1645,6 +1646,7 @@ function buildAIPrimaryParseContext(
       name: context.file.name,
     },
     normalizedText: context.normalizedText,
+    pdfFields: context.pdfFields,
   };
 }
 
@@ -1652,6 +1654,73 @@ function isUsableAIPrimaryStatementResult(
   parsedResult: ParsedDocumentResult | null,
 ): parsedResult is ParsedDocumentResult {
   return parsedResult?.values.documentTypeId === "account_statement";
+}
+
+function extractAuthoritativePdfFieldFacts(
+  pdfFields: TextAnalysisContext["pdfFields"],
+) {
+  const accountNumber = findPdfFieldValue(pdfFields, [
+    "account number",
+    "acct number",
+    "account no",
+    "acct no",
+  ]);
+  const accountLast4 = accountNumber
+    ? accountNumber.replace(/\D/g, "").slice(-4) || null
+    : null;
+  const accountType = normalizeAccountStatementAccountType(
+    findPdfFieldValue(pdfFields, [
+      "account type",
+      "registration type",
+      "account registration",
+      "registration",
+    ]),
+  ).finalValue;
+  const custodian = normalizeAccountStatementCustodian(
+    findPdfFieldValue(pdfFields, [
+      "custodian",
+      "brokerage",
+      "broker dealer",
+      "financial institution",
+      "institution",
+      "firm name",
+    ]),
+  ).finalValue;
+  const documentDate = sanitizeAIDocumentDate(
+    findPdfFieldValue(pdfFields, [
+      "statement date",
+      "document date",
+      "period end",
+      "date",
+    ]),
+  );
+
+  return {
+    accountLast4,
+    accountType,
+    custodian,
+    documentDate,
+  };
+}
+
+function findPdfFieldValue(
+  pdfFields: TextAnalysisContext["pdfFields"],
+  labelHints: string[],
+) {
+  const normalizedHints = labelHints.map(normalizePdfFieldLabel);
+  const field = pdfFields.find((candidate) => {
+    const normalizedName = normalizePdfFieldLabel(candidate.name);
+    return normalizedHints.some(
+      (hint) => normalizedName === hint || normalizedName.includes(hint),
+    );
+  });
+  const value = field?.value?.trim();
+
+  return value ? value : null;
+}
+
+function normalizePdfFieldLabel(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function validateAndFinalizeParsedResult(
@@ -1687,20 +1756,26 @@ function validateAndFinalizeParsedResult(
   const normalizedCustodian = normalizeAccountStatementCustodian(
     normalizeAIFreeText(aiMetadata.custodian),
   );
+  const pdfFieldFacts = extractAuthoritativePdfFieldFacts(context.pdfFields);
   const accountLast4 = resolveAIPrimaryFieldValue({
     field: "accountLast4",
     aiValue: sanitizeAIAccountLast4(aiMetadata.accountLast4),
-    legacyValue: legacyExtraction.metadata.accountLast4,
+    legacyValue:
+      pdfFieldFacts.accountLast4 ?? legacyExtraction.metadata.accountLast4,
     ownership,
     aiRawValue: aiMetadata.accountLast4 ?? null,
+    preferLegacyValue: Boolean(pdfFieldFacts.accountLast4),
+    authoritativeSource: "pdf_form_field_authority",
     validatorSource: "validated_account_last4",
   });
   const accountType = resolveAIPrimaryFieldValue({
     field: "accountType",
     aiValue: normalizedAccountType.finalValue,
-    legacyValue: legacyExtraction.metadata.accountType,
+    legacyValue: pdfFieldFacts.accountType ?? legacyExtraction.metadata.accountType,
     ownership,
     aiRawValue: normalizedAccountType.rawValue,
+    preferLegacyValue: Boolean(pdfFieldFacts.accountType),
+    authoritativeSource: "pdf_form_field_authority",
     validatorSource: normalizedAccountType.changed
       ? `normalized_account_type:${normalizedAccountType.ruleId ?? "rule"}`
       : undefined,
@@ -1708,9 +1783,11 @@ function validateAndFinalizeParsedResult(
   const custodian = resolveAIPrimaryFieldValue({
     field: "custodian",
     aiValue: normalizedCustodian.finalValue,
-    legacyValue: legacyExtraction.metadata.custodian,
+    legacyValue: pdfFieldFacts.custodian ?? legacyExtraction.metadata.custodian,
     ownership,
     aiRawValue: normalizedCustodian.rawValue,
+    preferLegacyValue: Boolean(pdfFieldFacts.custodian),
+    authoritativeSource: "pdf_form_field_authority",
     validatorSource: normalizedCustodian.changed
       ? `normalized_custodian:${normalizedCustodian.ruleId ?? "rule"}`
       : undefined,
@@ -1718,9 +1795,12 @@ function validateAndFinalizeParsedResult(
   const documentDate = resolveAIPrimaryFieldValue({
     field: "documentDate",
     aiValue: sanitizeAIDocumentDate(aiMetadata.documentDate),
-    legacyValue: legacyExtraction.metadata.documentDate,
+    legacyValue:
+      pdfFieldFacts.documentDate ?? legacyExtraction.metadata.documentDate,
     ownership,
     aiRawValue: aiMetadata.documentDate ?? null,
+    preferLegacyValue: Boolean(pdfFieldFacts.documentDate),
+    authoritativeSource: "pdf_form_field_authority",
     validatorSource: "validated_document_date",
   });
 
@@ -1761,7 +1841,7 @@ function validateAndFinalizeParsedResult(
   }
 
   context.reasons.unshift(
-    "AI primary parser handled the Phase 1 account statement fields for this preview analysis.",
+    "AI-assisted mapping handled the account statement fields for this document analysis.",
   );
 
   const canonical = buildCanonicalAIPrimaryStatementDocument({
@@ -2053,7 +2133,7 @@ function buildCanonicalAIPrimaryStatementDocument(input: {
       parserVersion: PARSER_VERSION,
       parserConflictSummary: input.context.parserConflictSummary,
       documentSignal:
-        "AI primary parser accepted this as an account statement for the Phase 1 preview path.",
+        "AI-assisted mapping accepted this as an account statement for the shared document analysis path.",
       reasons: [...input.context.reasons],
       textExcerpt: input.context.textExcerpt,
       diagnosticText: input.context.diagnosticText,
@@ -2292,7 +2372,7 @@ function buildCanonicalIdentityDocument(input: {
     taxIdentifiers: [],
     governmentIds: [{ ...governmentId }],
   };
-  const aiEnabled = input.analysisProfile === "preview_ai_primary";
+  const aiEnabled = isAIAssistedAnalysisProfile(input.analysisProfile);
   const canonicalDraft: CanonicalExtractedDocumentDraft = {
     source: {
       file: {
@@ -3119,8 +3199,56 @@ function buildCanonicalStatementAccounts(input: {
   finalPrimaryAccountLast4: string | null;
 }) {
   if (input.parsedAccounts.length === 0) {
+    if (
+      input.fallbackAccounts.extractedAccounts.length === 0 &&
+      (input.finalPrimaryAccountLast4 || input.finalAccountType)
+    ) {
+      return {
+        extracted: [
+          {
+            id: "account-1",
+            institutionIds: resolveCanonicalInstitutionIds(
+              [],
+              input.institutions.extracted,
+            ),
+            accountNumber: null,
+            maskedAccountNumber: null,
+            accountLast4: input.finalPrimaryAccountLast4,
+            accountType: input.rawPrimaryAccountType ?? input.finalAccountType,
+            registrationType: null,
+            openedDateId: null,
+            closedDateId: null,
+            statementStartDateId: null,
+            statementEndDateId: null,
+            values: [],
+            beneficiaryText: null,
+          },
+        ],
+        normalized: [
+          {
+            id: "account-1",
+            institutionIds: resolveCanonicalInstitutionIds(
+              [],
+              input.institutions.normalized,
+            ),
+            accountNumber: null,
+            maskedAccountNumber: null,
+            accountLast4: input.finalPrimaryAccountLast4,
+            accountType: input.finalAccountType,
+            registrationType: null,
+            openedDateId: null,
+            closedDateId: null,
+            statementStartDateId: null,
+            statementEndDateId: null,
+            values: [],
+            beneficiaryText: null,
+          },
+        ],
+      };
+    }
+
     return {
-      extracted: input.fallbackAccounts.extractedAccounts.map((account) => ({
+      extracted: input.fallbackAccounts.extractedAccounts.map((account, index) => ({
         id: account.normalizedId,
         institutionIds: resolveCanonicalInstitutionIds(
           [],
@@ -3128,8 +3256,12 @@ function buildCanonicalStatementAccounts(input: {
         ),
         accountNumber: account.rawAccountNumber,
         maskedAccountNumber: account.maskedAccountNumber,
-        accountLast4: account.accountLast4,
-        accountType: account.rawAccountType,
+        accountLast4:
+          account.accountLast4 ??
+          (index === 0 ? input.finalPrimaryAccountLast4 : null),
+        accountType:
+          account.rawAccountType ??
+          (index === 0 ? input.rawPrimaryAccountType ?? input.finalAccountType : null),
         registrationType: account.registrationType,
         openedDateId: null,
         closedDateId: null,
@@ -3149,7 +3281,7 @@ function buildCanonicalStatementAccounts(input: {
         })),
         beneficiaryText: null,
       })),
-      normalized: input.fallbackAccounts.normalizedAccounts.map((account) => ({
+      normalized: input.fallbackAccounts.normalizedAccounts.map((account, index) => ({
         id: account.normalizedId,
         institutionIds: resolveCanonicalInstitutionIds(
           [],
@@ -3157,8 +3289,12 @@ function buildCanonicalStatementAccounts(input: {
         ),
         accountNumber: account.normalizedAccountNumber,
         maskedAccountNumber: account.maskedAccountNumber,
-        accountLast4: account.accountLast4,
-        accountType: account.normalizedAccountType,
+        accountLast4:
+          account.accountLast4 ??
+          (index === 0 ? input.finalPrimaryAccountLast4 : null),
+        accountType:
+          account.normalizedAccountType ??
+          (index === 0 ? input.finalAccountType : null),
         registrationType: account.registrationType,
         openedDateId: null,
         closedDateId: null,
@@ -3193,12 +3329,14 @@ function buildCanonicalStatementAccounts(input: {
       maskFullAccountNumber(accountNumber) ??
       fallbackAccount?.maskedAccountNumber ??
       null;
+    const parsedAccountLast4 = sanitizeAIAccountLast4(
+      account.accountLast4 ?? accountNumber ?? maskedAccountNumber,
+    );
     const accountLast4 =
-      sanitizeAIAccountLast4(
-        account.accountLast4 ?? accountNumber ?? maskedAccountNumber,
-      ) ??
-      fallbackAccount?.accountLast4 ??
-      (index === 0 ? input.finalPrimaryAccountLast4 : null);
+      parsedAccountLast4 && !isAllZeroLast4(parsedAccountLast4)
+        ? parsedAccountLast4
+        : fallbackAccount?.accountLast4 ??
+          (index === 0 ? input.finalPrimaryAccountLast4 : null);
     const accountType =
       normalizeAIFreeText(account.accountType) ??
       fallbackAccount?.rawAccountType ??
@@ -3319,13 +3457,18 @@ function buildCanonicalStatementAccounts(input: {
       maskedAccountNumber:
         maskFullAccountNumber(normalizedAccountNumber) ??
         normalizeCanonicalMaskedAccountNumber(account.maskedAccountNumber),
-      accountLast4:
-        sanitizeAIAccountLast4(
+      accountLast4: (() => {
+        const parsedAccountLast4 = sanitizeAIAccountLast4(
           account.accountLast4 ??
             normalizedAccountNumber ??
             account.maskedAccountNumber,
-        ) ??
-        (index === 0 ? input.finalPrimaryAccountLast4 : null),
+        );
+        return parsedAccountLast4 && !isAllZeroLast4(parsedAccountLast4)
+          ? parsedAccountLast4
+          : index === 0
+            ? input.finalPrimaryAccountLast4
+            : null;
+      })(),
       accountType:
         normalizedAccountType.finalValue ??
         (index === 0 ? input.finalAccountType : null) ??
@@ -4861,8 +5004,25 @@ function resolveAIPrimaryFieldValue<
     | undefined;
   ownership: Partial<Record<ParsedFieldKey, ParsedFieldOwnership>>;
   aiRawValue?: string | null;
+  preferLegacyValue?: boolean;
+  authoritativeSource?: string;
   validatorSource?: string;
 }) {
+  if (
+    input.preferLegacyValue &&
+    input.legacyValue !== null &&
+    input.legacyValue !== undefined &&
+    input.legacyValue !== ""
+  ) {
+    input.ownership[input.field] = {
+      owner: "logic",
+      source: input.authoritativeSource ?? "extracted_evidence_authority",
+      confidence: input.ownership[input.field]?.confidence ?? null,
+      raw: String(input.legacyValue),
+    };
+    return input.legacyValue;
+  }
+
   if (input.aiValue !== null && input.aiValue !== undefined && input.aiValue !== "") {
     const rawValue = input.aiRawValue ?? String(input.aiValue);
     const ownershipRecord = input.ownership[input.field];

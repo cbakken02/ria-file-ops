@@ -5,7 +5,6 @@ import type {
   ParsedExtractedAccountParty,
   ParsedExtractedContact,
   ParsedExtractedDate,
-  ParsedExtractedDocumentFacts,
   ParsedExtractedInstitution,
   ParsedExtractedParty,
   ParsedFieldOwnership,
@@ -142,6 +141,7 @@ export type AIPrimaryParseContext = {
     name: string;
   };
   normalizedText: string;
+  pdfFields: Array<{ name: string; value: string }>;
 };
 
 export type AIPrimaryParseAttempt = {
@@ -171,10 +171,12 @@ const DEFAULT_AI_PRIMARY_PARSER_API_URL =
 const DEFAULT_AI_PRIMARY_PARSER_TIMEOUT_MS = 30_000;
 const DEFAULT_AI_PRIMARY_PARSER_MAX_ATTEMPTS = 2;
 const ACCOUNT_STATEMENT_AI_SYSTEM_PROMPT = [
-  "You extract structured data from likely account statements.",
+  "You map extracted document evidence into structured data from likely account statements.",
   "Return valid JSON only. No markdown fences. No commentary.",
   "If you are not confident this is an account statement, set documentTypeId to null.",
   "Never invent values. Prefer null or omission when unsure.",
+  "PDF form fields are high-authority evidence. Use their field names and values to map facts into the schema.",
+  "Do not override exact PDF form-field values such as account numbers, owner names, account types, or document dates unless the value is clearly unusable.",
   "Preserve the current flat Phase 1 fields and also return richer raw entities when supported by the text.",
   "Use simple stable local ids like party-1, institution-1, contact-1, account-1, date-1 when you can link related objects.",
   "detectedClient and detectedClient2 must be personal client names, not advisor or institution names.",
@@ -278,6 +280,18 @@ const ACCOUNT_STATEMENT_AI_RESPONSE_SCHEMA = {
 
 let testCompletionAdapter: AIPrimaryCompletionAdapter | null = null;
 
+export function isAIAssistedAnalysisProfile(
+  profile: AnalysisProfile | null | undefined,
+) {
+  return profile === "ai_assisted" || profile === "preview_ai_primary";
+}
+
+export function isDeterministicFallbackAnalysisProfile(
+  profile: AnalysisProfile | null | undefined,
+) {
+  return profile === "deterministic_fallback" || profile === "legacy";
+}
+
 export function setAIPrimaryCompletionAdapterForTests(
   adapter: AIPrimaryCompletionAdapter | null,
 ) {
@@ -285,7 +299,12 @@ export function setAIPrimaryCompletionAdapterForTests(
 }
 
 export function isAIPrimaryParserEnabled() {
-  return envFlag("AI_PRIMARY_PARSER");
+  const raw = process.env.AI_PRIMARY_PARSER;
+  if (raw !== undefined) {
+    return envFlag("AI_PRIMARY_PARSER");
+  }
+
+  return Boolean(process.env.OPENAI_API_KEY);
 }
 
 export function isAIPrimaryAccountStatementOnlyEnabled() {
@@ -305,10 +324,10 @@ export function resolveAnalysisProfileForMode(
     isAIPrimaryParserEnabled() &&
     isAIPrimaryAccountStatementOnlyEnabled()
   ) {
-    return "preview_ai_primary";
+    return "ai_assisted";
   }
 
-  return "legacy";
+  return "deterministic_fallback";
 }
 
 export async function parseAccountStatementWithAI(
@@ -378,6 +397,7 @@ export function buildAccountStatementAICompletionRequest(
         schema: ACCOUNT_STATEMENT_AI_RESPONSE_SCHEMA,
         file: context.file,
         contentSource: context.contentSource,
+        pdfFields: (context.pdfFields ?? []).slice(0, 200),
         normalizedText: (context.diagnosticText ?? context.normalizedText).slice(
           0,
           14000,

@@ -159,4 +159,10 @@ export type ParsedDocumentResult = {
   };
 };
 
-export type AnalysisProfile = "legacy" | "preview_ai_primary";
+export type AnalysisProfile =
+  | "ai_assisted"
+  | "deterministic_fallback"
+  | "cleanup_workflow"
+  | "legacy"
+  | "cleanup_explorer"
+  | "preview_ai_primary";
