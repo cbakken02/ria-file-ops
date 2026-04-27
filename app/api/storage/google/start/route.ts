@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   }
 
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    redirect("/setup?section=storage&notice=Google+OAuth+credentials+are+missing+for+this+workspace.");
+    redirect("/setup?section=workspace&notice=Google+OAuth+credentials+are+missing+for+this+workspace.");
   }
 
   const state = crypto.randomUUID();

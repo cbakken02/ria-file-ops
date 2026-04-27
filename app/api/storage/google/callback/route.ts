@@ -38,14 +38,14 @@ export async function GET(request: Request) {
 
   if (error) {
     redirect(
-      `/setup?section=storage&notice=${encodeURIComponent(
+      `/setup?section=workspace&notice=${encodeURIComponent(
         `Google returned an authorization error: ${error}.`,
       )}`,
     );
   }
 
   if (!code || !state || !savedState || state !== savedState) {
-    redirect("/setup?section=storage&notice=The+storage+connection+flow+could+not+be+verified.");
+    redirect("/setup?section=workspace&notice=The+storage+connection+flow+could+not+be+verified.");
   }
 
   const redirectUri = buildAppUrl("/api/storage/google/callback", request);
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
   const tokenJson = (await tokenResponse.json()) as GoogleTokenResponse;
 
   if (!tokenResponse.ok || !tokenJson.access_token) {
-    redirect("/setup?section=storage&notice=Google+did+not+return+a+usable+storage+token.");
+    redirect("/setup?section=workspace&notice=Google+did+not+return+a+usable+storage+token.");
   }
 
   const userInfoResponse = await fetch(
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
   const userInfo = (await userInfoResponse.json()) as GoogleUserInfo;
 
   if (!userInfoResponse.ok || !userInfo.email) {
-    redirect("/setup?section=storage&notice=Google+did+not+return+account+details+for+that+connection.");
+    redirect("/setup?section=workspace&notice=Google+did+not+return+account+details+for+that+connection.");
   }
 
   saveStorageConnectionForOwner({
@@ -105,7 +105,7 @@ export async function GET(request: Request) {
   });
 
   redirect(
-    `/setup?section=storage&notice=${encodeURIComponent(
+    `/setup?section=workspace&notice=${encodeURIComponent(
       `${userInfo.email} was added as a storage connection.`,
     )}`,
   );

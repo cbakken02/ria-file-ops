@@ -139,8 +139,8 @@ export default async function PreviewPage({
         <section className={styles.noteCard}>
           <strong>Connect storage</strong>
           <p>Connect Google Drive in Settings before choosing an intake folder.</p>
-          <Link className={styles.primaryAction} href="/setup?section=storage">
-            Open storage settings
+          <Link className={styles.primaryAction} href="/setup?section=workspace">
+            Open workspace settings
           </Link>
         </section>
       ) : displayConnection.status !== "connected" ? (
@@ -150,8 +150,8 @@ export default async function PreviewPage({
             Storage is linked, but it needs to be reconnected before Intake can
             refresh from Drive.
           </p>
-          <Link className={styles.primaryAction} href="/setup?section=storage">
-            Open storage settings
+          <Link className={styles.primaryAction} href="/setup?section=workspace">
+            Open workspace settings
           </Link>
         </section>
       ) : !settings?.sourceFolderId ? (
@@ -161,7 +161,7 @@ export default async function PreviewPage({
             Choose an intake/source folder in Settings. Page navigation will keep
             using cached state until you refresh the browser page.
           </p>
-          <Link className={styles.primaryAction} href="/setup?section=intake">
+          <Link className={styles.primaryAction} href="/setup?section=workspace">
             Open settings
           </Link>
         </section>

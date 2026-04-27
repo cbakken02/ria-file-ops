@@ -59,12 +59,10 @@ type Props = {
 };
 
 type SettingsSectionId =
-  | "general"
-  | "storage"
-  | "naming"
-  | "intake"
-  | "cleanup"
-  | "security";
+  | "workspace"
+  | "rules"
+  | "workflow"
+  | "privacy";
 
 type SettingsEditorId =
   | "firm"
@@ -80,17 +78,16 @@ const initialActionState: SaveSettingsState = {
 };
 
 type FolderLoadState = "idle" | "loading" | "loaded" | "error";
+type WorkspaceOverviewTone = "ready" | "attention";
 
 const sectionDefinitions: Array<{
   id: SettingsSectionId;
   label: string;
 }> = [
-  { id: "general", label: "General" },
-  { id: "storage", label: "Storage connections" },
-  { id: "naming", label: "Naming conventions" },
-  { id: "intake", label: "Intake" },
-  { id: "cleanup", label: "Cleanup" },
-  { id: "security", label: "Security" },
+  { id: "workspace", label: "Workspace Setup" },
+  { id: "rules", label: "File Rules" },
+  { id: "workflow", label: "Workflow" },
+  { id: "privacy", label: "Privacy & Audit" },
 ];
 
 export function SetupForm({
@@ -147,6 +144,47 @@ export function SetupForm({
     ? getFolderLabel(destinationFolderValue) || "Not set"
     : "Reconnect storage";
   const folderTemplateSummary = summarizeFolderTemplate(folderTemplate);
+  const workspaceOverviewItems = [
+    {
+      detail: activeStorageConnection
+        ? activeStorageConnection.connectedDriveLabel
+        : "Connect storage to browse and file documents.",
+      label: "Storage",
+      status:
+        activeStorageConnection?.status === "connected"
+          ? "Connected"
+          : "Needs setup",
+      tone:
+        activeStorageConnection?.status === "connected"
+          ? ("ready" as const)
+          : ("attention" as const),
+      value: activeStorageConnection?.providerLabel ?? "No storage connected",
+    },
+    {
+      detail: sourceFolderValue
+        ? "New client uploads are read from this folder."
+        : "Choose where new client uploads arrive.",
+      label: "Upload source",
+      status: driveConnected && sourceFolderValue ? "Set" : "Needs setup",
+      tone:
+        driveConnected && sourceFolderValue
+          ? ("ready" as const)
+          : ("attention" as const),
+      value: sourceFolderName,
+    },
+    {
+      detail: destinationFolderValue
+        ? "Filed records are organized under this root."
+        : "Choose where client records should live.",
+      label: "Records destination",
+      status: driveConnected && destinationFolderValue ? "Set" : "Needs setup",
+      tone:
+        driveConnected && destinationFolderValue
+          ? ("ready" as const)
+          : ("attention" as const),
+      value: destinationFolderName,
+    },
+  ];
   const activeSectionMeta = sectionDefinitions.find(
     (section) => section.id === activeSection,
   );
@@ -339,25 +377,6 @@ export function SetupForm({
             <h2>{activeSectionMeta?.label ?? "Settings"}</h2>
             <p>{getSectionDescription(activeSection)}</p>
           </div>
-          {activeSection === "storage" ? (
-            <div className={styles.settingsPaneHeaderActions}>
-              <AddStorageConnectionButton
-                activeConnection={
-                  activeStorageConnection
-                    ? {
-                        accountEmail: activeStorageConnection.accountEmail,
-                        accountName: activeStorageConnection.accountName,
-                        id: activeStorageConnection.id,
-                        isPrimary: activeStorageConnection.isPrimary,
-                        provider: activeStorageConnection.provider,
-                      }
-                    : null
-                }
-                existingConnections={storageConnections}
-                variant="ghost"
-              />
-            </div>
-          ) : null}
         </header>
 
         <div className={styles.settingsPaneBody}>
@@ -365,97 +384,150 @@ export function SetupForm({
             <div className={styles.settingsNotice}>{notice}</div>
           ) : null}
 
-          {activeSection === "general" ? (
+          {activeSection === "workspace" ? (
             <div className={styles.sectionStack}>
-              <div className={styles.settingsList}>
-                <SettingsRowButton
-                  label="Firm name"
-                  onClick={() => setActiveEditor("firm")}
-                  value={firmName || "Not set"}
+              <WorkspaceOverview items={workspaceOverviewItems} />
+
+              <SettingsGroup
+                description="Name the firm or workspace shown throughout RIA File Ops."
+                title="Firm profile"
+              >
+                <div className={styles.settingsList}>
+                  <SettingsRowButton
+                    label="Firm name"
+                    onClick={() => setActiveEditor("firm")}
+                    value={firmName || "Not set"}
+                  />
+                </div>
+              </SettingsGroup>
+
+              <SettingsGroup
+                action={
+                  <AddStorageConnectionButton
+                    activeConnection={
+                      activeStorageConnection
+                        ? {
+                            accountEmail: activeStorageConnection.accountEmail,
+                            accountName: activeStorageConnection.accountName,
+                            id: activeStorageConnection.id,
+                            isPrimary: activeStorageConnection.isPrimary,
+                            provider: activeStorageConnection.provider,
+                          }
+                        : null
+                    }
+                    existingConnections={storageConnections}
+                    variant="ghost"
+                  />
+                }
+                description="Manage the storage account RIA File Ops reads from and files into."
+                title="Connected storage"
+              >
+                <StorageConnectionsSection
+                  activeConnection={activeStorageConnection}
+                  onRemove={() => {
+                    setStorageRemovalError(null);
+                    setPendingStorageRemoval(activeStorageConnection);
+                  }}
                 />
-                <SettingsRowButton
-                  label="Destination root"
-                  onClick={() => setActiveEditor("destination")}
-                  value={destinationFolderName}
-                />
-                <SettingsRowButton
-                  label="Standard household folder structure"
-                  onClick={() => setActiveEditor("folderTemplate")}
-                  value={folderTemplateSummary}
-                />
-              </div>
+              </SettingsGroup>
+
+              <SettingsGroup
+                description="Choose where new uploads arrive and where organized records should live."
+                title="Folder locations"
+              >
+                <div className={styles.settingsList}>
+                  <SettingsRowButton
+                    label="Client upload source"
+                    onClick={() => setActiveEditor("source")}
+                    value={sourceFolderName}
+                  />
+                  <SettingsRowButton
+                    label="Client records destination"
+                    onClick={() => setActiveEditor("destination")}
+                    value={destinationFolderName}
+                  />
+                </div>
+              </SettingsGroup>
             </div>
           ) : null}
 
-          {activeSection === "storage" ? (
+          {activeSection === "rules" ? (
             <div className={styles.sectionStack}>
-              <StorageConnectionsSection
-                activeConnection={activeStorageConnection}
-                onRemove={() => {
-                  setStorageRemovalError(null);
-                  setPendingStorageRemoval(activeStorageConnection);
-                }}
-              />
+              <SettingsGroup
+                description="Create the standard folder set for each household."
+                title="Folder structure"
+              >
+                <div className={styles.settingsList}>
+                  <SettingsRowButton
+                    label="Household folder structure"
+                    onClick={() => setActiveEditor("folderTemplate")}
+                    value={folderTemplateSummary}
+                  />
+                </div>
+              </SettingsGroup>
+
+              <SettingsGroup
+                description="Set a default filename pattern, then override it by document type."
+                title="Filename patterns"
+              >
+                <NamingRulesEditor onChange={setNamingRules} value={namingRules} />
+              </SettingsGroup>
             </div>
           ) : null}
 
-          {activeSection === "naming" ? (
+          {activeSection === "workflow" ? (
             <div className={styles.sectionStack}>
-              <NamingRulesEditor onChange={setNamingRules} value={namingRules} />
+              <SettingsGroup
+                description="Decide when new uploads can file automatically."
+                title="Intake"
+              >
+                <div className={styles.settingsList}>
+                  <SettingsRowButton
+                    label="Intake review behavior"
+                    onClick={() => setActiveEditor("reviewRule")}
+                    value={reviewRuleOptionLabel(reviewRule)}
+                  />
+                </div>
+              </SettingsGroup>
+
+              <SettingsGroup
+                description="Cleanup uses the same file rules, then shows a plan before changes."
+                title="Cleanup"
+              >
+                <div className={styles.settingsList}>
+                  <SettingsRowStatic
+                    label="Cleanup safety"
+                    value="Preview before changes"
+                  />
+                  <SettingsRowStatic
+                    label="Shared filing rules"
+                    value="Uses File Rules settings"
+                  />
+                  <SettingsRowLink href="/cleanup" label="Cleanup tool" value="Open" />
+                </div>
+              </SettingsGroup>
             </div>
           ) : null}
 
-          {activeSection === "intake" ? (
+          {activeSection === "privacy" ? (
             <div className={styles.sectionStack}>
-              <div className={styles.settingsList}>
-                <SettingsRowButton
-                  label="Source folder"
-                  onClick={() => setActiveEditor("source")}
-                  value={sourceFolderName}
-                />
-                <SettingsRowButton
-                  label="Auto-file rule"
-                  onClick={() => setActiveEditor("reviewRule")}
-                  value={reviewRuleOptionLabel(reviewRule)}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {activeSection === "cleanup" ? (
-            <div className={styles.sectionStack}>
-              <div className={styles.settingsList}>
-                <SettingsRowStatic
-                  label="Shared conventions"
-                  value="Uses the same naming conventions as Intake"
-                />
-                <SettingsRowStatic
-                  label="Preview first"
-                  value="Show the plan before anything changes"
-                />
-                <SettingsRowStatic
-                  label="Shared structure"
-                  value="Uses the same household folder structure for existing files"
-                />
-                <SettingsRowLink href="/cleanup" label="Cleanup tool" value="Open" />
-              </div>
-            </div>
-          ) : null}
-
-          {activeSection === "security" ? (
-            <div className={styles.sectionStack}>
-              <div className={styles.settingsList}>
-                <SettingsRowButton
-                  label="Data handling"
-                  onClick={() => setActiveEditor("dataHandling")}
-                  value="Open"
-                />
-                <SettingsRowLink
-                  href="/history"
-                  label="Audit history"
-                  value="Open"
-                />
-              </div>
+              <SettingsGroup
+                description="Review how files, metadata, and audit records are handled."
+                title="Privacy & audit"
+              >
+                <div className={styles.settingsList}>
+                  <SettingsRowButton
+                    label="Data handling"
+                    onClick={() => setActiveEditor("dataHandling")}
+                    value="Open"
+                  />
+                  <SettingsRowLink
+                    href="/history"
+                    label="Audit history"
+                    value="Open"
+                  />
+                </div>
+              </SettingsGroup>
             </div>
           ) : null}
         </div>
@@ -517,7 +589,7 @@ export function SetupForm({
             folderLoadError={folderLoadError}
             folderLoadState={folderLoadState}
             folders={folderOptions}
-            label="Destination root"
+            label="Client records destination"
             onLoadFolders={loadDriveFolders}
             onApply={setDestinationFolderValue}
             onClose={() => setActiveEditor(null)}
@@ -534,7 +606,7 @@ export function SetupForm({
             folderLoadError={folderLoadError}
             folderLoadState={folderLoadState}
             folders={folderOptions}
-            label="Source folder"
+            label="Client upload source"
             onLoadFolders={loadDriveFolders}
             onApply={setSourceFolderValue}
             onClose={() => setActiveEditor(null)}
@@ -613,6 +685,66 @@ type FolderPickerProps = {
   showDisabledState: boolean;
   showStoredSelection: boolean;
 };
+
+function WorkspaceOverview({
+  items,
+}: {
+  items: Array<{
+    detail: string;
+    label: string;
+    status: string;
+    tone: WorkspaceOverviewTone;
+    value: string;
+  }>;
+}) {
+  return (
+    <section className={styles.workspaceOverview} aria-label="Workspace setup status">
+      {items.map((item) => (
+        <div className={styles.workspaceOverviewItem} key={item.label}>
+          <div className={styles.workspaceOverviewTopRow}>
+            <span className={styles.workspaceOverviewLabel}>{item.label}</span>
+            <span
+              className={
+                item.tone === "ready"
+                  ? `${styles.workspaceStatus} ${styles.workspaceStatusReady}`
+                  : `${styles.workspaceStatus} ${styles.workspaceStatusAttention}`
+              }
+            >
+              {item.status}
+            </span>
+          </div>
+          <strong>{item.value}</strong>
+          <p>{item.detail}</p>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function SettingsGroup({
+  action,
+  children,
+  description,
+  title,
+}: {
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  description: string;
+  title: string;
+}) {
+  return (
+    <section className={styles.settingsGroup}>
+      <div className={styles.settingsGroupHeader}>
+        <div>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+        {action ? <div className={styles.settingsGroupAction}>{action}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 function FolderPicker({
   description,
@@ -1008,7 +1140,7 @@ function FolderTemplateEditorModal({
   return (
     <EditorModalShell
       onClose={onClose}
-      title="Standard household folder structure"
+      title="Household folder structure"
     >
       <div className={styles.sectionHeading}>
         <div>
@@ -1109,11 +1241,11 @@ function ReviewRuleEditorModal({
     <EditorModalShell
       modalClassName={styles.editorModalWide}
       onClose={onClose}
-      title="Auto-file rule"
+      title="Intake review behavior"
     >
       <div className={styles.editorIntro}>
-        Choose whether Intake should move files automatically or send them to
-        review first.
+        Choose whether Intake should file high-confidence items automatically or
+        send them to review first.
       </div>
       <div className={styles.settingsList}>
         {REVIEW_RULE_OPTIONS.map((option) => (
@@ -1284,24 +1416,16 @@ function reviewRuleOptionLabel(reviewRule: ReviewRuleValue) {
 }
 
 function getSectionDescription(section: SettingsSectionId) {
-  if (section === "general") {
-    return "Firm and shared structure.";
+  if (section === "workspace") {
+    return "Firm profile, storage, and folder locations.";
   }
 
-  if (section === "storage") {
-    return "Connected accounts and active workspace.";
+  if (section === "rules") {
+    return "How filed documents are named and organized.";
   }
 
-  if (section === "naming") {
-    return "Set a default filename pattern, then override it by document type.";
-  }
-
-  if (section === "intake") {
-    return "How new uploads should behave.";
-  }
-
-  if (section === "cleanup") {
-    return "Defaults for existing files and folders.";
+  if (section === "workflow") {
+    return "Review behavior and cleanup defaults.";
   }
 
   return "Data handling and audit references.";
@@ -1312,5 +1436,5 @@ function getStorageReconnectHref(provider: string) {
     return "/api/storage/google/start";
   }
 
-  return "/setup?section=storage";
+  return "/setup?section=workspace";
 }

@@ -150,7 +150,7 @@ export function StorageSwitcher({
           <div className={styles.popoverFooter}>
             <Link
               className={styles.footerLink}
-              href="/setup?section=storage"
+              href="/setup?section=workspace"
               onClick={() => setOpen(false)}
             >
               Manage storage connections
