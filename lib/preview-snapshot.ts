@@ -217,7 +217,7 @@ export function restorePreviewItemsFromSnapshot(
 
       return {
         ...candidate,
-        analysisProfile: candidate.analysisProfile ?? "deterministic_fallback",
+        analysisProfile: candidate.analysisProfile ?? "legacy",
         diagnosticText: null,
       } as PreviewItem;
     })
