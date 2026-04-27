@@ -70,6 +70,8 @@ function buildPdfFile(buffer, name = "Christopher Bakken Statement.pdf") {
 
 test("Vercel PDF extraction uses direct pdfjs text before native fallbacks", async () => {
   const restoreEnv = withEnv({ VERCEL: "1" });
+  const originalDomMatrix = globalThis.DOMMatrix;
+  delete globalThis.DOMMatrix;
   const buffer = buildTextPdfBuffer(
     "Account Statement U.S. Bank CHRISTOPHER T BAKKEN Checking account ending in 6642 Statement date 2026-04-12 ending balance 1234.56",
   );
@@ -127,6 +129,11 @@ test("Vercel PDF extraction uses direct pdfjs text before native fallbacks", asy
       ),
     );
   } finally {
+    if (originalDomMatrix === undefined) {
+      delete globalThis.DOMMatrix;
+    } else {
+      globalThis.DOMMatrix = originalDomMatrix;
+    }
     setAIPrimaryCompletionAdapterForTests(null);
     restoreEnv();
   }
