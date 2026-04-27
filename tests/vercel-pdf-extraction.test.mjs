@@ -54,6 +54,45 @@ function buildTextPdfBuffer(text) {
   return Buffer.from(body, "latin1");
 }
 
+function buildAcroFormPdfBuffer(text, fields) {
+  const stream = `BT /F1 12 Tf 72 720 Td (${escapePdfText(text)}) Tj ET`;
+  const fieldObjects = fields.map((field, index) => {
+    const y = 660 - index * 28;
+    return `<< /Type /Annot /Subtype /Widget /FT /Tx /T (${escapePdfText(
+      field.name,
+    )}) /V (${escapePdfText(field.value)}) /DV (${escapePdfText(
+      field.value,
+    )}) /Rect [72 ${y} 360 ${y + 18}] /P 3 0 R /F 4 /DA (/Helv 12 Tf 0 g) >>`;
+  });
+  const fieldRefs = fields
+    .map((_, index) => `${6 + index} 0 R`)
+    .join(" ");
+  const objects = [
+    `<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [${fieldRefs}] /NeedAppearances true /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 4 0 R >> >> >> >>`,
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    `<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R /Helv 4 0 R >> >> /MediaBox [0 0 612 792] /Annots [${fieldRefs}] /Contents 5 0 R >>`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`,
+    ...fieldObjects,
+  ];
+  let body = "%PDF-1.4\n";
+  const offsets = [0];
+
+  objects.forEach((object, index) => {
+    offsets[index + 1] = Buffer.byteLength(body, "latin1");
+    body += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+
+  const xrefOffset = Buffer.byteLength(body, "latin1");
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let index = 1; index <= objects.length; index += 1) {
+    body += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+  }
+  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+
+  return Buffer.from(body, "latin1");
+}
+
 function escapePdfText(text) {
   return text.replace(/[\\()]/g, (match) => `\\${match}`);
 }
@@ -145,6 +184,92 @@ test("Vercel PDF extraction uses direct pdfjs text before native fallbacks", asy
       globalThis.pdfjsWorker = originalPdfJsWorker;
     }
     pdfjs.GlobalWorkerOptions.workerSrc = originalWorkerSrc;
+    setAIPrimaryCompletionAdapterForTests(null);
+    restoreEnv();
+  }
+});
+
+test("Vercel PDF extraction reads AcroForm fields with pdfjs", async () => {
+  const restoreEnv = withEnv({ VERCEL: "1" });
+  const buffer = buildAcroFormPdfBuffer(
+    "Standing Payment Instructions Fidelity Account Owner Name Account Number Account Type",
+    [
+      { name: "Account Owner Name", value: "Christopher Bakken Jannis" },
+      { name: "Account Number", value: "1234562222" },
+      { name: "Account Type", value: "Simple IRA" },
+      { name: "Custodian", value: "Fidelity" },
+    ],
+  );
+  let userPrompt = "";
+  setAIPrimaryCompletionAdapterForTests(async (request) => {
+    userPrompt = request.userPrompt;
+    return {
+      model: "test-model",
+      rawText: JSON.stringify({
+        documentTypeId: "account_statement",
+        detectedClient: "Christopher Bakken Jannis",
+        detectedClient2: null,
+        ownershipType: "single",
+        metadata: {
+          custodian: "Fidelity",
+          accountType: "Simple IRA",
+          accountLast4: "2222",
+          documentDate: null,
+        },
+        confidence: {
+          documentTypeId: 0.94,
+          detectedClient: 0.95,
+          detectedClient2: null,
+          ownershipType: 0.9,
+          custodian: 0.93,
+          accountType: 0.92,
+          accountLast4: 0.91,
+          documentDate: null,
+        },
+        rawEvidenceSummary:
+          "PDF form fields include owner, custodian, account type, and account number.",
+      }),
+    };
+  });
+
+  try {
+    const envelope = await analyzeDocumentWithEnvelope(
+      buildPdfFile(buffer, "Fidelity Standing Instructions.pdf"),
+      async () => buffer,
+      { analysisProfile: "preview_ai_primary" },
+    );
+    const insight = envelope.legacyInsight;
+
+    assert.equal(insight.contentSource, "pdf_text");
+    assert.equal(insight.debug.aiAttempted, true);
+    assert.equal(insight.debug.aiUsed, true);
+    assert.match(insight.detectedClient ?? "", /Christopher/);
+    assert.equal(insight.metadata.accountType, "SIMPLE IRA");
+    assert.ok(userPrompt.includes("Christopher Bakken Jannis"));
+    assert.ok(userPrompt.includes("Simple IRA"));
+    assert.ok(insight.debug.pdfFieldReaders.includes("pdfjs"));
+    assert.ok(
+      insight.pdfFields.some(
+        (field) =>
+          field.name === "Account Owner Name" &&
+          field.value === "Christopher Bakken Jannis",
+      ),
+    );
+    assert.ok(
+      insight.pdfFields.some(
+        (field) =>
+          field.name === "Account Number" && field.value === "1234562222",
+      ),
+    );
+    assert.ok(
+      insight.debug.pdfExtractionAttempts.some(
+        (attempt) =>
+          attempt.extractor === "pdfjs" &&
+          attempt.status === "succeeded" &&
+          attempt.fieldCount >= 4,
+      ),
+    );
+  } finally {
     setAIPrimaryCompletionAdapterForTests(null);
     restoreEnv();
   }

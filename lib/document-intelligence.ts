@@ -118,7 +118,7 @@ export type PdfExtractionAttempt = {
 };
 
 const execFileAsync = promisify(execFile);
-const PARSER_VERSION = "2026-04-27-vercel-js-pdf-extraction-4";
+const PARSER_VERSION = "2026-04-27-vercel-js-pdf-form-fields-1";
 export const DOCUMENT_ANALYSIS_VERSION = PARSER_VERSION;
 
 type AnalysisExecutionOptions = {
@@ -477,6 +477,28 @@ async function extractPdfData(buffer: Buffer) {
     }
 
     if (isVercelRuntime()) {
+      try {
+        const pdfJsFieldExtraction = await extractPdfFieldsWithPdfJs(buffer);
+        fields = mergePdfFieldMaps(fields, pdfJsFieldExtraction.fields);
+        fieldEntries = [...fieldEntries, ...pdfJsFieldExtraction.fieldEntries];
+        if (Object.keys(pdfJsFieldExtraction.fields).length > 0) {
+          fieldReaders.push("pdfjs");
+        }
+        attempts.push(
+          buildPdfFieldExtractionAttempt(
+            "pdfjs",
+            "",
+            pdfJsFieldExtraction.fields,
+          ),
+        );
+      } catch (error) {
+        attempts.push(
+          buildFailedExtractionAttempt(
+            "pdfjs",
+            `PDF form fields: ${safeDiagnosticMessage(error)}`,
+          ),
+        );
+      }
       attempts.push(
         buildSkippedExtractionAttempt(
           "pypdf",
@@ -486,7 +508,7 @@ async function extractPdfData(buffer: Buffer) {
       attempts.push(
         buildSkippedExtractionAttempt(
           "pdfkit",
-          "Skipped in Vercel runtime; Swift/PDFKit form-field extraction is local-only.",
+          "Skipped in Vercel runtime; Swift/PDFKit form-field fallback is local-only. PDF.js form-field extraction was attempted first.",
         ),
       );
     } else {
@@ -601,6 +623,135 @@ async function extractPdfTextWithPdfJs(buffer: Buffer) {
   } finally {
     await pdf.destroy();
   }
+}
+
+type PdfJsFieldSource = Record<string, unknown>;
+
+async function extractPdfFieldsWithPdfJs(buffer: Buffer) {
+  installPdfJsNodePolyfills();
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  await configurePdfJsNodeWorker(pdfjs);
+  const documentParams = {
+    data: new Uint8Array(buffer),
+    disableFontFace: true,
+    disableWorker: true,
+    isEvalSupported: false,
+    useSystemFonts: true,
+  } as Parameters<typeof pdfjs.getDocument>[0] & { disableWorker: boolean };
+  const loadingTask = pdfjs.getDocument(documentParams);
+  const pdf = await loadingTask.promise;
+
+  try {
+    const fields: Record<string, string> = {};
+    const fieldEntries: Array<{ name: string; value: string }> = [];
+    const fieldObjects = await pdf.getFieldObjects().catch(() => null);
+
+    if (fieldObjects && typeof fieldObjects === "object") {
+      for (const [fieldName, objects] of Object.entries(fieldObjects)) {
+        const fieldObjectList = Array.isArray(objects) ? objects : [objects];
+
+        for (const fieldObject of fieldObjectList) {
+          collectPdfJsField(
+            fields,
+            fieldEntries,
+            fieldName,
+            asPdfJsFieldSource(fieldObject),
+          );
+        }
+      }
+    }
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+
+      try {
+        const annotations = await page.getAnnotations({ intent: "display" });
+        annotations.forEach((annotation, index) => {
+          const source = asPdfJsFieldSource(annotation);
+          const name =
+            cleanPdfJsFieldText(source.fieldName) ||
+            cleanPdfJsFieldText(source.fullName) ||
+            cleanPdfJsFieldText(source.id) ||
+            `Page ${pageNumber} field ${index + 1}`;
+          collectPdfJsField(fields, fieldEntries, name, source);
+        });
+      } finally {
+        page.cleanup();
+      }
+    }
+
+    return { fields, fieldEntries };
+  } finally {
+    await pdf.destroy();
+  }
+}
+
+function asPdfJsFieldSource(value: unknown): PdfJsFieldSource {
+  return value && typeof value === "object" ? (value as PdfJsFieldSource) : {};
+}
+
+function collectPdfJsField(
+  fields: Record<string, string>,
+  fieldEntries: Array<{ name: string; value: string }>,
+  rawName: string,
+  source: PdfJsFieldSource,
+) {
+  const name = cleanPdfJsFieldText(rawName);
+  if (!name) {
+    return;
+  }
+
+  const value = collectPdfJsFieldValueCandidates(source)
+    .map(cleanPdfJsFieldText)
+    .find(Boolean);
+
+  if (!value) {
+    return;
+  }
+
+  const preferred = choosePreferredPdfFieldValue(name, fields[name], value);
+  if (!preferred) {
+    return;
+  }
+
+  fields[name] = preferred;
+  fieldEntries.push({ name, value: preferred });
+}
+
+function collectPdfJsFieldValueCandidates(source: PdfJsFieldSource): unknown[] {
+  return [
+    source.value,
+    source.fieldValue,
+    source.defaultValue,
+    source.buttonValue,
+    source.exportValue,
+    source.alternativeText,
+    source.contents,
+  ];
+}
+
+function cleanPdfJsFieldText(value: unknown): string {
+  if (Array.isArray(value)) {
+    return normalizeWhitespace(
+      value
+        .map((item) => cleanPdfJsFieldText(item))
+        .filter(Boolean)
+        .join(" "),
+    );
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return normalizeWhitespace(value)
+    .replace(/\u0000/g, "")
+    .replace(/^\s*(Off|No|false)\s*$/i, "")
+    .trim();
 }
 
 async function configurePdfJsNodeWorker(
