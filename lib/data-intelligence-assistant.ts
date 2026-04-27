@@ -299,6 +299,13 @@ function buildStateAwareFallbackQuestion(
     return null;
   }
 
+  if (
+    state.lastTurnKind === "ambiguous" &&
+    isOrdinalAmbiguitySelection(question)
+  ) {
+    return buildReplacementClientFollowUpQuestion(state.activeClientName, state);
+  }
+
   if (isClientNameOnlyReply(question, state.activeClientName)) {
     return buildReplacementClientFollowUpQuestion(state.activeClientName, state);
   }
@@ -729,6 +736,12 @@ function questionMentionsActiveClientLoosely(
 function isLikelyFollowUpQuestion(question: string) {
   return /\bwhat about\b|\bhow about\b|\bthat one\b|\bthat statement\b|\bthat document\b|\bthe latest one\b|\bthe last one\b|\bsame client\b|\bfor them\b|\bfor that client\b|\bhis\b|\bher\b|\btheir\b/i.test(
     question,
+  );
+}
+
+function isOrdinalAmbiguitySelection(question: string) {
+  return /\b(first|1st|one|option one|second|2nd|two|option two|third|3rd|three|option three)\b/i.test(
+    normalizeFollowUpText(question),
   );
 }
 

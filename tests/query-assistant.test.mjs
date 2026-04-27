@@ -618,6 +618,73 @@ test("assistant returns bounded ambiguous, not-found, and unsupported responses 
   }
 });
 
+test("assistant treats duplicate client records with equivalent address formatting as one client", () => {
+  const tempDb = makeTempDbEnv("query-assistant-equivalent-client-address-");
+  const ownerEmail = "query-assistant-equivalent-client-address@example.com";
+  const spacedZipAddress = {
+    kind: "identity",
+    rawText: "N1345 Maple Hills Dr, Fontana WI 53125 - 1921",
+    lines: ["N1345 Maple Hills Dr", "Fontana WI 53125 - 1921"],
+    city: "Fontana",
+    state: "WI",
+    postalCode: "53125 - 1921",
+    country: "US",
+  };
+  const hyphenZipAddress = {
+    ...spacedZipAddress,
+    rawText: "N1345 Maple Hills Dr, Fontana WI 53125-1921",
+    lines: ["N1345 Maple Hills Dr", "Fontana WI 53125-1921"],
+    postalCode: "53125-1921",
+  };
+
+  try {
+    for (const canonical of [
+      buildStatementCanonicalFixture({
+        ownerName: "Christopher Bakken",
+        normalizedAccountType: "Checking",
+        accountNumber: "100000002211",
+        maskedAccountNumber: "XXXXXXXX2211",
+        accountLast4: "2211",
+        fileId: "equivalent-address-checking",
+        sourceName: "equivalent-address-checking.pdf",
+        partyAddresses: [spacedZipAddress],
+      }),
+      buildStatementCanonicalFixture({
+        ownerName: "Christopher Bakken",
+        normalizedAccountType: "Savings",
+        accountNumber: "100000007777",
+        maskedAccountNumber: "XXXXXXXX7777",
+        accountLast4: "7777",
+        fileId: "equivalent-address-savings",
+        sourceName: "equivalent-address-savings.pdf",
+        partyAddresses: [hyphenZipAddress],
+      }),
+    ]) {
+      writeCanonicalAccountStatementToSqlite({
+        ownerEmail,
+        analysisProfile: "preview_ai_primary",
+        analysisVersion: "query-assistant-test",
+        analysisRanAt: "2026-04-22T12:00:00.000Z",
+        canonical,
+      });
+    }
+
+    const result = askFirmDocumentAssistant({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "What statements do we have on file for Christopher Bakken?",
+    });
+
+    assert.equal(result.status, "answered");
+    assert.equal(result.intent, "statement_list");
+    assert.equal(result.sources.length, 2);
+    assert.match(result.answer, /Christopher Bakken/);
+    assert.doesNotMatch(result.answer, /ambiguous|not guessing/i);
+  } finally {
+    tempDb.cleanup();
+  }
+});
+
 test("assistant asks a natural client clarification when no active client is available", () => {
   const tempDb = makeTempDbEnv("query-assistant-client-needed-");
   const ownerEmail = "query-assistant-client-needed@example.com";
@@ -636,6 +703,42 @@ test("assistant asks a natural client clarification when no active client is ava
     assert.equal(result.answer, "Which client do you want me to check?");
     assert.equal(result.presentation.mode, "ambiguity_prompt");
     assert.doesNotMatch(result.answer, /firm-document store/i);
+  } finally {
+    tempDb.cleanup();
+  }
+});
+
+test("hybrid assistant treats ordinal ambiguity replies as conversation follow-ups", async () => {
+  const tempDb = makeTempDbEnv("query-assistant-ordinal-ambiguity-follow-up-");
+  const ownerEmail = "query-assistant-ordinal-ambiguity-follow-up@example.com";
+
+  try {
+    seedAssistantFixtures(ownerEmail);
+
+    const ambiguous = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "What is the latest ID for Alex Kim?",
+    });
+    const conversationState = deriveDataIntelligenceConversationStateFromResult({
+      previousState: null,
+      result: ambiguous,
+    });
+    const result = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "the first one",
+      conversationState,
+      includeDebug: true,
+    });
+    const debug = result.debug?.dataIntelligenceHybrid;
+
+    assert.equal(ambiguous.status, "ambiguous");
+    assert.equal(conversationState.activeClientName, "Alex Kim");
+    assert.notEqual(result.status, "unsupported");
+    assert.equal(result.status, "ambiguous");
+    assert.ok(debug);
+    assert.match(debug.executedQuestion, /Alex Kim/i);
   } finally {
     tempDb.cleanup();
   }
