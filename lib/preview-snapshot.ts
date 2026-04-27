@@ -80,6 +80,7 @@ export async function writePreviewSnapshot(input: {
       suggestedClientFolder: item.suggestedClientFolder,
       clientMatchReason: item.clientMatchReason,
       clientResolutionStatus: item.clientResolutionStatus,
+      analysisProfile: item.analysisProfile,
       analysisSource: item.analysisSource,
       analysisRanAt: item.analysisRanAt,
       cacheWrittenAt: item.cacheWrittenAt,
@@ -216,6 +217,7 @@ export function restorePreviewItemsFromSnapshot(
 
       return {
         ...candidate,
+        analysisProfile: candidate.analysisProfile ?? "legacy",
         diagnosticText: null,
       } as PreviewItem;
     })

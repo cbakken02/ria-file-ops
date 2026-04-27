@@ -96,6 +96,7 @@ export type DocumentInsight = {
     downloadByteLength: number | null;
     downloadSha1: string | null;
     pdfFieldReaders: string[];
+    pdfExtractionAttempts: PdfExtractionAttempt[];
   };
   metadata: {
     accountLast4: string | null;
@@ -108,12 +109,21 @@ export type DocumentInsight = {
   };
 };
 
+export type PdfExtractionAttempt = {
+  extractor: "pdfjs" | "pdf-parse" | "pypdf" | "pdfkit" | "ocr";
+  status: "succeeded" | "empty" | "skipped" | "failed";
+  detail: string | null;
+  textLength: number | null;
+  fieldCount: number | null;
+};
+
 const execFileAsync = promisify(execFile);
-const PARSER_VERSION = "2026-04-24-vercel-pdf-text-fallback-1";
+const PARSER_VERSION = "2026-04-27-vercel-js-pdf-extraction-1";
 export const DOCUMENT_ANALYSIS_VERSION = PARSER_VERSION;
 
 type AnalysisExecutionOptions = {
   analysisProfile?: AnalysisProfile;
+  pdfExtractionAttempts?: PdfExtractionAttempt[];
 };
 
 type DownloadFingerprint = {
@@ -139,6 +149,7 @@ type TextAnalysisContext = {
   yearCandidates: string[];
   taxKeywordDetected: boolean;
   pdfFieldReaders: string[];
+  pdfExtractionAttempts: PdfExtractionAttempt[];
   downloadFingerprint?: DownloadFingerprint | null;
   parserConflictSummary: string | null;
 };
@@ -262,9 +273,11 @@ export async function analyzeDocumentWithEnvelope(
   if (file.mimeType === "application/pdf") {
     const buffer = await getFileBuffer();
     const fingerprint = describeDownloadedBuffer(buffer);
+    let pdfExtractionAttempts: PdfExtractionAttempt[] = [];
 
     try {
       const extraction = await extractPdfData(buffer);
+      pdfExtractionAttempts = extraction.attempts;
       if (hasUsefulText(extraction.text) || Object.keys(extraction.fields).length > 0) {
         const baseEnvelope = await analyzeTextContentWithEnvelope(
           file,
@@ -275,13 +288,21 @@ export async function analyzeDocumentWithEnvelope(
           extraction.fieldReaders,
           fingerprint,
           extraction.parserConflictSummary,
-          options,
+          {
+            ...options,
+            pdfExtractionAttempts,
+          },
         );
 
-        if (shouldSupplementPdfInsight(baseEnvelope.legacyInsight, extraction.fields)) {
+        if (
+          shouldSupplementPdfInsight(baseEnvelope.legacyInsight, extraction.fields) &&
+          !isVercelRuntime()
+        ) {
           try {
             const ocrText = await extractVisualText(buffer, "pdf");
+            const ocrAttempt = buildTextExtractionAttempt("ocr", ocrText);
             if (hasUsefulText(ocrText)) {
+              const supplementedAttempts = [...pdfExtractionAttempts, ocrAttempt];
               const mergedEnvelope = await analyzeTextContentWithEnvelope(
                 file,
                 `${extraction.text}\n${ocrText}`,
@@ -291,11 +312,15 @@ export async function analyzeDocumentWithEnvelope(
                 extraction.fieldReaders,
                 fingerprint,
                 extraction.parserConflictSummary,
-                options,
+                {
+                  ...options,
+                  pdfExtractionAttempts: supplementedAttempts,
+                },
               );
 
               return preferSupplementedPdfEnvelope(baseEnvelope, mergedEnvelope);
             }
+            pdfExtractionAttempts = [...pdfExtractionAttempts, ocrAttempt];
           } catch {
             // Keep the base PDF insight if supplemental OCR fails.
           }
@@ -303,27 +328,53 @@ export async function analyzeDocumentWithEnvelope(
 
         return baseEnvelope;
       }
-    } catch {
+    } catch (error) {
+      pdfExtractionAttempts = [
+        ...pdfExtractionAttempts,
+        buildFailedExtractionAttempt(
+          "pdfjs",
+          `PDF extraction crashed before fallback classification: ${safeDiagnosticMessage(error)}`,
+        ),
+      ];
       // Fall through to OCR.
     }
 
-    try {
-      const ocrText = await extractVisualText(buffer, "pdf");
-      if (hasUsefulText(ocrText)) {
-        return analyzeTextContentWithEnvelope(
-          file,
-          ocrText,
-          {},
-          "pdf_ocr",
-          [],
-          [],
-          fingerprint,
-          null,
-          options,
-        );
+    if (isVercelRuntime()) {
+      pdfExtractionAttempts = [
+        ...pdfExtractionAttempts,
+        buildSkippedExtractionAttempt(
+          "ocr",
+          "Skipped in Vercel runtime; OCR/Swift fallbacks are local-only for now.",
+        ),
+      ];
+    } else {
+      try {
+        const ocrText = await extractVisualText(buffer, "pdf");
+        const ocrAttempt = buildTextExtractionAttempt("ocr", ocrText);
+        pdfExtractionAttempts = [...pdfExtractionAttempts, ocrAttempt];
+        if (hasUsefulText(ocrText)) {
+          return analyzeTextContentWithEnvelope(
+            file,
+            ocrText,
+            {},
+            "pdf_ocr",
+            [],
+            [],
+            fingerprint,
+            null,
+            {
+              ...options,
+              pdfExtractionAttempts,
+            },
+          );
+        }
+      } catch (error) {
+        pdfExtractionAttempts = [
+          ...pdfExtractionAttempts,
+          buildFailedExtractionAttempt("ocr", safeDiagnosticMessage(error)),
+        ];
+        // Fall through to metadata.
       }
-    } catch {
-      // Fall through to metadata.
     }
 
     return {
@@ -333,7 +384,9 @@ export async function analyzeDocumentWithEnvelope(
         extraReasons: [
           "PDF text extraction and OCR did not return enough usable content, so this file fell back to metadata-only classification.",
         ],
-        metadataOnlyDiagnosticText: buildPdfMetadataOnlyDiagnostic(),
+        metadataOnlyDiagnosticText:
+          buildPdfMetadataOnlyDiagnostic(pdfExtractionAttempts),
+        pdfExtractionAttempts,
       }),
     };
   }
@@ -390,51 +443,97 @@ async function extractPdfData(buffer: Buffer) {
     let fields: Record<string, string> = {};
     let fieldEntries: Array<{ name: string; value: string }> = [];
     const fieldReaders: string[] = [];
+    const attempts: PdfExtractionAttempt[] = [];
     let parserConflictSummary: string | null = null;
     let pythonError: Error | null = null;
     let pythonFields: Record<string, string> = {};
 
-    try {
-      text = await extractPdfTextWithPdfParse(buffer);
-    } catch {
-      // Keep going. Direct pdf.js, pypdf, or OCR may still recover usable content.
-    }
+    const textExtractors = isVercelRuntime()
+      ? [
+          ["pdfjs", extractPdfTextWithPdfJs] as const,
+          ["pdf-parse", extractPdfTextWithPdfParse] as const,
+        ]
+      : [
+          ["pdf-parse", extractPdfTextWithPdfParse] as const,
+          ["pdfjs", extractPdfTextWithPdfJs] as const,
+        ];
 
-    if (!hasUsefulText(text)) {
+    for (const [extractor, extractText] of textExtractors) {
+      if (hasUsefulText(text)) {
+        break;
+      }
+
       try {
-        text = await extractPdfTextWithPdfJs(buffer);
-      } catch {
-        // Keep going. pypdf or OCR may still recover usable content.
+        const extractedText = await extractText(buffer);
+        attempts.push(buildTextExtractionAttempt(extractor, extractedText));
+        if (hasUsefulText(extractedText)) {
+          text = extractedText;
+        }
+      } catch (error) {
+        attempts.push(
+          buildFailedExtractionAttempt(extractor, safeDiagnosticMessage(error)),
+        );
       }
     }
 
-    try {
-      const pythonExtraction = await extractPdfDataWithPyPdf(tempPath);
-      if (!hasUsefulText(text)) {
-        text = pythonExtraction.text;
-      }
-      fields = pythonExtraction.fields;
-      pythonFields = pythonExtraction.fields;
-      fieldEntries = pythonExtraction.fieldEntries;
-      fieldReaders.push("pypdf");
-    } catch (error) {
-      pythonError =
-        error instanceof Error
-          ? error
-          : new Error("Python PDF extraction failed unexpectedly.");
-    }
-
-    try {
-      const pdfKitExtraction = await extractPdfFieldsWithPdfKit(tempPath);
-      parserConflictSummary = summarizeParserConflicts(
-        pythonFields,
-        pdfKitExtraction.fields,
+    if (isVercelRuntime()) {
+      attempts.push(
+        buildSkippedExtractionAttempt(
+          "pypdf",
+          "Skipped in Vercel runtime; Python PDF extraction is local-only.",
+        ),
       );
-      fields = mergePdfFieldMaps(fields, pdfKitExtraction.fields, true);
-      fieldEntries = [...fieldEntries, ...pdfKitExtraction.fieldEntries];
-      fieldReaders.push("pdfkit");
-    } catch {
-      // Keep the primary parser result if PDFKit fallback is unavailable.
+      attempts.push(
+        buildSkippedExtractionAttempt(
+          "pdfkit",
+          "Skipped in Vercel runtime; Swift/PDFKit form-field extraction is local-only.",
+        ),
+      );
+    } else {
+      try {
+        const pythonExtraction = await extractPdfDataWithPyPdf(tempPath);
+        if (!hasUsefulText(text)) {
+          text = pythonExtraction.text;
+        }
+        fields = pythonExtraction.fields;
+        pythonFields = pythonExtraction.fields;
+        fieldEntries = pythonExtraction.fieldEntries;
+        fieldReaders.push("pypdf");
+        attempts.push(
+          buildPdfFieldExtractionAttempt(
+            "pypdf",
+            pythonExtraction.text,
+            pythonExtraction.fields,
+          ),
+        );
+      } catch (error) {
+        pythonError =
+          error instanceof Error
+            ? error
+            : new Error("Python PDF extraction failed unexpectedly.");
+        attempts.push(
+          buildFailedExtractionAttempt("pypdf", safeDiagnosticMessage(error)),
+        );
+      }
+
+      try {
+        const pdfKitExtraction = await extractPdfFieldsWithPdfKit(tempPath);
+        parserConflictSummary = summarizeParserConflicts(
+          pythonFields,
+          pdfKitExtraction.fields,
+        );
+        fields = mergePdfFieldMaps(fields, pdfKitExtraction.fields, true);
+        fieldEntries = [...fieldEntries, ...pdfKitExtraction.fieldEntries];
+        fieldReaders.push("pdfkit");
+        attempts.push(
+          buildPdfFieldExtractionAttempt("pdfkit", "", pdfKitExtraction.fields),
+        );
+      } catch (error) {
+        attempts.push(
+          buildFailedExtractionAttempt("pdfkit", safeDiagnosticMessage(error)),
+        );
+        // Keep the primary parser result if PDFKit fallback is unavailable.
+      }
     }
 
     if (pythonError && fieldReaders.length === 0 && !hasUsefulText(text)) {
@@ -447,6 +546,7 @@ async function extractPdfData(buffer: Buffer) {
       fieldEntries,
       fieldReaders,
       parserConflictSummary,
+      attempts,
     };
   } finally {
     await fs.unlink(tempPath).catch(() => {});
@@ -467,10 +567,14 @@ async function extractPdfTextWithPdfParse(buffer: Buffer) {
 
 async function extractPdfTextWithPdfJs(buffer: Buffer) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({
+  const documentParams = {
     data: new Uint8Array(buffer),
+    disableFontFace: true,
+    disableWorker: true,
     isEvalSupported: false,
-  });
+    useSystemFonts: true,
+  } as Parameters<typeof pdfjs.getDocument>[0] & { disableWorker: boolean };
+  const loadingTask = pdfjs.getDocument(documentParams);
   const pdf = await loadingTask.promise;
 
   try {
@@ -495,6 +599,78 @@ async function extractPdfTextWithPdfJs(buffer: Buffer) {
   } finally {
     await pdf.destroy();
   }
+}
+
+function isVercelRuntime() {
+  return Boolean(process.env.VERCEL);
+}
+
+function buildTextExtractionAttempt(
+  extractor: PdfExtractionAttempt["extractor"],
+  text: string,
+): PdfExtractionAttempt {
+  const textLength = normalizeWhitespace(text).length;
+  return {
+    extractor,
+    status: hasUsefulText(text) ? "succeeded" : "empty",
+    detail: hasUsefulText(text) ? null : "No usable selectable text was returned.",
+    textLength,
+    fieldCount: null,
+  };
+}
+
+function buildPdfFieldExtractionAttempt(
+  extractor: PdfExtractionAttempt["extractor"],
+  text: string,
+  fields: Record<string, string>,
+): PdfExtractionAttempt {
+  const textLength = normalizeWhitespace(text).length;
+  const fieldCount = Object.keys(fields).length;
+  const hasData = hasUsefulText(text) || fieldCount > 0;
+  return {
+    extractor,
+    status: hasData ? "succeeded" : "empty",
+    detail: hasData ? null : "No usable text or PDF form fields were returned.",
+    textLength,
+    fieldCount,
+  };
+}
+
+function buildSkippedExtractionAttempt(
+  extractor: PdfExtractionAttempt["extractor"],
+  detail: string,
+): PdfExtractionAttempt {
+  return {
+    extractor,
+    status: "skipped",
+    detail,
+    textLength: null,
+    fieldCount: null,
+  };
+}
+
+function buildFailedExtractionAttempt(
+  extractor: PdfExtractionAttempt["extractor"],
+  detail: string,
+): PdfExtractionAttempt {
+  return {
+    extractor,
+    status: "failed",
+    detail,
+    textLength: null,
+    fieldCount: null,
+  };
+}
+
+function safeDiagnosticMessage(error: unknown) {
+  const raw =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "Unknown extraction error.";
+  const normalized = normalizeWhitespace(raw).replace(/[^\S\r\n]+/g, " ");
+  return normalized.slice(0, 240);
 }
 
 async function extractPdfDataWithPyPdf(tempPath: string) {
@@ -663,6 +839,7 @@ export async function analyzeTextContentWithEnvelope(
     pdfFieldReaders,
     downloadFingerprint,
     parserConflictSummary,
+    options.pdfExtractionAttempts ?? [],
   );
   const legacyClassification = classifyTextAnalysisContext(context);
   const legacyExtraction = runTextAnalysisExtraction(context, legacyClassification);
@@ -744,6 +921,7 @@ function buildTextAnalysisContext(
   pdfFieldReaders: string[] = [],
   downloadFingerprint?: DownloadFingerprint | null,
   parserConflictSummary: string | null = null,
+  pdfExtractionAttempts: PdfExtractionAttempt[] = [],
 ): TextAnalysisContext {
   const metadataFallback = analyzeFromMetadata(file, {
     downloadFingerprint,
@@ -790,6 +968,7 @@ function buildTextAnalysisContext(
       /\btaxpayer\b/i.test(normalizedText) ||
       /\bform\s+1040\b/i.test(normalizedText),
     pdfFieldReaders,
+    pdfExtractionAttempts,
     downloadFingerprint,
     parserConflictSummary,
   };
@@ -1436,6 +1615,7 @@ function buildCanonicalAIPrimaryStatementDocument(input: {
         contentSource: input.context.contentSource,
         pdfFields: input.context.pdfFields,
         pdfFieldReaders: input.context.pdfFieldReaders,
+        pdfExtractionAttempts: input.context.pdfExtractionAttempts,
       },
     },
     classification: {
@@ -1740,6 +1920,7 @@ function buildCanonicalIdentityDocument(input: {
         contentSource: input.context.contentSource,
         pdfFields: input.context.pdfFields,
         pdfFieldReaders: input.context.pdfFieldReaders,
+        pdfExtractionAttempts: input.context.pdfExtractionAttempts,
       },
     },
     classification: {
@@ -4467,6 +4648,7 @@ function finalizeTextAnalysisInsight(
       downloadByteLength: context.downloadFingerprint?.byteLength ?? null,
       downloadSha1: context.downloadFingerprint?.sha1 ?? null,
       pdfFieldReaders: context.pdfFieldReaders,
+      pdfExtractionAttempts: context.pdfExtractionAttempts,
     },
     metadata: {
       accountLast4: extraction.metadata.accountLast4,
@@ -4588,6 +4770,7 @@ function analyzeFromMetadata(
     downloadFingerprint?: DownloadFingerprint | null;
     extraReasons?: string[];
     metadataOnlyDiagnosticText?: string | null;
+    pdfExtractionAttempts?: PdfExtractionAttempt[];
   },
 ) {
   const name = file.name;
@@ -4736,6 +4919,7 @@ function analyzeFromMetadata(
       downloadByteLength: options?.downloadFingerprint?.byteLength ?? null,
       downloadSha1: options?.downloadFingerprint?.sha1 ?? null,
       pdfFieldReaders: [],
+      pdfExtractionAttempts: options?.pdfExtractionAttempts ?? [],
     },
     metadata: {
       accountLast4: detectLast4FromFilename(name),
@@ -4749,16 +4933,45 @@ function analyzeFromMetadata(
   } satisfies DocumentInsight;
 }
 
-function buildPdfMetadataOnlyDiagnostic() {
+function buildPdfMetadataOnlyDiagnostic(
+  pdfExtractionAttempts: PdfExtractionAttempt[] = [],
+) {
   const runtimeDetail = process.env.VERCEL
     ? "OCR is not available in this Vercel staging runtime, so scanned or image-only PDFs cannot be read yet."
     : "The local OCR fallback did not return usable text for this PDF.";
+  const attemptSummary = formatPdfExtractionAttemptSummary(pdfExtractionAttempts);
 
-  return [
+  const lines = [
     "No selectable PDF text was extracted from this file.",
     runtimeDetail,
     "This preview is using the filename and Google Drive metadata only. If the PDF is scanned or image-based, fields like client, account type, and statement date may stay undetected until OCR is added for staging.",
-  ].join("\n");
+  ];
+
+  if (attemptSummary) {
+    lines.push(`Extractor diagnostics: ${attemptSummary}`);
+  }
+
+  return lines.join("\n");
+}
+
+function formatPdfExtractionAttemptSummary(attempts: PdfExtractionAttempt[]) {
+  return attempts
+    .map((attempt) => {
+      const metrics = [
+        attempt.textLength !== null ? `${attempt.textLength} chars` : null,
+        attempt.fieldCount !== null ? `${attempt.fieldCount} fields` : null,
+      ].filter(Boolean);
+      const suffix = [
+        metrics.length ? `(${metrics.join(", ")})` : null,
+        attempt.detail,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return suffix
+        ? `${attempt.extractor}: ${attempt.status} ${suffix}`
+        : `${attempt.extractor}: ${attempt.status}`;
+    })
+    .join("; ");
 }
 
 function describeDownloadedBuffer(buffer: Buffer): DownloadFingerprint {

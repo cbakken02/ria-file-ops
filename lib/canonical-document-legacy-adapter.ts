@@ -87,6 +87,7 @@ export function adaptCanonicalToLegacyDocumentInsight(
       downloadByteLength: canonical.source.file.downloadByteLength,
       downloadSha1: canonical.source.file.downloadSha1,
       pdfFieldReaders: canonical.source.extraction.pdfFieldReaders,
+      pdfExtractionAttempts: canonical.source.extraction.pdfExtractionAttempts ?? [],
     },
     metadata: {
       accountLast4: primaryFacts.accountLast4,

@@ -72,6 +72,7 @@ export type PreviewItem = {
   suggestedClientFolder: string | null;
   clientMatchReason: string;
   clientResolutionStatus: "matched_existing" | "created_new" | "needs_review";
+  analysisProfile: AnalysisProfile;
   analysisSource: "fresh_analysis" | "loaded_from_cache";
   analysisRanAt: string | null;
   cacheWrittenAt: string | null;
@@ -106,6 +107,7 @@ export type PreviewItem = {
     accountLooseCandidate: string | null;
     taxKeywordDetected: boolean;
     yearCandidates: string[];
+    pdfExtractionAttempts: DocumentInsight["debug"]["pdfExtractionAttempts"];
   };
   documentTypeId: NamingRuleDocumentType;
   extractedAccountLast4: string | null;
@@ -496,6 +498,7 @@ async function buildPreviewItem(
     suggestedClientFolder,
     clientMatchReason: clientMatch.matchReason,
     clientResolutionStatus: clientMatch.status,
+    analysisProfile,
     analysisSource,
     analysisRanAt,
     cacheWrittenAt,
