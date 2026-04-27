@@ -227,6 +227,13 @@ export type CanonicalExtractedDocument = {
       contentSource: CanonicalContentSource | null;
       pdfFields: Array<{ name: string; value: string }>;
       pdfFieldReaders: string[];
+      pdfExtractionAttempts?: Array<{
+        extractor: "pdfjs" | "pdf-parse" | "pypdf" | "pdfkit" | "ocr";
+        status: "succeeded" | "empty" | "skipped" | "failed";
+        detail: string | null;
+        textLength: number | null;
+        fieldCount: number | null;
+      }>;
     };
   };
   classification: {

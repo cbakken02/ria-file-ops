@@ -1059,6 +1059,7 @@ function PreviewItemModal({
                         {getDiagnosticFieldEntries({
                           accountLast4: plan.accountLast4,
                           accountType: plan.accountType,
+                          analysisProfile: item.analysisProfile,
                           analysisRanAt: item.analysisRanAt,
                           analysisSource: item.analysisSource,
                           aiAttempted: item.debug.aiAttempted,
@@ -1088,6 +1089,7 @@ function PreviewItemModal({
                           fileId: item.id,
                           idType: plan.idType,
                           ownershipType: plan.ownershipType,
+                          pdfExtractionAttempts: item.debug.pdfExtractionAttempts,
                           parserVersion: item.debug.parserVersion,
                           parserConflictSummary: item.parserConflictSummary,
                           phase1ReviewPriority: item.phase1ReviewPriority,
@@ -1324,6 +1326,7 @@ function getDiagnosticFieldEntries(input: {
   driveSize?: string | null;
   downloadByteLength?: number | null;
   downloadSha1?: string | null;
+  analysisProfile?: PreviewItem["analysisProfile"] | null;
   analysisSource?: PreviewItem["analysisSource"] | null;
   analysisRanAt?: string | null;
   cacheWrittenAt?: string | null;
@@ -1346,6 +1349,7 @@ function getDiagnosticFieldEntries(input: {
   parserConflictSummary?: string | null;
   documentSignal?: string | null;
   fieldOwnership?: PreviewItem["debug"]["fieldOwnership"];
+  pdfExtractionAttempts?: PreviewItem["debug"]["pdfExtractionAttempts"];
   statementClientSource?: PreviewItem["debug"]["statementClientSource"] | null;
   statementClientCandidate?: string | null;
   client?: string | null;
@@ -1360,6 +1364,7 @@ function getDiagnosticFieldEntries(input: {
   entityName?: string | null;
 }) {
   return [
+    ["Analysis profile", formatAnalysisProfile(input.analysisProfile)],
     ["Analysis source", formatAnalysisSource(input.analysisSource)],
     ["Analysis ran", formatDiagnosticTimestamp(input.analysisRanAt)],
     ["Cache written", formatDiagnosticTimestamp(input.cacheWrittenAt)],
@@ -1393,6 +1398,7 @@ function getDiagnosticFieldEntries(input: {
     ["Phase 1 review priority", formatPhase1ReviewPriority(input.phase1ReviewPriority)],
     ["Phase 1 review flags", formatPhase1ReviewFlags(input.phase1ReviewFlags)],
     ["Field ownership", formatFieldOwnershipSummary(input.fieldOwnership)],
+    ["PDF extractors", formatPdfExtractionAttempts(input.pdfExtractionAttempts)],
     ["Parser version", input.parserVersion],
     ["Parser conflict", input.parserConflictSummary],
     ["Document signal", input.documentSignal],
@@ -1435,6 +1441,20 @@ function formatAnalysisSource(
   return null;
 }
 
+function formatAnalysisProfile(
+  value: PreviewItem["analysisProfile"] | null | undefined,
+) {
+  if (value === "preview_ai_primary") {
+    return "Preview AI primary";
+  }
+
+  if (value === "legacy") {
+    return "Legacy deterministic";
+  }
+
+  return value ?? null;
+}
+
 function formatBooleanDiagnostic(value: boolean | null | undefined) {
   if (value === true) {
     return "Yes";
@@ -1445,6 +1465,32 @@ function formatBooleanDiagnostic(value: boolean | null | undefined) {
   }
 
   return null;
+}
+
+function formatPdfExtractionAttempts(
+  attempts: PreviewItem["debug"]["pdfExtractionAttempts"] | null | undefined,
+) {
+  if (!attempts?.length) {
+    return null;
+  }
+
+  return attempts
+    .map((attempt) => {
+      const metrics = [
+        attempt.textLength !== null ? `${attempt.textLength} chars` : null,
+        attempt.fieldCount !== null ? `${attempt.fieldCount} fields` : null,
+      ].filter(Boolean);
+      const suffix = [
+        metrics.length ? `(${metrics.join(", ")})` : null,
+        attempt.detail,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return suffix
+        ? `${attempt.extractor}: ${attempt.status} ${suffix}`
+        : `${attempt.extractor}: ${attempt.status}`;
+    })
+    .join("; ");
 }
 
 function formatAIStatus(input: {
