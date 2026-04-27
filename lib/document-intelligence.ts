@@ -118,7 +118,7 @@ export type PdfExtractionAttempt = {
 };
 
 const execFileAsync = promisify(execFile);
-const PARSER_VERSION = "2026-04-27-vercel-js-pdf-extraction-1";
+const PARSER_VERSION = "2026-04-27-vercel-js-pdf-extraction-2";
 export const DOCUMENT_ANALYSIS_VERSION = PARSER_VERSION;
 
 type AnalysisExecutionOptions = {
