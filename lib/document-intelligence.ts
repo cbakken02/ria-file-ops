@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
-import { createRequire } from "node:module";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -120,9 +118,7 @@ export type PdfExtractionAttempt = {
 };
 
 const execFileAsync = promisify(execFile);
-const require = createRequire(import.meta.url);
-
-const PARSER_VERSION = "2026-04-27-vercel-js-pdf-extraction-3";
+const PARSER_VERSION = "2026-04-27-vercel-js-pdf-extraction-4";
 export const DOCUMENT_ANALYSIS_VERSION = PARSER_VERSION;
 
 type AnalysisExecutionOptions = {
@@ -614,19 +610,17 @@ async function configurePdfJsNodeWorker(
     return;
   }
 
-  const workerPath = require.resolve(
-    "pdfjs-dist/legacy/build/pdf.worker.mjs",
-  );
-  const workerUrl = pathToFileURL(workerPath).href;
-  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-
   const globalObject = globalThis as typeof globalThis & {
     pdfjsWorker?: unknown;
   };
 
   if (!globalObject.pdfjsWorker) {
-    globalObject.pdfjsWorker = await import(workerUrl);
+    globalObject.pdfjsWorker = await import(
+      "pdfjs-dist/legacy/build/pdf.worker.mjs"
+    );
   }
+
+  pdfjs.GlobalWorkerOptions.workerSrc ||= "./pdf.worker.mjs";
 }
 
 type Matrix2DLike = {
