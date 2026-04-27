@@ -1,8 +1,5 @@
 import type { GoogleDriveFile } from "@/lib/google-drive";
-import {
-  isAIAssistedAnalysisProfile,
-  resolveAnalysisProfileForMode,
-} from "@/lib/ai-primary-parser";
+import { resolveAnalysisProfileForMode } from "@/lib/ai-primary-parser";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
 import {
   createPreviewFileSnapshot,
@@ -625,7 +622,7 @@ async function loadPreviewArtifacts(input: {
       canonical?.classification.normalized.documentTypeId ?? null;
     if (canonical) {
       if (
-        isAIAssistedAnalysisProfile(input.analysisProfile) &&
+        input.analysisProfile === "preview_ai_primary" &&
         canonicalDocumentTypeId === "account_statement"
       ) {
         try {
