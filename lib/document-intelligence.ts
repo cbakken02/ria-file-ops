@@ -566,6 +566,7 @@ async function extractPdfTextWithPdfParse(buffer: Buffer) {
 }
 
 async function extractPdfTextWithPdfJs(buffer: Buffer) {
+  installPdfJsNodePolyfills();
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const documentParams = {
     data: new Uint8Array(buffer),
@@ -598,6 +599,221 @@ async function extractPdfTextWithPdfJs(buffer: Buffer) {
     return pageTexts.join("\n");
   } finally {
     await pdf.destroy();
+  }
+}
+
+type Matrix2DLike = {
+  a?: number;
+  b?: number;
+  c?: number;
+  d?: number;
+  e?: number;
+  f?: number;
+};
+
+class NodePdfDomMatrix {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
+  is2D = true;
+
+  static fromFloat32Array(array32: Float32Array) {
+    return new NodePdfDomMatrix(array32);
+  }
+
+  static fromFloat64Array(array64: Float64Array) {
+    return new NodePdfDomMatrix(array64);
+  }
+
+  static fromMatrix(other?: Matrix2DLike) {
+    return new NodePdfDomMatrix(other);
+  }
+
+  constructor(init?: Matrix2DLike | number[] | Float32Array | Float64Array | string) {
+    if (typeof init === "string") {
+      this.a = 1;
+      this.b = 0;
+      this.c = 0;
+      this.d = 1;
+      this.e = 0;
+      this.f = 0;
+      return;
+    }
+
+    if (Array.isArray(init) || init instanceof Float32Array || init instanceof Float64Array) {
+      this.a = Number(init[0] ?? 1);
+      this.b = Number(init[1] ?? 0);
+      this.c = Number(init[2] ?? 0);
+      this.d = Number(init[3] ?? 1);
+      this.e = Number(init[4] ?? 0);
+      this.f = Number(init[5] ?? 0);
+      return;
+    }
+
+    this.a = Number(init?.a ?? 1);
+    this.b = Number(init?.b ?? 0);
+    this.c = Number(init?.c ?? 0);
+    this.d = Number(init?.d ?? 1);
+    this.e = Number(init?.e ?? 0);
+    this.f = Number(init?.f ?? 0);
+  }
+
+  get m11() {
+    return this.a;
+  }
+
+  set m11(value: number) {
+    this.a = value;
+  }
+
+  get m12() {
+    return this.b;
+  }
+
+  set m12(value: number) {
+    this.b = value;
+  }
+
+  get m21() {
+    return this.c;
+  }
+
+  set m21(value: number) {
+    this.c = value;
+  }
+
+  get m22() {
+    return this.d;
+  }
+
+  set m22(value: number) {
+    this.d = value;
+  }
+
+  get m41() {
+    return this.e;
+  }
+
+  set m41(value: number) {
+    this.e = value;
+  }
+
+  get m42() {
+    return this.f;
+  }
+
+  set m42(value: number) {
+    this.f = value;
+  }
+
+  multiplySelf(other?: Matrix2DLike) {
+    const matrix = new NodePdfDomMatrix(other);
+    const a = this.a * matrix.a + this.c * matrix.b;
+    const b = this.b * matrix.a + this.d * matrix.b;
+    const c = this.a * matrix.c + this.c * matrix.d;
+    const d = this.b * matrix.c + this.d * matrix.d;
+    const e = this.a * matrix.e + this.c * matrix.f + this.e;
+    const f = this.b * matrix.e + this.d * matrix.f + this.f;
+
+    this.a = a;
+    this.b = b;
+    this.c = c;
+    this.d = d;
+    this.e = e;
+    this.f = f;
+    return this;
+  }
+
+  preMultiplySelf(other?: Matrix2DLike) {
+    const matrix = new NodePdfDomMatrix(other);
+    return matrix.multiplySelf(this).copyTo(this);
+  }
+
+  translateSelf(tx = 0, ty = 0) {
+    this.e += Number(tx);
+    this.f += Number(ty);
+    return this;
+  }
+
+  scaleSelf(scaleX = 1, scaleY = scaleX) {
+    this.a *= Number(scaleX);
+    this.b *= Number(scaleX);
+    this.c *= Number(scaleY);
+    this.d *= Number(scaleY);
+    return this;
+  }
+
+  invertSelf() {
+    const determinant = this.a * this.d - this.b * this.c;
+
+    if (determinant === 0) {
+      this.a = Number.NaN;
+      this.b = Number.NaN;
+      this.c = Number.NaN;
+      this.d = Number.NaN;
+      this.e = Number.NaN;
+      this.f = Number.NaN;
+      return this;
+    }
+
+    const a = this.d / determinant;
+    const b = -this.b / determinant;
+    const c = -this.c / determinant;
+    const d = this.a / determinant;
+    const e = (this.c * this.f - this.d * this.e) / determinant;
+    const f = (this.b * this.e - this.a * this.f) / determinant;
+
+    this.a = a;
+    this.b = b;
+    this.c = c;
+    this.d = d;
+    this.e = e;
+    this.f = f;
+    return this;
+  }
+
+  toFloat32Array() {
+    return new Float32Array([
+      this.a,
+      this.b,
+      0,
+      0,
+      this.c,
+      this.d,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      this.e,
+      this.f,
+      0,
+      1,
+    ]);
+  }
+
+  private copyTo(target: NodePdfDomMatrix) {
+    target.a = this.a;
+    target.b = this.b;
+    target.c = this.c;
+    target.d = this.d;
+    target.e = this.e;
+    target.f = this.f;
+    return target;
+  }
+}
+
+function installPdfJsNodePolyfills() {
+  const globalObject = globalThis as typeof globalThis & {
+    DOMMatrix?: unknown;
+  };
+
+  if (!globalObject.DOMMatrix) {
+    globalObject.DOMMatrix = NodePdfDomMatrix as unknown as typeof DOMMatrix;
   }
 }
 
