@@ -25,6 +25,12 @@ import {
   DATA_INTELLIGENCE_EMPTY_TITLE,
   isSubmittableDataIntelligenceQuestion,
 } from "@/lib/data-intelligence-ui";
+import {
+  DATA_INTELLIGENCE_GENERIC_ERROR,
+  DATA_INTELLIGENCE_UNREADABLE_RESPONSE_ERROR,
+  parseDataIntelligencePayloadText,
+  readDataIntelligenceApiError,
+} from "@/lib/data-intelligence-api";
 import styles from "./data-intelligence-chat.module.css";
 
 type AssistantSource = {
@@ -94,11 +100,11 @@ type ChatMessage =
     };
 
 export const DATA_INTELLIGENCE_EXAMPLE_PROMPTS = [
-  "latest 401(k) snapshot for Christopher Bakken",
-  "rollover support phone for Christopher Bakken's 401(k)",
-  "what is Christopher T Bakken's DOB?",
-  "what address is on Christopher Bakken's latest ID?",
-  "do we have an unexpired driver's license on file for Christopher Bakken?",
+  "Do we have any statements for Christopher Bakken?",
+  "What is Christopher Bakken's latest checking balance?",
+  "What address is on Christopher Bakken's latest ID?",
+  "Does Christopher Bakken have an unexpired driver's license?",
+  "What is the rollover phone number for Christopher Bakken's 401(k)?",
 ] as const;
 
 export function DataIntelligenceChat() {
@@ -154,11 +160,16 @@ export function DataIntelligenceChat() {
         }),
       });
 
-      const payload = (await response.json()) as AssistantResult | { error?: unknown };
+      const responseText = await response.text();
+      const payload = parseDataIntelligencePayloadText(responseText);
 
       if (!response.ok || !isAssistantResult(payload)) {
-        const errorMessage = readErrorMessage(payload);
-        throw new Error(errorMessage ?? "The query assistant request failed.");
+        const errorMessage =
+          readDataIntelligenceApiError(payload) ??
+          (payload === null
+            ? DATA_INTELLIGENCE_UNREADABLE_RESPONSE_ERROR
+            : DATA_INTELLIGENCE_GENERIC_ERROR);
+        throw new Error(errorMessage);
       }
 
       setMessages((current) => [
@@ -184,7 +195,7 @@ export function DataIntelligenceChat() {
           error:
             requestError instanceof Error
               ? requestError.message
-              : "The query assistant request failed.",
+              : DATA_INTELLIGENCE_GENERIC_ERROR,
         },
       ]);
     } finally {
@@ -278,7 +289,7 @@ export function DataIntelligenceChat() {
                 </article>
               ) : (
                 <article className={styles.errorCard} key={message.id}>
-                  <p className={styles.statusBadge}>Request error</p>
+                  <p className={styles.statusBadge}>I hit a snag</p>
                   <p className={styles.answer}>{message.error}</p>
                 </article>
               ),
@@ -288,7 +299,7 @@ export function DataIntelligenceChat() {
               <div className={styles.loadingRow}>
                 <div className={styles.loadingCard}>
                   <span className={styles.loadingDot} />
-                  <span>Searching the firm document store...</span>
+                  <span>Reading the indexed documents...</span>
                 </div>
               </div>
             ) : null}
@@ -309,12 +320,14 @@ export function DataIntelligenceChat() {
                 void submitQuestion();
               }
             }}
-            placeholder="Ask about a latest statement, support contact, DOB, address, or license expiration."
+            placeholder="Ask a document question or follow up naturally..."
             rows={1}
             value={question}
           />
           <div className={styles.composerActions}>
-            <p className={styles.composerHint}>Statements and IDs for now.</p>
+            <p className={styles.composerHint}>
+              I will answer from indexed firm documents and show sources when available.
+            </p>
             <button
               aria-label="Send question"
               className={styles.submitButton}
@@ -628,11 +641,9 @@ function createMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function isAssistantResult(
-  value: AssistantResult | { error?: unknown },
-): value is AssistantResult {
+function isAssistantResult(value: unknown): value is AssistantResult {
   return (
-    Boolean(value) &&
+    value !== null &&
     typeof value === "object" &&
     "status" in value &&
     "title" in value &&
@@ -646,14 +657,6 @@ function isAssistantResult(
   );
 }
 
-function readErrorMessage(value: AssistantResult | { error?: unknown }) {
-  if (value && typeof value === "object" && "error" in value) {
-    return typeof value.error === "string" ? value.error : null;
-  }
-
-  return null;
-}
-
 function shouldRenderMetaHeader(result: AssistantResult) {
   return (
     result.presentation.mode === "ambiguity_prompt" ||
@@ -665,15 +668,15 @@ function shouldRenderMetaHeader(result: AssistantResult) {
 function labelForPresentationMode(mode: AssistantResult["presentation"]["mode"]) {
   switch (mode) {
     case "ambiguity_prompt":
-      return "Need more detail";
+      return "I need a bit more";
     case "not_found":
-      return "Not found";
+      return "I couldn't find it";
     case "unsupported":
-      return "Unsupported";
+      return "Try another question";
     case "summary_answer":
-      return "Summary";
+      return "Here's what I found";
     default:
-      return "Answer";
+      return "Found";
   }
 }
 
