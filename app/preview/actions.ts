@@ -271,7 +271,7 @@ export async function prepareReadyItemsFilingRedirect(
   if (mode === "auto") {
     const tab = preview.reviewCount > 0 ? "review" : "filed";
     return `/preview?tab=${tab}&notice=${encodeURIComponent(
-      `Auto-file rule moved ${result.succeededCount} high-confidence items and ${result.failedCount} failed.`,
+      `Auto-file moved ${result.succeededCount} high-confidence items and ${result.failedCount} failed.`,
     )}`;
   }
 

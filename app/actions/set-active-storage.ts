@@ -38,7 +38,7 @@ export async function setActiveStorageForPathAction(formData: FormData) {
 
 function normalizeReturnPath(raw: string) {
   if (!raw.startsWith("/") || raw.startsWith("//")) {
-    return "/setup?section=storage";
+    return "/setup?section=workspace";
   }
 
   return raw;

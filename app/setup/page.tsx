@@ -16,13 +16,26 @@ import { SetupForm } from "./setup-form";
 import styles from "./page.module.css";
 
 const validSections = new Set([
-  "general",
-  "storage",
-  "naming",
-  "intake",
-  "cleanup",
-  "security",
+  "workspace",
+  "rules",
+  "workflow",
+  "privacy",
 ]);
+
+type SettingsSectionId = "workspace" | "rules" | "workflow" | "privacy";
+
+const sectionAliases: Record<string, SettingsSectionId> = {
+  cleanup: "workflow",
+  general: "workspace",
+  intake: "workspace",
+  naming: "rules",
+  privacy: "privacy",
+  rules: "rules",
+  security: "privacy",
+  storage: "workspace",
+  workflow: "workflow",
+  workspace: "workspace",
+};
 
 export default async function SetupPage({
   searchParams,
@@ -30,15 +43,10 @@ export default async function SetupPage({
   searchParams?: Promise<{ dialog?: string; notice?: string; section?: string }>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const initialSection = validSections.has(resolvedSearchParams?.section ?? "")
-    ? (resolvedSearchParams?.section as
-        | "general"
-        | "storage"
-        | "naming"
-        | "intake"
-        | "cleanup"
-        | "security")
-    : "general";
+  const requestedSection = resolvedSearchParams?.section?.trim() ?? "";
+  const initialSection = validSections.has(requestedSection)
+    ? (requestedSection as SettingsSectionId)
+    : sectionAliases[requestedSection] ?? "workspace";
   const notice = resolvedSearchParams?.notice?.trim() || null;
   const initialDialog =
     resolvedSearchParams?.dialog === "data-handling"

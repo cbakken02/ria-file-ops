@@ -7,7 +7,7 @@ export default async function GoogleDriveSetupPage({
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const params = new URLSearchParams();
-  params.set("section", "storage");
+  params.set("section", "workspace");
 
   const notice = resolvedSearchParams?.notice?.trim();
   if (notice) {

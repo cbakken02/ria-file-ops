@@ -19,7 +19,7 @@ export function GoogleDriveConnectButton({
       onClick={() =>
         signIn(
           "google",
-          { callbackUrl: "/setup?section=storage" },
+          { callbackUrl: "/setup?section=workspace" },
           {
             access_type: "offline",
             include_granted_scopes: "true",

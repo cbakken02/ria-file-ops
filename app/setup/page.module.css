@@ -174,12 +174,131 @@
 
 .sectionStack,
 .cleanupGrid {
-  width: min(840px, 100%);
+  width: min(920px, 100%);
 }
 
 .sectionStack {
   display: grid;
-  gap: 16px;
+  gap: 30px;
+}
+
+.workspaceOverview {
+  width: min(920px, 100%);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  background: #292929;
+}
+
+.workspaceOverviewItem {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  padding: 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.workspaceOverviewItem:first-child {
+  border-left: 0;
+}
+
+.workspaceOverviewTopRow {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.workspaceOverviewLabel {
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.workspaceOverviewItem strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 0.98rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceOverviewItem p {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.workspaceStatus {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.workspaceStatus::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.workspaceStatusReady {
+  color: #83d6a0;
+}
+
+.workspaceStatusAttention {
+  color: #e2c36e;
+}
+
+.settingsGroup {
+  display: grid;
+  gap: 13px;
+}
+
+.settingsGroupHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.settingsGroupHeader h3 {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.settingsGroupHeader p {
+  margin-top: 5px;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.5;
+}
+
+.settingsGroupAction {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .builderSection,
@@ -880,7 +999,30 @@
   }
 
   .settingsNav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .settingsNavItem,
+  .activeSettingsNavItem {
+    justify-content: center;
+    min-height: 48px;
+    padding: 0 12px;
+    font-size: 0.96rem;
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  .workspaceOverview {
+    grid-template-columns: 1fr;
+  }
+
+  .workspaceOverviewItem {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 0;
+  }
+
+  .workspaceOverviewItem:first-child {
+    border-top: 0;
   }
 
   .helperGrid,
@@ -926,6 +1068,13 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .settingsNavItem,
+  .activeSettingsNavItem {
+    min-height: 46px;
+    padding: 0 10px;
+    font-size: 0.94rem;
+  }
+
   .folderRow {
     grid-template-columns: 1fr;
   }
@@ -937,6 +1086,15 @@
   .settingsPaneFooter {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .settingsGroupHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settingsGroupAction {
+    justify-content: flex-start;
   }
 
   .actions {
