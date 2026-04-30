@@ -108,6 +108,17 @@
   display: grid;
   gap: 14px;
   width: min(760px, 100%);
+}
+
+.assistantCard {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.errorCard,
+.loadingCard {
   padding: 14px 16px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.04);
@@ -150,7 +161,6 @@
   color: #f1c77e;
 }
 
-.assistantCard[data-tone="warning"],
 .errorCard {
   background: rgba(246, 196, 116, 0.05);
   border-color: rgba(246, 196, 116, 0.12);
@@ -161,6 +171,69 @@
   color: #ededed;
   font-size: 0.99rem;
   line-height: 1.7;
+}
+
+.safeMarkdown {
+  display: grid;
+  gap: 8px;
+}
+
+.safeMarkdown p,
+.safeMarkdown h2,
+.safeMarkdown h3,
+.safeMarkdown h4,
+.safeMarkdown ul,
+.safeMarkdown ol {
+  margin: 0;
+}
+
+.safeMarkdown h2,
+.safeMarkdown h3,
+.safeMarkdown h4 {
+  color: #f3f3f3;
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.safeMarkdown h2 {
+  font-size: 1.08rem;
+  line-height: 1.45;
+}
+
+.safeMarkdown h3 {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.safeMarkdown h4 {
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.safeMarkdown ul,
+.safeMarkdown ol {
+  display: grid;
+  gap: 4px;
+  padding-left: 20px;
+}
+
+.safeMarkdown strong {
+  color: inherit;
+  font-weight: 760;
+}
+
+.safeMarkdown em {
+  color: inherit;
+}
+
+.safeMarkdown code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.92em;
 }
 
 .followUp {
@@ -186,6 +259,104 @@
 .detailSection {
   display: grid;
   gap: 8px;
+}
+
+.structuredResponse {
+  display: grid;
+  gap: 14px;
+}
+
+.responseSections {
+  display: grid;
+  gap: 14px;
+}
+
+.responseSection {
+  display: grid;
+  gap: 6px;
+}
+
+.responseSectionTitle {
+  margin: 0;
+  color: #f0f0f0;
+  font-size: 0.95rem;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+}
+
+.responseSectionBody {
+  color: #d6d6d6;
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.responseSectionBody p,
+.responseSectionBody ul {
+  margin: 0;
+}
+
+.responseSectionBody ul {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+}
+
+.clarificationPanel {
+  display: grid;
+  gap: 9px;
+}
+
+.clarificationOptions {
+  display: grid;
+  gap: 8px;
+}
+
+.clarificationOption,
+.suggestionChip {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  color: #ededed;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.clarificationOption {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border-radius: 15px;
+  text-align: left;
+}
+
+.clarificationOption:hover,
+.suggestionChip:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.clarificationOption span {
+  font-weight: 650;
+}
+
+.clarificationOption small {
+  color: #a9a9a9;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.suggestionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestionChip {
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
 }
 
 .messageActionSection {
