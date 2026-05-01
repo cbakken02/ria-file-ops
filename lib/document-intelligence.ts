@@ -38,6 +38,7 @@ import {
   type AccountStatementClientSource,
 } from "@/lib/document-extractors/account-statement";
 import { extractIdentityDocument } from "@/lib/document-extractors/identity-document";
+import { extractMoneyMovementForm } from "@/lib/document-extractors/money-movement-form";
 import {
   extractTaxDocument,
   type TaxDocumentTaxIdentifier,
@@ -1400,6 +1401,26 @@ function classifyTextAnalysisContext(
 
   if (
     includesAny(context.lowerText, [
+      "standing payment",
+      "wire instructions",
+      "money movement",
+      "electronic funds transfer",
+      "journal request",
+      "ach authorization",
+    ])
+  ) {
+    documentLabel = "Money movement form";
+    documentSubtype = null;
+    documentTypeId = "money_movement_form";
+    filenameLabel = "Money_Movement";
+    topLevelFolder = "Money Movement";
+    confidence = 0.88;
+    documentSignal = "Matched money movement keywords in document text.";
+    context.reasons.unshift(
+      "Actual document text suggests this is a money movement or transfer form.",
+    );
+  } else if (
+    includesAny(context.lowerText, [
       "account statement",
       "account summary",
       "portfolio summary",
@@ -1572,6 +1593,23 @@ function runTextAnalysisExtraction(
           },
         })
       : null;
+  const moneyMovementOverlay =
+    classification.documentTypeId === "money_movement_form"
+      ? extractMoneyMovementForm({
+          file: context.file,
+          rawText: context.rawText,
+          normalizedText: context.normalizedText,
+          fields: context.fields,
+          metadata: genericMetadata,
+          helpers: {
+            extractClientNameFromFields,
+            extractClientNameFromText,
+            extractJointClientNamesFromFields,
+            extractJointClientNames,
+            normalizeWhitespace,
+          },
+        })
+      : null;
   const identityDocumentOverlay =
     classification.documentTypeId === "identity_document"
       ? extractIdentityDocument({
@@ -1608,21 +1646,26 @@ function runTextAnalysisExtraction(
 
   const resolvedClient =
     accountStatementOverlay?.detectedClient ??
+    moneyMovementOverlay?.detectedClient ??
     identityDocumentOverlay?.detectedClient ??
     taxDocumentOverlay?.detectedClient ??
     detectedClient;
   const resolvedClient2 =
     accountStatementOverlay?.detectedClient2 ??
+    moneyMovementOverlay?.detectedClient2 ??
     detectedClient2;
   const resolvedMetadata = {
     accountLast4:
       accountStatementOverlay?.accountLast4 ??
+      moneyMovementOverlay?.accountLast4 ??
       genericMetadata.accountLast4,
     accountType:
       accountStatementOverlay?.accountType ??
+      moneyMovementOverlay?.accountType ??
       genericMetadata.accountType,
     custodian:
       accountStatementOverlay?.custodian ??
+      moneyMovementOverlay?.custodian ??
       taxDocumentOverlay?.custodian ??
       genericMetadata.custodian,
     documentDate:
@@ -5624,6 +5667,24 @@ function analyzeFromMetadata(
   const reasons: string[] = [];
 
   if (
+    includesAny(lowerName, [
+      "wire",
+      "ach",
+      "journal",
+      "standing payment",
+      "money movement",
+      "transfer",
+    ])
+  ) {
+    documentLabel = "Money movement form";
+    documentSubtype = null;
+    documentTypeId = "money_movement_form";
+    filenameLabel = "Money_Movement";
+    topLevelFolder = "Money Movement";
+    confidence = 0.82;
+    documentSignal = "Filename matched money movement terms.";
+    reasons.push("Filename suggests a transfer or standing payment workflow.");
+  } else if (
     includesAny(lowerName, [
       "statement",
       "schwab",
