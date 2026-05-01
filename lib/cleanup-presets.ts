@@ -17,11 +17,6 @@ export const CLEANUP_DOCUMENT_PRESETS = [
     topLevelFolder: "Client Info",
   },
   {
-    label: "Tax return",
-    filenameToken: "Tax_Return",
-    topLevelFolder: "Tax",
-  },
-  {
     label: "Tax document",
     filenameToken: "Tax_Document",
     topLevelFolder: "Tax",
@@ -86,7 +81,7 @@ export function getCleanupTopLevelFolderForDocumentType(label: string) {
   if (documentTypeId === "identity_document") {
     return "Client Info";
   }
-  if (documentTypeId === "tax_return" || documentTypeId === "tax_document") {
+  if (documentTypeId === "tax_document") {
     return "Tax";
   }
   if (documentTypeId === "planning_document" || documentTypeId === "legal_document") {

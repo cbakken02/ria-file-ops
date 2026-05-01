@@ -31,6 +31,7 @@ import {
   type CanonicalFieldProvenance,
   type CanonicalNormalizationRecord,
   type CanonicalSourceRef,
+  type CanonicalTaxFact,
 } from "@/lib/canonical-extracted-document";
 import {
   extractAccountStatement,
@@ -38,18 +39,26 @@ import {
 } from "@/lib/document-extractors/account-statement";
 import { extractIdentityDocument } from "@/lib/document-extractors/identity-document";
 import {
+  extractTaxDocument,
+  type TaxDocumentTaxIdentifier,
+} from "@/lib/document-extractors/tax-document";
+import {
   collectAnchoredLines,
   extractFirstPageText,
   getHeaderZoneLines,
 } from "@/lib/document-extractors/shared-text-zones";
 import type { GoogleDriveFile } from "@/lib/google-drive";
+import {
+  detectTaxDocumentSubtype,
+  getTaxDocumentSubtypeLabel,
+  normalizeTaxDocumentSubtype,
+} from "@/lib/tax-document-types";
 
 export type DocumentInsight = {
   documentTypeId:
     | "default"
     | "account_statement"
     | "money_movement_form"
-    | "tax_return"
     | "tax_document"
     | "identity_document"
     | "planning_document"
@@ -61,6 +70,7 @@ export type DocumentInsight = {
   detectedClient2: string | null;
   ownershipType: "single" | "joint";
   documentLabel: string;
+  documentSubtype: string | null;
   filenameLabel: string;
   topLevelFolder: string;
   confidence: number;
@@ -118,7 +128,7 @@ export type PdfExtractionAttempt = {
 };
 
 const execFileAsync = promisify(execFile);
-const PARSER_VERSION = "2026-04-27-vercel-js-pdf-form-fields-1";
+const PARSER_VERSION = "2026-04-28-tax-document-v2-facts-1";
 export const DOCUMENT_ANALYSIS_VERSION = PARSER_VERSION;
 
 type AnalysisExecutionOptions = {
@@ -157,6 +167,7 @@ type TextAnalysisContext = {
 type TextAnalysisClassification = {
   documentTypeId: DocumentInsight["documentTypeId"];
   documentLabel: string;
+  documentSubtype: string | null;
   filenameLabel: string;
   topLevelFolder: string;
   confidence: number;
@@ -1232,6 +1243,20 @@ export async function analyzeTextContentWithEnvelope(
   const legacyClassification = classifyTextAnalysisContext(context);
   const legacyExtraction = runTextAnalysisExtraction(context, legacyClassification);
 
+  const taxCanonical = buildCanonicalTaxDocument({
+    context,
+    legacyClassification,
+    legacyExtraction,
+    analysisProfile: options.analysisProfile ?? "legacy",
+  });
+
+  if (taxCanonical) {
+    return {
+      canonical: taxCanonical,
+      legacyInsight: adaptCanonicalToLegacyDocumentInsight(taxCanonical),
+    };
+  }
+
   if (
     options.analysisProfile === "preview_ai_primary" &&
     shouldAttemptAIPrimaryAccountStatement(context, legacyClassification)
@@ -1366,6 +1391,7 @@ function classifyTextAnalysisContext(
   context: TextAnalysisContext,
 ): TextAnalysisClassification {
   let documentLabel = context.metadataFallback.documentLabel;
+  let documentSubtype = context.metadataFallback.documentSubtype;
   let documentTypeId = context.metadataFallback.documentTypeId;
   let filenameLabel = context.metadataFallback.filenameLabel;
   let topLevelFolder = context.metadataFallback.topLevelFolder;
@@ -1384,9 +1410,11 @@ function classifyTextAnalysisContext(
       "fidelity",
       "pershing",
       "statement",
-    ])
+    ]) &&
+    !hasStrongTaxDocumentSignal(context.lowerText)
   ) {
     documentLabel = "Account statement";
+    documentSubtype = null;
     documentTypeId = "account_statement";
     filenameLabel = "Account_Statement";
     topLevelFolder = "Accounts";
@@ -1395,48 +1423,43 @@ function classifyTextAnalysisContext(
     context.reasons.unshift("Actual document text suggests this is an account statement.");
   } else if (
     includesAny(context.lowerText, [
-      "tax return",
-      "form 1040",
-      "u.s. individual income tax return",
-    ])
-  ) {
-    documentLabel = "Tax return";
-    documentTypeId = "tax_return";
-    filenameLabel = "Tax_Return";
-    topLevelFolder = "Tax";
-    confidence = 0.84;
-    documentSignal = "Matched tax-return text (1040 / tax return).";
-    context.reasons.unshift("Actual document text suggests this is a tax return.");
-  } else if (
-    includesAny(context.lowerText, [
       "tax",
+      "tax return",
       "1099",
       "w-2",
       "w2",
       "taxpayer",
       "capital gains",
       "qualified dividends",
+      "form 1040",
+      "u.s. individual income tax return",
+      "extension",
+      "estimated tax",
+      "schedule k-1",
     ])
   ) {
-    const specificTaxDocumentLabel = extractTaxDocumentLabel(
+    const taxSubtype = detectTaxDocumentSubtype(
       context.normalizedText,
       context.file.name,
     );
-    documentLabel = specificTaxDocumentLabel ?? "Tax document";
+    const specificTaxDocumentLabel = getTaxDocumentSubtypeLabel(taxSubtype);
+    documentLabel = "Tax document";
+    documentSubtype = taxSubtype;
     documentTypeId = "tax_document";
     filenameLabel = specificTaxDocumentLabel ?? "Tax_Document";
     topLevelFolder = "Tax";
-    confidence = specificTaxDocumentLabel ? 0.84 : 0.8;
+    confidence = taxSubtype !== "unknown_tax_document" ? 0.84 : 0.8;
     documentSignal = specificTaxDocumentLabel
-      ? `Matched tax-form text: ${specificTaxDocumentLabel}.`
+      ? `Matched tax-document text: ${specificTaxDocumentLabel}.`
       : "Matched tax-document keywords in document text.";
     context.reasons.unshift(
       specificTaxDocumentLabel
-        ? `Actual document text suggests this is a ${specificTaxDocumentLabel}.`
+        ? `Actual document text suggests this is a ${specificTaxDocumentLabel} tax document.`
         : "Actual document text suggests this is a tax document.",
     );
   } else if (isLikelyIdentityDocumentText(context.lowerText)) {
     documentLabel = "Identity document";
+    documentSubtype = null;
     documentTypeId = "identity_document";
     filenameLabel = "Client_ID";
     topLevelFolder = "Client Info";
@@ -1455,6 +1478,7 @@ function classifyTextAnalysisContext(
     ])
   ) {
     documentLabel = "Planning / advice document";
+    documentSubtype = null;
     documentTypeId = "planning_document";
     filenameLabel = "Planning_Document";
     topLevelFolder = "Planning";
@@ -1471,6 +1495,7 @@ function classifyTextAnalysisContext(
   return {
     documentTypeId,
     documentLabel,
+    documentSubtype,
     filenameLabel,
     topLevelFolder,
     confidence,
@@ -1562,10 +1587,29 @@ function runTextAnalysisExtraction(
           },
         })
       : null;
+  const taxDocumentOverlay =
+    classification.documentTypeId === "tax_document"
+      ? extractTaxDocument({
+          file: context.file,
+          rawText: context.rawText,
+          normalizedText: context.normalizedText,
+          fields: context.fields,
+          metadata: genericMetadata,
+          helpers: {
+            extractClientNameFromFields,
+            extractClientNameFromText,
+            extractCustodian,
+            extractTaxYear,
+            extractDocumentDate,
+            normalizeWhitespace,
+          },
+        })
+      : null;
 
   const resolvedClient =
     accountStatementOverlay?.detectedClient ??
     identityDocumentOverlay?.detectedClient ??
+    taxDocumentOverlay?.detectedClient ??
     detectedClient;
   const resolvedClient2 =
     accountStatementOverlay?.detectedClient2 ??
@@ -1579,15 +1623,18 @@ function runTextAnalysisExtraction(
       genericMetadata.accountType,
     custodian:
       accountStatementOverlay?.custodian ??
+      taxDocumentOverlay?.custodian ??
       genericMetadata.custodian,
     documentDate:
-      accountStatementOverlay?.documentDate ?? genericMetadata.documentDate,
+      accountStatementOverlay?.documentDate ??
+      taxDocumentOverlay?.documentDate ??
+      genericMetadata.documentDate,
     entityName: genericMetadata.entityName,
     idType:
       classification.documentTypeId === "account_statement"
         ? null
         : identityDocumentOverlay?.idType ?? genericMetadata.idType,
-    taxYear: genericMetadata.taxYear,
+    taxYear: taxDocumentOverlay?.taxYear ?? genericMetadata.taxYear,
   } satisfies DocumentInsight["metadata"];
   const hasSpecializedJointOwners =
     classification.documentTypeId === "account_statement" &&
@@ -2479,6 +2526,412 @@ function buildCanonicalIdentityDocument(input: {
   });
 
   return finalizeCanonicalExtractedDocument(canonicalDraft);
+}
+
+type CanonicalTaxEvidence = {
+  subtype: string;
+  subtypeLabel: string;
+  rawClient: string | null;
+  displayClient: string | null;
+  rawCustodian: string | null;
+  normalizedCustodian: string | null;
+  taxYear: string | null;
+  documentDate: string | null;
+  taxIdentifier: TaxDocumentTaxIdentifier | null;
+  taxFacts: CanonicalTaxFact[];
+};
+
+function buildCanonicalTaxDocument(input: {
+  context: TextAnalysisContext;
+  legacyClassification: TextAnalysisClassification;
+  legacyExtraction: TextAnalysisExtraction;
+  analysisProfile: AnalysisProfile;
+}): CanonicalExtractedDocument | null {
+  if (input.legacyClassification.documentTypeId !== "tax_document") {
+    return null;
+  }
+
+  const taxEvidence = extractCanonicalTaxEvidence(input);
+  const sourceRefs: CanonicalSourceRef[] = [];
+  const subtypeSourceRefId = pushSourceRef(sourceRefs, {
+    kind: "logic_field",
+    fieldPath: "classification.normalized.documentSubtype",
+    label: "Tax document subtype",
+    value: taxEvidence.subtypeLabel,
+  });
+  const rawClientSourceRefId = pushSourceRef(sourceRefs, {
+    kind: "logic_field",
+    fieldPath: "extracted.parties[0].rawName",
+    label: "Tax document client",
+    value: taxEvidence.rawClient,
+  });
+  const rawCustodianSourceRefId = pushSourceRef(sourceRefs, {
+    kind: "logic_field",
+    fieldPath: "extracted.institutions[0].rawName",
+    label: "Tax document payer or issuer",
+    value: taxEvidence.rawCustodian,
+  });
+  const rawTaxYearSourceRefId = pushSourceRef(sourceRefs, {
+    kind: "logic_field",
+    fieldPath: "extracted.documentFacts.taxYear",
+    label: "Tax year",
+    value: taxEvidence.taxYear,
+  });
+  const rawDocumentDateSourceRefId = pushSourceRef(sourceRefs, {
+    kind: "logic_field",
+    fieldPath: "extracted.dates[0].rawValue",
+    label: "Tax document date",
+    value: taxEvidence.documentDate,
+  });
+  const rawTaxIdentifierSourceRefId = pushSourceRef(sourceRefs, {
+    kind: "logic_field",
+    fieldPath: "extracted.parties[0].taxIdentifiers[0].value",
+    label: "Tax document taxpayer identifier",
+    value: taxEvidence.taxIdentifier?.value ?? null,
+  });
+  const taxFactSourceRefIds = taxEvidence.taxFacts.map((fact, index) =>
+    pushSourceRef(sourceRefs, {
+      kind: "logic_field",
+      fieldPath: `extracted.taxFacts[${index}].rawValue`,
+      label: `${fact.form ?? "Tax"} ${fact.label}`,
+      value: fact.rawValue,
+    }),
+  );
+
+  const extractedDates = taxEvidence.documentDate
+    ? [
+        {
+          id: "date-1",
+          kind: "document_date" as const,
+          value: taxEvidence.documentDate,
+          rawValue: taxEvidence.documentDate,
+          entityType: "document" as const,
+          entityId: null,
+        },
+      ]
+    : [];
+  const extractedParties = taxEvidence.rawClient
+    ? [
+        {
+          id: "party-1",
+          kind: "person" as const,
+          displayName: taxEvidence.rawClient,
+          rawName: taxEvidence.rawClient,
+          addresses: [],
+          birthDateId: null,
+          taxIdentifiers: taxEvidence.taxIdentifier ? [taxEvidence.taxIdentifier] : [],
+          governmentIds: [],
+        },
+      ]
+    : [];
+  const normalizedParties = taxEvidence.displayClient
+    ? [
+        {
+          id: "party-1",
+          kind: "person" as const,
+          displayName: taxEvidence.displayClient,
+          rawName: taxEvidence.rawClient,
+          addresses: [],
+          birthDateId: null,
+          taxIdentifiers: taxEvidence.taxIdentifier ? [taxEvidence.taxIdentifier] : [],
+          governmentIds: [],
+        },
+      ]
+    : [];
+  const extractedInstitutions = taxEvidence.rawCustodian
+    ? [
+        {
+          id: "institution-1",
+          name: taxEvidence.rawCustodian,
+          rawName: taxEvidence.rawCustodian,
+          addresses: [],
+        },
+      ]
+    : [];
+  const normalizedInstitutions = taxEvidence.normalizedCustodian
+    ? [
+        {
+          id: "institution-1",
+          name: taxEvidence.normalizedCustodian,
+          rawName: taxEvidence.rawCustodian,
+          addresses: [],
+        },
+      ]
+    : [];
+  const canonicalDraft: CanonicalExtractedDocumentDraft = {
+    source: {
+      file: {
+        fileId: input.context.file.id,
+        sourceName: input.context.file.name,
+        mimeType: input.context.file.mimeType,
+        modifiedTime: input.context.file.modifiedTime ?? null,
+        driveSize: input.context.file.size ?? null,
+        downloadByteLength: input.context.downloadFingerprint?.byteLength ?? null,
+        downloadSha1: input.context.downloadFingerprint?.sha1 ?? null,
+      },
+      extraction: {
+        contentSource: input.context.contentSource,
+        pdfFields: input.context.pdfFields,
+        pdfFieldReaders: input.context.pdfFieldReaders,
+        pdfExtractionAttempts: input.context.pdfExtractionAttempts,
+      },
+    },
+    classification: {
+      extracted: {
+        documentTypeId: "tax_document",
+        documentSubtype: taxEvidence.subtype,
+      },
+      normalized: {
+        documentTypeId: "tax_document",
+        documentSubtype: taxEvidence.subtype,
+      },
+    },
+    extracted: {
+      parties: extractedParties,
+      accounts: [],
+      accountParties: [],
+      institutions: extractedInstitutions,
+      contacts: [],
+      dates: extractedDates,
+      documentFacts: {
+        entityName: null,
+        idType: taxEvidence.subtypeLabel,
+        taxYear: taxEvidence.taxYear,
+      },
+      taxFacts: taxEvidence.taxFacts,
+    },
+    normalized: {
+      parties: normalizedParties,
+      accounts: [],
+      accountParties: [],
+      institutions: normalizedInstitutions,
+      contacts: [],
+      dates: extractedDates.map((date) => ({ ...date })),
+      documentFacts: {
+        entityName: null,
+        idType: taxEvidence.subtypeLabel,
+        taxYear: taxEvidence.taxYear,
+      },
+      taxFacts: taxEvidence.taxFacts.map((fact) => ({ ...fact })),
+    },
+    provenance: {
+      fields: {},
+      normalization: [],
+      sourceRefs,
+    },
+    diagnostics: {
+      parserVersion: PARSER_VERSION,
+      parserConflictSummary: input.context.parserConflictSummary,
+      documentSignal:
+        input.legacyClassification.documentSignal ??
+        `Tax document canonical path recognized ${taxEvidence.subtypeLabel}.`,
+      reasons: [
+        ...input.context.reasons,
+        `Tax document canonical path recognized ${taxEvidence.subtypeLabel}.`,
+      ],
+      textExcerpt: input.context.textExcerpt,
+      diagnosticText: input.context.diagnosticText,
+      statementClientSource: null,
+      statementClientCandidate: null,
+      ownershipClientCandidate: input.context.ownershipClientCandidate,
+      accountContextCandidate: input.context.accountContextCandidate,
+      accountLooseCandidate: input.context.accountLooseCandidate,
+      taxKeywordDetected: input.context.taxKeywordDetected,
+      yearCandidates: input.context.yearCandidates,
+      ai: {
+        enabled: input.analysisProfile === "preview_ai_primary",
+        attempted: false,
+        used: false,
+        model: null,
+        promptVersion: null,
+        failureReason:
+          input.analysisProfile === "preview_ai_primary"
+            ? "Skipped: Phase 1 AI parser only runs for likely account statements with usable text."
+            : null,
+        rawSummary: null,
+      },
+    },
+  };
+
+  assignCanonicalFieldProvenance(
+    canonicalDraft.provenance.fields,
+    "classification.normalized.documentTypeId",
+    {
+      owner: "logic",
+      source: "tax_document_canonical_path",
+      confidence: 0.9,
+      raw: "tax_document",
+    },
+  );
+  assignCanonicalFieldProvenance(
+    canonicalDraft.provenance.fields,
+    "classification.normalized.documentSubtype",
+    {
+      owner: "logic",
+      source: "tax_document_subtype",
+      confidence: taxEvidence.subtype === "unknown_tax_document" ? 0.72 : 0.9,
+      raw: taxEvidence.subtypeLabel,
+    },
+    [subtypeSourceRefId],
+  );
+  if (taxEvidence.rawClient) {
+    assignCanonicalFieldProvenance(
+      canonicalDraft.provenance.fields,
+      "normalized.parties[0].displayName",
+      {
+        owner: "logic",
+        source: "tax_document_client",
+        confidence: 0.84,
+        raw: taxEvidence.rawClient,
+      },
+      [rawClientSourceRefId],
+    );
+  }
+  if (taxEvidence.normalizedCustodian) {
+    assignCanonicalFieldProvenance(
+      canonicalDraft.provenance.fields,
+      "normalized.institutions[0].name",
+      {
+        owner: "logic",
+        source: "tax_document_payer_or_issuer",
+        confidence: 0.82,
+        raw: taxEvidence.rawCustodian,
+      },
+      [rawCustodianSourceRefId],
+    );
+  }
+  if (taxEvidence.taxYear) {
+    assignCanonicalFieldProvenance(
+      canonicalDraft.provenance.fields,
+      "normalized.documentFacts.taxYear",
+      {
+        owner: "logic",
+        source: "tax_document_tax_year",
+        confidence: 0.9,
+        raw: taxEvidence.taxYear,
+      },
+      [rawTaxYearSourceRefId],
+    );
+  }
+  assignCanonicalFieldProvenance(
+    canonicalDraft.provenance.fields,
+    "normalized.documentFacts.idType",
+    {
+      owner: "logic",
+      source: "tax_document_subtype_label",
+      confidence: 0.86,
+      raw: taxEvidence.subtypeLabel,
+    },
+    [subtypeSourceRefId],
+  );
+  if (taxEvidence.documentDate) {
+    assignCanonicalFieldProvenance(
+      canonicalDraft.provenance.fields,
+      "normalized.dates[0].value",
+      {
+        owner: "logic",
+        source: "tax_document_date",
+        confidence: 0.82,
+        raw: taxEvidence.documentDate,
+      },
+      [rawDocumentDateSourceRefId],
+    );
+  }
+  if (taxEvidence.taxIdentifier) {
+    assignCanonicalFieldProvenance(
+      canonicalDraft.provenance.fields,
+      "normalized.parties[0].taxIdentifiers[0].value",
+      {
+        owner: "logic",
+        source: "tax_document_taxpayer_identifier",
+        confidence: 0.82,
+        raw: taxEvidence.taxIdentifier.value,
+      },
+      [rawTaxIdentifierSourceRefId],
+    );
+  }
+  taxEvidence.taxFacts.forEach((fact, index) => {
+    assignCanonicalFieldProvenance(
+      canonicalDraft.provenance.fields,
+      `normalized.taxFacts[${index}].value`,
+      {
+        owner: "logic",
+        source: "tax_document_line_or_box_fact",
+        confidence: fact.value ? 0.84 : 0.72,
+        raw: fact.rawValue,
+      },
+      [taxFactSourceRefIds[index] ?? null],
+    );
+
+    if (fact.money?.amount) {
+      assignCanonicalFieldProvenance(
+        canonicalDraft.provenance.fields,
+        `normalized.taxFacts[${index}].money.amount`,
+        {
+          owner: "logic",
+          source: "tax_document_line_or_box_fact",
+          confidence: 0.84,
+          raw: fact.rawValue,
+        },
+        [taxFactSourceRefIds[index] ?? null],
+      );
+    }
+  });
+
+  return finalizeCanonicalExtractedDocument(canonicalDraft);
+}
+
+function extractCanonicalTaxEvidence(input: {
+  context: TextAnalysisContext;
+  legacyClassification: TextAnalysisClassification;
+  legacyExtraction: TextAnalysisExtraction;
+}): CanonicalTaxEvidence {
+  const taxOverlay = extractTaxDocument({
+    file: input.context.file,
+    rawText: input.context.rawText,
+    normalizedText: input.context.normalizedText,
+    fields: input.context.fields,
+    metadata: input.legacyExtraction.metadata,
+    helpers: {
+      extractClientNameFromFields,
+      extractClientNameFromText,
+      extractCustodian,
+      extractTaxYear,
+      extractDocumentDate,
+      normalizeWhitespace,
+    },
+  });
+  const subtype =
+    normalizeTaxDocumentSubtype(input.legacyClassification.documentSubtype) ??
+    detectTaxDocumentSubtype(input.context.normalizedText, input.context.file.name);
+  const subtypeLabel = getTaxDocumentSubtypeLabel(subtype) ?? "Tax Document";
+  const rawClient =
+    normalizeAIFreeText(taxOverlay.detectedClient) ??
+    normalizeAIFreeText(input.legacyExtraction.detectedClient) ??
+    null;
+  const displayClient = rawClient ? toTitleCaseWords(rawClient) : null;
+  const rawCustodian =
+    normalizeAIFreeText(taxOverlay.custodian) ??
+    normalizeAIFreeText(input.legacyExtraction.metadata.custodian) ??
+    null;
+  const normalizedCustodian = normalizeAccountStatementCustodian(rawCustodian);
+  const documentDate =
+    sanitizeAIDocumentDate(taxOverlay.documentDate) ??
+    sanitizeAIDocumentDate(input.legacyExtraction.metadata.documentDate) ??
+    null;
+
+  return {
+    subtype,
+    subtypeLabel,
+    rawClient,
+    displayClient,
+    rawCustodian,
+    normalizedCustodian: normalizedCustodian.finalValue ?? rawCustodian,
+    taxYear: taxOverlay.taxYear ?? input.legacyExtraction.metadata.taxYear ?? null,
+    documentDate,
+    taxIdentifier: taxOverlay.taxIdentifier ?? null,
+    taxFacts: taxOverlay.taxFacts ?? [],
+  };
 }
 
 function extractCanonicalIdentityEvidence(
@@ -4970,10 +5423,7 @@ function finalizeTextAnalysisInsight(
   let taxYear = extraction.metadata.taxYear;
   let entityName = extraction.metadata.entityName;
 
-  if (
-    classification.documentTypeId !== "tax_return" &&
-    classification.documentTypeId !== "tax_document"
-  ) {
+  if (classification.documentTypeId !== "tax_document") {
     taxYear = null;
   }
 
@@ -5001,6 +5451,7 @@ function finalizeTextAnalysisInsight(
     ownershipType: extraction.ownershipType,
     documentTypeId: classification.documentTypeId,
     documentLabel: classification.documentLabel,
+    documentSubtype: classification.documentSubtype,
     filenameLabel: classification.filenameLabel,
     topLevelFolder: classification.topLevelFolder,
     confidence,
@@ -5164,6 +5615,7 @@ function analyzeFromMetadata(
   const name = file.name;
   const lowerName = name.toLowerCase();
   let documentLabel = "Needs inspection";
+  let documentSubtype: string | null = null;
   let documentTypeId: DocumentInsight["documentTypeId"] = "default";
   let filenameLabel = "Review_Item";
   let topLevelFolder = "Review";
@@ -5180,9 +5632,11 @@ function analyzeFromMetadata(
       "account",
       "custodian",
       "brokerage",
-    ])
+    ]) &&
+    !hasStrongTaxDocumentSignal(lowerName)
   ) {
     documentLabel = "Account statement";
+    documentSubtype = null;
     documentTypeId = "account_statement";
     filenameLabel = "Account_Statement";
     topLevelFolder = "Accounts";
@@ -5201,37 +5655,47 @@ function analyzeFromMetadata(
     file.mimeType.startsWith("image/")
   ) {
     documentLabel = "Identity document";
+    documentSubtype = null;
     documentTypeId = "identity_document";
     filenameLabel = "Client_ID";
     topLevelFolder = "Client Info";
     confidence = file.mimeType.startsWith("image/") ? 0.58 : 0.76;
     documentSignal = "Filename or image type matched identity-document terms.";
     reasons.push("This looks like an image or personal identity document.");
-  } else if (includesAny(lowerName, ["tax return", "1040", "return"])) {
-    documentLabel = "Tax return";
-    documentTypeId = "tax_return";
-    filenameLabel = "Tax_Return";
-    topLevelFolder = "Tax";
-    confidence = 0.76;
-    documentSignal = "Filename matched tax-return terms.";
-    reasons.push("Filename suggests a tax return.");
-  } else if (includesAny(lowerName, ["tax", "1099", "w2", "w-2"])) {
-    const specificTaxDocumentLabel = extractTaxDocumentLabel(name, name);
-    documentLabel = specificTaxDocumentLabel ?? "Tax document";
+  } else if (
+    includesAny(lowerName, [
+      "tax",
+      "tax return",
+      "1040",
+      "return",
+      "1099",
+      "1098",
+      "w2",
+      "w-2",
+      "k-1",
+      "extension",
+      "estimated",
+    ])
+  ) {
+    const taxSubtype = detectTaxDocumentSubtype(name, name);
+    const specificTaxDocumentLabel = getTaxDocumentSubtypeLabel(taxSubtype);
+    documentLabel = "Tax document";
+    documentSubtype = taxSubtype;
     documentTypeId = "tax_document";
     filenameLabel = specificTaxDocumentLabel ?? "Tax_Document";
     topLevelFolder = "Tax";
-    confidence = 0.75;
+    confidence = taxSubtype !== "unknown_tax_document" ? 0.76 : 0.75;
     documentSignal = specificTaxDocumentLabel
-      ? `Filename matched tax-form text: ${specificTaxDocumentLabel}.`
+      ? `Filename matched tax-document text: ${specificTaxDocumentLabel}.`
       : "Filename matched tax-document terms.";
     reasons.push(
       specificTaxDocumentLabel
-        ? `Filename suggests this is a ${specificTaxDocumentLabel}.`
+        ? `Filename suggests this is a ${specificTaxDocumentLabel} tax document.`
         : "Filename suggests a tax document.",
     );
   } else if (includesAny(lowerName, ["meeting", "plan", "notes", "advice"])) {
     documentLabel = "Planning / advice document";
+    documentSubtype = null;
     documentTypeId = "planning_document";
     filenameLabel = "Planning_Document";
     topLevelFolder = "Planning";
@@ -5272,6 +5736,7 @@ function analyzeFromMetadata(
     ownershipType,
     documentTypeId,
     documentLabel,
+    documentSubtype,
     filenameLabel,
     topLevelFolder,
     confidence: Math.max(0.18, Math.min(0.96, confidence)),
@@ -5721,30 +6186,6 @@ function extractCustodian(text: string, fallbackText: string) {
   if (source.includes("vanguard")) {
     return "Vanguard";
   }
-  return null;
-}
-
-function extractTaxDocumentLabel(text: string, fallbackText: string) {
-  const source = `${text} ${fallbackText}`;
-  const patterns: Array<[RegExp, string]> = [
-    [/\b1099[-\s]?da\b/i, "1099-DA"],
-    [/\b1099[-\s]?div\b/i, "1099-DIV"],
-    [/\b1099[-\s]?int\b/i, "1099-INT"],
-    [/\b1099[-\s]?misc\b/i, "1099-MISC"],
-    [/\b1099[-\s]?nec\b/i, "1099-NEC"],
-    [/\b1099[-\s]?b\b/i, "1099-B"],
-    [/\b1099[-\s]?r\b/i, "1099-R"],
-    [/\b1098\b/i, "1098"],
-    [/\bw[-\s]?2\b/i, "W-2"],
-    [/\bk[-\s]?1\b/i, "K-1"],
-  ];
-
-  for (const [pattern, label] of patterns) {
-    if (pattern.test(source)) {
-      return label;
-    }
-  }
-
   return null;
 }
 
@@ -6432,6 +6873,19 @@ function normalizeWhitespace(value: string) {
 
 function includesAny(value: string, keywords: string[]) {
   return keywords.some((keyword) => value.includes(keyword));
+}
+
+function hasStrongTaxDocumentSignal(value: string) {
+  return (
+    /\bform\s+1040\b/i.test(value) ||
+    /\b1040x\b/i.test(value) ||
+    /\b1099(?:[-\s]?[a-z]+)?\b/i.test(value) ||
+    /\b1098\b/i.test(value) ||
+    /\bw[-\s]?2\b/i.test(value) ||
+    /\bk[-\s]?1\b/i.test(value) ||
+    /\bschedule\s+k[-\s]?1\b/i.test(value) ||
+    /\btaxpayer\b/i.test(value)
+  );
 }
 
 function toTitleCase(value: string) {

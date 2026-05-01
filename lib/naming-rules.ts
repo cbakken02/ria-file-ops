@@ -1,3 +1,9 @@
+import {
+  TAX_DOCUMENT_SUBTYPES,
+  getTaxDocumentSubtypeLabel,
+  normalizeTaxDocumentSubtype,
+} from "@/lib/tax-document-types";
+
 export type NamingTokenId =
   | "last_name"
   | "first_name"
@@ -16,7 +22,6 @@ export type NamingRuleDocumentType =
   | "default"
   | "account_statement"
   | "money_movement_form"
-  | "tax_return"
   | "tax_document"
   | "identity_document"
   | "planning_document"
@@ -97,20 +102,7 @@ const DOCUMENT_SUBTYPE_OPTIONS: Partial<Record<NamingRuleDocumentType, string[]>
     "Transfer form",
     "Standing letter",
   ],
-  tax_return: ["1040", "1040X", "State return", "Extension", "Estimated payment"],
-  tax_document: [
-    "1099",
-    "1099-DA",
-    "1099-DIV",
-    "1099-INT",
-    "1099-B",
-    "1099-R",
-    "1099-MISC",
-    "1099-NEC",
-    "1098",
-    "W-2",
-    "K-1",
-  ],
+  tax_document: [...TAX_DOCUMENT_SUBTYPES],
   identity_document: [
     "Driver License",
     "Passport",
@@ -258,33 +250,6 @@ export const NAMING_RULE_DEFINITIONS: Record<
       ownershipType: "joint",
     },
   },
-  tax_return: {
-    label: "Tax return",
-    supportedTokens: [
-      "last_name",
-      "first_name",
-      "client2_last_name",
-      "client2_first_name",
-      "document_type",
-      "tax_year",
-      "document_date",
-    ],
-    defaultTokens: [
-      "last_name",
-      "first_name",
-      "client2_first_name",
-      "document_type",
-      "tax_year",
-    ],
-    exampleContext: {
-      clientFolder: "Bakken_Christopher",
-      clientName2: "Mary Bakken",
-      documentTypeId: "tax_return",
-      extension: ".pdf",
-      ownershipType: "joint",
-      taxYear: "2025",
-    },
-  },
   tax_document: {
     label: "Tax document",
     supportedTokens: [
@@ -310,7 +275,7 @@ export const NAMING_RULE_DEFINITIONS: Record<
       clientName2: "Mary Bakken",
       custodian: "Coinbase",
       documentTypeId: "tax_document",
-      documentTypeLabel: "1099-DA",
+      documentTypeLabel: "form_1099_da",
       extension: ".pdf",
       ownershipType: "joint",
       taxYear: "2025",
@@ -402,7 +367,6 @@ export function getDefaultNamingRules(): NamingRulesConfig {
       money_movement_form: [
         ...NAMING_RULE_DEFINITIONS.money_movement_form.defaultTokens,
       ],
-      tax_return: [...NAMING_RULE_DEFINITIONS.tax_return.defaultTokens],
       tax_document: [...NAMING_RULE_DEFINITIONS.tax_document.defaultTokens],
       identity_document: [
         ...NAMING_RULE_DEFINITIONS.identity_document.defaultTokens,
@@ -432,40 +396,40 @@ export function parseNamingRules(
       return applyLegacyFallback(fallback, legacyConvention);
     }
 
+    const legacyRules = parsed.rules as Partial<
+      Record<NamingRuleDocumentType, NamingTokenId[]>
+    >;
+
     return {
       version: 1,
       rules: {
         default: upgradeLegacyRecommendedRule(
           "default",
-          sanitizeRuleTokens("default", parsed.rules.default),
+          sanitizeRuleTokens("default", legacyRules.default),
         ),
         account_statement: upgradeLegacyRecommendedRule(
           "account_statement",
-          sanitizeRuleTokens("account_statement", parsed.rules.account_statement),
+          sanitizeRuleTokens("account_statement", legacyRules.account_statement),
         ),
         money_movement_form: upgradeLegacyRecommendedRule(
           "money_movement_form",
-          sanitizeRuleTokens("money_movement_form", parsed.rules.money_movement_form),
-        ),
-        tax_return: upgradeLegacyRecommendedRule(
-          "tax_return",
-          sanitizeRuleTokens("tax_return", parsed.rules.tax_return),
+          sanitizeRuleTokens("money_movement_form", legacyRules.money_movement_form),
         ),
         tax_document: upgradeLegacyRecommendedRule(
           "tax_document",
-          sanitizeRuleTokens("tax_document", parsed.rules.tax_document),
+          sanitizeRuleTokens("tax_document", legacyRules.tax_document),
         ),
         identity_document: upgradeLegacyRecommendedRule(
           "identity_document",
-          sanitizeRuleTokens("identity_document", parsed.rules.identity_document),
+          sanitizeRuleTokens("identity_document", legacyRules.identity_document),
         ),
         planning_document: upgradeLegacyRecommendedRule(
           "planning_document",
-          sanitizeRuleTokens("planning_document", parsed.rules.planning_document),
+          sanitizeRuleTokens("planning_document", legacyRules.planning_document),
         ),
         legal_document: upgradeLegacyRecommendedRule(
           "legal_document",
-          sanitizeRuleTokens("legal_document", parsed.rules.legal_document),
+          sanitizeRuleTokens("legal_document", legacyRules.legal_document),
         ),
       },
     } satisfies NamingRulesConfig;
@@ -495,6 +459,10 @@ export function getDetectedDocumentSubtype(
     return null;
   }
 
+  if (documentTypeId === "tax_document") {
+    return normalizeTaxDocumentSubtype(normalized);
+  }
+
   return normalized === getNamingDocumentTypeLabel(documentTypeId) ? null : normalized;
 }
 
@@ -503,13 +471,27 @@ export function getDocumentSubtypeOptions(
   currentSubtype?: string | null,
 ) {
   const options = [...(DOCUMENT_SUBTYPE_OPTIONS[documentTypeId] ?? [])];
-  const normalizedCurrent = (currentSubtype ?? "").trim();
+  const normalizedCurrent =
+    documentTypeId === "tax_document"
+      ? normalizeTaxDocumentSubtype(currentSubtype)
+      : (currentSubtype ?? "").trim();
 
   if (normalizedCurrent && !options.includes(normalizedCurrent)) {
     options.unshift(normalizedCurrent);
   }
 
   return options;
+}
+
+export function getDocumentSubtypeLabel(
+  documentTypeId: NamingRuleDocumentType,
+  subtype: string | null | undefined,
+) {
+  if (documentTypeId === "tax_document") {
+    return getTaxDocumentSubtypeLabel(subtype) ?? "Tax Document";
+  }
+
+  return subtype ?? "";
 }
 
 export function getNamingDocumentTypeOptions() {
@@ -576,17 +558,20 @@ export function getDocumentTypeIdFromLabel(label: string | null | undefined) {
     return "money_movement_form";
   }
 
-  if (normalized.includes("tax return")) {
-    return "tax_return";
-  }
-
   if (
     normalized.includes("tax") ||
+    normalized.includes("tax return") ||
+    normalized.includes("1040") ||
+    normalized.includes("state return") ||
+    normalized.includes("extension") ||
+    normalized.includes("estimated payment") ||
+    normalized.includes("estimated tax") ||
     normalized.includes("1099") ||
     normalized.includes("1098") ||
     normalized.includes("w-2") ||
     normalized.includes("w2") ||
-    normalized.includes("k-1")
+    normalized.includes("k-1") ||
+    normalized.includes("notice")
   ) {
     return "tax_document";
   }
@@ -622,13 +607,12 @@ export function getDocumentTypeLabelForFilename(
     return "Money Movement";
   }
 
-  if (documentTypeId === "tax_return") {
-    return "Tax Return";
-  }
-
   if (documentTypeId === "tax_document") {
-    return documentTypeLabel && documentTypeLabel !== "Tax document"
-      ? documentTypeLabel
+    const taxSubtypeLabel = getTaxDocumentSubtypeLabel(documentTypeLabel);
+    return taxSubtypeLabel
+      ? taxSubtypeLabel
+      : documentTypeLabel && documentTypeLabel !== "Tax document"
+        ? documentTypeLabel
       : "Tax Document";
   }
 
@@ -862,17 +846,6 @@ function upgradeLegacyRecommendedRule(
         "document_type",
         "account_type",
         "account_last4",
-      ],
-    ],
-    tax_return: [
-      ["last_name", "first_name", "document_type", "tax_year"],
-      [
-        "last_name",
-        "first_name",
-        "client2_first_name",
-        "client2_last_name",
-        "document_type",
-        "tax_year",
       ],
     ],
     tax_document: [
