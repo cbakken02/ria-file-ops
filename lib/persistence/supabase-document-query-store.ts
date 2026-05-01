@@ -17,6 +17,8 @@ import type {
   FirmDocumentLatestIdentityFacts,
   FirmDocumentPartyMatch,
   FirmDocumentResolvedParty,
+  FirmDocumentTaxDocument,
+  FirmDocumentTaxFact,
 } from "@/lib/firm-document-sqlite-query";
 
 type ReadInput = {
@@ -661,6 +663,117 @@ export function findLatestDriverLicenseStatusForParty(
     issueDate: latest.issueDate,
     expirationDate: latest.expirationDate,
   };
+}
+
+export function findTaxDocumentsForParty(
+  input: ReadInput & {
+    partyId: string;
+    taxYear?: string | null;
+    documentSubtype?: string | null;
+    limit?: number;
+  },
+): FirmDocumentTaxDocument[] {
+  const ownerEmail = normalizeOwnerEmail(input.ownerEmail);
+  if (!ownerEmail) {
+    return [];
+  }
+
+  const taxYear = normalizeNullableQueryValue(input.taxYear ?? null);
+  const documentSubtype = normalizeNullableQueryValue(input.documentSubtype ?? null);
+  const limit = clampPositiveInt(input.limit, 25);
+  const result = queryPostgresSync<FirmDocumentTaxDocument>(
+    `
+      SELECT
+        document_primary_facts.primary_party_id AS "partyId",
+        parties.canonical_display_name AS "partyDisplayName",
+        documents.source_file_id AS "sourceFileId",
+        documents.source_name AS "sourceName",
+        documents.document_id AS "documentId",
+        documents.document_date AS "documentDate",
+        documents.analyzed_at AS "analyzedAt",
+        documents.normalized_document_subtype AS "documentSubtype",
+        document_primary_facts.tax_year AS "taxYear",
+        document_primary_facts.id_type AS "idType",
+        document_primary_facts.custodian_institution_id AS "custodianInstitutionId",
+        COALESCE(institutions.canonical_name, document_primary_facts.custodian_name) AS "institutionName"
+      FROM public.documents
+      INNER JOIN public.document_primary_facts
+        ON document_primary_facts.document_id = documents.document_id
+      LEFT JOIN public.parties
+        ON parties.party_id = document_primary_facts.primary_party_id
+      LEFT JOIN public.institutions
+        ON institutions.institution_id = document_primary_facts.custodian_institution_id
+      WHERE documents.owner_email = $1
+        AND documents.normalized_document_type_id = 'tax_document'
+        AND document_primary_facts.primary_party_id = $2
+        AND ($3::text IS NULL OR document_primary_facts.tax_year = $3)
+        AND (
+          $4::text IS NULL OR
+          LOWER(COALESCE(documents.normalized_document_subtype, '')) = $4
+        )
+      ORDER BY
+        COALESCE(document_primary_facts.tax_year, '') DESC,
+        COALESCE(documents.document_date, documents.analyzed_at) DESC,
+        documents.analyzed_at DESC,
+        documents.document_id DESC
+      LIMIT $5
+    `,
+    [ownerEmail, input.partyId, taxYear, documentSubtype, limit],
+  );
+
+  return result.rows;
+}
+
+export function findTaxFactsForDocument(
+  input: ReadInput & {
+    documentId: string;
+    fieldId?: string | null;
+    limit?: number;
+  },
+): FirmDocumentTaxFact[] {
+  const ownerEmail = normalizeOwnerEmail(input.ownerEmail);
+  if (!ownerEmail) {
+    return [];
+  }
+
+  const fieldId = normalizeNullableQueryValue(input.fieldId ?? null);
+  const limit = clampPositiveInt(input.limit, 100);
+  const result = queryPostgresSync<FirmDocumentTaxFact>(
+    `
+      SELECT
+        document_tax_facts.document_tax_fact_id AS "documentTaxFactId",
+        documents.document_id AS "documentId",
+        documents.source_file_id AS "sourceFileId",
+        documents.source_name AS "sourceName",
+        documents.document_date AS "documentDate",
+        documents.analyzed_at AS "analyzedAt",
+        documents.normalized_document_subtype AS "documentSubtype",
+        document_primary_facts.tax_year AS "taxYear",
+        document_tax_facts.form AS "form",
+        document_tax_facts.field_id AS "fieldId",
+        document_tax_facts.label AS "label",
+        document_tax_facts.line AS "line",
+        document_tax_facts.box AS "box",
+        document_tax_facts.value_type AS "valueType",
+        document_tax_facts.raw_value AS "rawValue",
+        document_tax_facts.normalized_value AS "normalizedValue",
+        document_tax_facts.amount AS "amount",
+        document_tax_facts.currency AS "currency"
+      FROM public.document_tax_facts
+      INNER JOIN public.documents
+        ON documents.document_id = document_tax_facts.document_id
+      LEFT JOIN public.document_primary_facts
+        ON document_primary_facts.document_id = documents.document_id
+      WHERE documents.owner_email = $1
+        AND documents.document_id = $2
+        AND ($3::text IS NULL OR LOWER(document_tax_facts.field_id) = $3)
+      ORDER BY document_tax_facts.source_index ASC
+      LIMIT $4
+    `,
+    [ownerEmail, input.documentId, fieldId, limit],
+  );
+
+  return result.rows;
 }
 
 export function inspectFirmDocumentBySourceFileId(

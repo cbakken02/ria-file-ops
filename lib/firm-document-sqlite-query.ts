@@ -139,6 +139,42 @@ export type FirmDocumentLatestIdentityFacts = {
 
 export type FirmDocumentLatestIdentityDocument = FirmDocumentLatestIdentityFacts;
 
+export type FirmDocumentTaxDocument = {
+  partyId: string | null;
+  partyDisplayName: string | null;
+  sourceFileId: string | null;
+  sourceName: string | null;
+  documentId: string;
+  documentDate: string | null;
+  analyzedAt: string | null;
+  documentSubtype: string | null;
+  taxYear: string | null;
+  idType: string | null;
+  custodianInstitutionId: string | null;
+  institutionName: string | null;
+};
+
+export type FirmDocumentTaxFact = {
+  documentTaxFactId: string;
+  documentId: string;
+  sourceFileId: string | null;
+  sourceName: string | null;
+  documentDate: string | null;
+  analyzedAt: string | null;
+  documentSubtype: string | null;
+  taxYear: string | null;
+  form: string | null;
+  fieldId: string;
+  label: string;
+  line: string | null;
+  box: string | null;
+  valueType: string;
+  rawValue: string | null;
+  normalizedValue: string | null;
+  amount: string | null;
+  currency: string | null;
+};
+
 export type FirmDocumentLatestIdentityDob = {
   partyId: string;
   partyDisplayName: string | null;
@@ -205,6 +241,7 @@ export type FirmDocumentInspection = {
   documentPrimaryFacts: Record<string, unknown> | null;
   documentParties: Array<Record<string, unknown>>;
   documentPartyFacts: Array<Record<string, unknown>>;
+  documentTaxFacts: Array<Record<string, unknown>>;
   documentInstitutions: Array<Record<string, unknown>>;
   documentAccountSnapshots: Array<Record<string, unknown>>;
   documentAccountParties: Array<Record<string, unknown>>;
@@ -768,6 +805,135 @@ export function findLatestDriverLicenseStatusForParty(
   };
 }
 
+export function findTaxDocumentsForParty(
+  input: ReadInput & {
+    partyId: string;
+    taxYear?: string | null;
+    documentSubtype?: string | null;
+    limit?: number;
+  },
+): FirmDocumentTaxDocument[] {
+  const taxYear = normalizeNullableQueryValue(input.taxYear ?? null);
+  const documentSubtype = normalizeNullableQueryValue(input.documentSubtype ?? null);
+  const limit = clampPositiveInt(input.limit, 25);
+
+  return withReadOnlyFirmDocumentDb(input, [], (db) => {
+    return db
+      .prepare<
+        {
+          ownerEmail: string;
+          partyId: string;
+          taxYear: string | null;
+          documentSubtype: string | null;
+          limit: number;
+        },
+        FirmDocumentTaxDocument
+      >(`
+        SELECT
+          document_primary_facts.primary_party_id AS partyId,
+          parties.canonical_display_name AS partyDisplayName,
+          documents.source_file_id AS sourceFileId,
+          documents.source_name AS sourceName,
+          documents.document_id AS documentId,
+          documents.document_date AS documentDate,
+          documents.analyzed_at AS analyzedAt,
+          documents.normalized_document_subtype AS documentSubtype,
+          document_primary_facts.tax_year AS taxYear,
+          document_primary_facts.id_type AS idType,
+          document_primary_facts.custodian_institution_id AS custodianInstitutionId,
+          COALESCE(institutions.canonical_name, document_primary_facts.custodian_name) AS institutionName
+        FROM documents
+        INNER JOIN document_primary_facts
+          ON document_primary_facts.document_id = documents.document_id
+        LEFT JOIN parties
+          ON parties.party_id = document_primary_facts.primary_party_id
+        LEFT JOIN institutions
+          ON institutions.institution_id = document_primary_facts.custodian_institution_id
+        WHERE documents.owner_email = @ownerEmail
+          AND documents.normalized_document_type_id = 'tax_document'
+          AND document_primary_facts.primary_party_id = @partyId
+          AND (@taxYear IS NULL OR document_primary_facts.tax_year = @taxYear)
+          AND (
+            @documentSubtype IS NULL OR
+            LOWER(COALESCE(documents.normalized_document_subtype, '')) = @documentSubtype
+          )
+        ORDER BY
+          COALESCE(document_primary_facts.tax_year, '') DESC,
+          COALESCE(documents.document_date, documents.analyzed_at) DESC,
+          documents.analyzed_at DESC,
+          documents.document_id DESC
+        LIMIT @limit
+      `)
+      .all({
+        ownerEmail: normalizeOwnerEmail(input.ownerEmail),
+        partyId: input.partyId,
+        taxYear,
+        documentSubtype,
+        limit,
+      });
+  });
+}
+
+export function findTaxFactsForDocument(
+  input: ReadInput & {
+    documentId: string;
+    fieldId?: string | null;
+    limit?: number;
+  },
+): FirmDocumentTaxFact[] {
+  const fieldId = normalizeNullableQueryValue(input.fieldId ?? null);
+  const limit = clampPositiveInt(input.limit, 100);
+
+  return withReadOnlyFirmDocumentDb(input, [], (db) => {
+    return db
+      .prepare<
+        {
+          ownerEmail: string;
+          documentId: string;
+          fieldId: string | null;
+          limit: number;
+        },
+        FirmDocumentTaxFact
+      >(`
+        SELECT
+          document_tax_facts.document_tax_fact_id AS documentTaxFactId,
+          documents.document_id AS documentId,
+          documents.source_file_id AS sourceFileId,
+          documents.source_name AS sourceName,
+          documents.document_date AS documentDate,
+          documents.analyzed_at AS analyzedAt,
+          documents.normalized_document_subtype AS documentSubtype,
+          document_primary_facts.tax_year AS taxYear,
+          document_tax_facts.form AS form,
+          document_tax_facts.field_id AS fieldId,
+          document_tax_facts.label AS label,
+          document_tax_facts.line AS line,
+          document_tax_facts.box AS box,
+          document_tax_facts.value_type AS valueType,
+          document_tax_facts.raw_value AS rawValue,
+          document_tax_facts.normalized_value AS normalizedValue,
+          document_tax_facts.amount AS amount,
+          document_tax_facts.currency AS currency
+        FROM document_tax_facts
+        INNER JOIN documents
+          ON documents.document_id = document_tax_facts.document_id
+        LEFT JOIN document_primary_facts
+          ON document_primary_facts.document_id = documents.document_id
+        WHERE documents.owner_email = @ownerEmail
+          AND documents.document_id = @documentId
+          AND (@fieldId IS NULL OR LOWER(document_tax_facts.field_id) = @fieldId)
+        ORDER BY document_tax_facts.source_index ASC
+        LIMIT @limit
+      `)
+      .all({
+        ownerEmail: normalizeOwnerEmail(input.ownerEmail),
+        documentId: input.documentId,
+        fieldId,
+        limit,
+      });
+  });
+}
+
 export function inspectFirmDocumentBySourceFileId(
   input: ReadInput & { sourceFileId: string },
 ): FirmDocumentInspection | null {
@@ -819,6 +985,14 @@ export function inspectFirmDocumentBySourceFileId(
       .prepare<{ documentId: string }, Record<string, unknown>>(`
         SELECT *
         FROM document_party_facts
+        WHERE document_id = @documentId
+        ORDER BY source_index ASC
+      `)
+      .all({ documentId });
+    const documentTaxFacts = db
+      .prepare<{ documentId: string }, Record<string, unknown>>(`
+        SELECT *
+        FROM document_tax_facts
         WHERE document_id = @documentId
         ORDER BY source_index ASC
       `)
@@ -943,6 +1117,7 @@ export function inspectFirmDocumentBySourceFileId(
       documentPrimaryFacts: documentPrimaryFacts ?? null,
       documentParties,
       documentPartyFacts,
+      documentTaxFacts,
       documentInstitutions,
       documentAccountSnapshots,
       documentAccountParties,

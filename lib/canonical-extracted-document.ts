@@ -23,6 +23,25 @@ export type CanonicalMoney = {
   currency: string | null;
 };
 
+export type CanonicalTaxFactValueType = "money" | "number" | "text" | "code" | "date";
+
+export type CanonicalTaxFact = {
+  id: string;
+  form: string | null;
+  fieldId: string;
+  label: string;
+  line: string | null;
+  box: string | null;
+  valueType: CanonicalTaxFactValueType;
+  rawValue: string | null;
+  value: string | null;
+  money: CanonicalMoney | null;
+};
+
+export type ExtractedTaxFact = CanonicalTaxFact;
+
+export type NormalizedTaxFact = CanonicalTaxFact;
+
 export type CanonicalAccountValue = {
   kind:
     | "beginning_balance"
@@ -254,6 +273,7 @@ export type CanonicalExtractedDocument = {
     contacts: ExtractedContact[];
     dates: ExtractedDate[];
     documentFacts: CanonicalDocumentFacts;
+    taxFacts?: ExtractedTaxFact[];
   };
   normalized: {
     parties: NormalizedParty[];
@@ -263,6 +283,7 @@ export type CanonicalExtractedDocument = {
     contacts: NormalizedContact[];
     dates: NormalizedDate[];
     documentFacts: CanonicalDocumentFacts;
+    taxFacts?: NormalizedTaxFact[];
     primaryFacts: CanonicalPrimaryFacts;
   };
   provenance: {
@@ -339,12 +360,22 @@ export function deriveCanonicalPrimaryFacts(
 export function finalizeCanonicalExtractedDocument(
   document: CanonicalExtractedDocumentDraft,
 ): CanonicalExtractedDocument {
+  const extracted = {
+    ...document.extracted,
+    taxFacts: document.extracted.taxFacts ?? [],
+  };
+  const normalized = {
+    ...document.normalized,
+    taxFacts: document.normalized.taxFacts ?? [],
+  };
+
   return {
     ...document,
+    extracted,
     normalized: {
-      ...document.normalized,
+      ...normalized,
       primaryFacts: deriveCanonicalPrimaryFacts(
-        document.normalized,
+        normalized,
         document.classification,
       ),
     },
@@ -363,7 +394,7 @@ function derivePrimaryDocumentFacts(
     };
   }
 
-  if (documentTypeId !== "tax_document" && documentTypeId !== "tax_return") {
+  if (documentTypeId !== "tax_document") {
     return {
       entityName: documentFacts.entityName ?? null,
       idType: documentFacts.idType ?? null,

@@ -10,6 +10,7 @@ import {
   closeFirmDocumentSqliteConnection,
   writeCanonicalAccountStatementToSqlite,
   writeCanonicalIdentityDocumentToSqlite,
+  writeCanonicalTaxDocumentToSqlite,
 } from "@/lib/firm-document-sqlite";
 import {
   inspectFirmDocumentBySourceFileId,
@@ -50,6 +51,19 @@ export async function writeCanonicalIdentityDocumentToSupabase(
   return writeCanonicalProjectionViaSqliteBridge(
     input,
     writeCanonicalIdentityDocumentToSqlite,
+  );
+}
+
+export async function writeCanonicalTaxDocumentToSupabase(
+  input: CanonicalSqliteWriteInput,
+): Promise<CanonicalSqliteWriteResult | null> {
+  if (input.canonical.classification.normalized.documentTypeId !== "tax_document") {
+    return null;
+  }
+
+  return writeCanonicalProjectionViaSqliteBridge(
+    input,
+    writeCanonicalTaxDocumentToSqlite,
   );
 }
 
@@ -178,6 +192,12 @@ async function persistInspectionToSupabase(input: {
       ),
     },
     {
+      table: "document_tax_facts",
+      rows: input.inspection.documentTaxFacts.map((row) =>
+        normalizeProjectionRow("document_tax_facts", row),
+      ),
+    },
+    {
       table: "document_account_snapshots",
       rows: input.inspection.documentAccountSnapshots.map((row) =>
         normalizeProjectionRow("document_account_snapshots", row),
@@ -276,6 +296,9 @@ async function deleteDocumentScopedRows(
     [documentId],
   );
   await client.query(`DELETE FROM public.document_party_facts WHERE document_id = $1`, [
+    documentId,
+  ]);
+  await client.query(`DELETE FROM public.document_tax_facts WHERE document_id = $1`, [
     documentId,
   ]);
   await client.query(`DELETE FROM public.document_parties WHERE document_id = $1`, [
@@ -420,6 +443,10 @@ function resolveCanonicalSchemaVersion(
 
   if (normalizedDocumentTypeId === "identity_document") {
     return "canonical-identity-document-v1";
+  }
+
+  if (normalizedDocumentTypeId === "tax_document") {
+    return "canonical-tax-document-v2";
   }
 
   return "canonical-account-statement-v1";
