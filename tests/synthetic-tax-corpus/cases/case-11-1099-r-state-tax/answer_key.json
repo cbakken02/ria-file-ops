@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "synthetic-tax-answer-key-v1",
+  "caseId": "case-11-1099-r-state-tax",
+  "title": "1099-R | State tax and annuity payer",
+  "documentTypeId": "tax_document",
+  "documentSubtype": "form_1099_r",
+  "normalized": {
+    "primaryFacts": {
+      "detectedClient": "Mateo Garcia",
+      "custodian": "Jackson",
+      "documentDate": null,
+      "idType": "1099-R",
+      "taxYear": "2025"
+    }
+  },
+  "taxFacts": [
+    { "fieldId": "form_1099_r.gross_distribution", "form": "1099-R", "label": "Gross distribution", "line": null, "box": "1", "valueType": "money", "value": "12345.67", "amount": "12345.67", "currency": "USD" },
+    { "fieldId": "form_1099_r.taxable_amount", "form": "1099-R", "label": "Taxable amount", "line": null, "box": "2a", "valueType": "money", "value": "11000.00", "amount": "11000.00", "currency": "USD" },
+    { "fieldId": "form_1099_r.federal_income_tax_withheld", "form": "1099-R", "label": "Federal income tax withheld", "line": null, "box": "4", "valueType": "money", "value": "1500.00", "amount": "1500.00", "currency": "USD" },
+    { "fieldId": "form_1099_r.distribution_codes", "form": "1099-R", "label": "Distribution code(s)", "line": null, "box": "7", "valueType": "code", "value": "7", "amount": null, "currency": null },
+    { "fieldId": "form_1099_r.state_tax_withheld", "form": "1099-R", "label": "State tax withheld", "line": null, "box": "14", "valueType": "money", "value": "500.50", "amount": "500.50", "currency": "USD" },
+    { "fieldId": "form_1099_r.state_distribution", "form": "1099-R", "label": "State distribution", "line": null, "box": "16", "valueType": "money", "value": "11000.00", "amount": "11000.00", "currency": "USD" }
+  ],
+  "expectedAmbiguities": []
+}

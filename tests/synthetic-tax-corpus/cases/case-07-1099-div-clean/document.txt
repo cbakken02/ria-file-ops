@@ -1,0 +1,13 @@
+2025 Form 1099-DIV Dividends and Distributions
+PAYER'S name
+Fidelity Brokerage Services LLC
+RECIPIENT'S name
+Lena Ortiz
+Recipient's TIN XXX-XX-4321
+Tax year 2025
+Date issued February 3, 2026
+1a Total ordinary dividends $1,234.56
+1b Qualified dividends $900.00
+2a Total capital gain distributions $120.00
+4 Federal income tax withheld $80.00
+7 Foreign tax paid $12.34

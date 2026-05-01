@@ -1,0 +1,9 @@
+2024 Form 1099 DIV Dividends and Distributions
+Tax year: 2024
+Payer name: Charles Schwab & Co., Inc.
+Recipient name: Owen Brooks
+1a Total ordinary dividends 100.5
+1b Qualified dividends 80.25
+2a Total capital gain distributions 10.1
+4 Federal income tax withheld 5
+7 Foreign tax paid .25

@@ -1,0 +1,177 @@
+{
+  "schemaVersion": "synthetic-tax-corpus-manifest-v1",
+  "generationPath": {
+    "source": "Synthetic extracted text fixtures that mimic PDF text and OCR output",
+    "script": "scripts/evaluate-synthetic-tax-corpus.mjs"
+  },
+  "cases": [
+    {
+      "id": "case-01-1040-clean",
+      "title": "Form 1040 | Clean return with comma decimals",
+      "category": "1040 clean",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "individual_return",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-01-1040-clean/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-01-1040-clean/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-01-1040-clean/notes.md"
+      }
+    },
+    {
+      "id": "case-02-1040-zero-owed",
+      "title": "Form 1040 | Zero tax and amount owed",
+      "category": "1040 zero values",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "individual_return",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-02-1040-zero-owed/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-02-1040-zero-owed/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-02-1040-zero-owed/notes.md"
+      }
+    },
+    {
+      "id": "case-03-1040-parenthetical-refund",
+      "title": "Form 1040 | Parenthetical values",
+      "category": "1040 signed values",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "individual_return",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-03-1040-parenthetical-refund/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-03-1040-parenthetical-refund/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-03-1040-parenthetical-refund/notes.md"
+      }
+    },
+    {
+      "id": "case-04-w2-clean",
+      "title": "W-2 | Clean wage statement",
+      "category": "W-2 clean",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "form_w2",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-04-w2-clean/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-04-w2-clean/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-04-w2-clean/notes.md"
+      }
+    },
+    {
+      "id": "case-05-w2-box-prefixes",
+      "title": "W-2 | Explicit box prefixes",
+      "category": "W-2 box labels",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "form_w2",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-05-w2-box-prefixes/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-05-w2-box-prefixes/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-05-w2-box-prefixes/notes.md"
+      }
+    },
+    {
+      "id": "case-06-w2-ocr-spacing",
+      "title": "W-2 | OCR-ish spacing and whole-dollar values",
+      "category": "W-2 OCR text",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "form_w2",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-06-w2-ocr-spacing/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-06-w2-ocr-spacing/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-06-w2-ocr-spacing/notes.md"
+      }
+    },
+    {
+      "id": "case-07-1099-div-clean",
+      "title": "1099-DIV | Clean dividend form",
+      "category": "1099-DIV clean",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "form_1099_div",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-07-1099-div-clean/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-07-1099-div-clean/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-07-1099-div-clean/notes.md"
+      }
+    },
+    {
+      "id": "case-08-1099-div-zero-withheld",
+      "title": "1099-DIV | Zero withholding boxes",
+      "category": "1099-DIV zero values",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "form_1099_div",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-08-1099-div-zero-withheld/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-08-1099-div-zero-withheld/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-08-1099-div-zero-withheld/notes.md"
+      }
+    },
+    {
+      "id": "case-09-1099-div-ocr-decimals",
+      "title": "1099-DIV | OCR-ish decimal values",
+      "category": "1099-DIV OCR text",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "form_1099_div",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-09-1099-div-ocr-decimals/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-09-1099-div-ocr-decimals/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-09-1099-div-ocr-decimals/notes.md"
+      }
+    },
+    {
+      "id": "case-10-1099-r-clean",
+      "title": "1099-R | Clean retirement distribution",
+      "category": "1099-R clean",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "form_1099_r",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-10-1099-r-clean/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-10-1099-r-clean/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-10-1099-r-clean/notes.md"
+      }
+    },
+    {
+      "id": "case-11-1099-r-state-tax",
+      "title": "1099-R | State tax and annuity payer",
+      "category": "1099-R state boxes",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "form_1099_r",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-11-1099-r-state-tax/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-11-1099-r-state-tax/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-11-1099-r-state-tax/notes.md"
+      }
+    },
+    {
+      "id": "case-12-1099-r-code-and-zero-state",
+      "title": "1099-R | Numeric distribution code and zero state values",
+      "category": "1099-R codes",
+      "documentTypeId": "tax_document",
+      "documentSubtype": "form_1099_r",
+      "golden": true,
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "text": "tests/synthetic-tax-corpus/cases/case-12-1099-r-code-and-zero-state/document.txt",
+        "answerKey": "tests/synthetic-tax-corpus/cases/case-12-1099-r-code-and-zero-state/answer_key.json",
+        "notes": "tests/synthetic-tax-corpus/cases/case-12-1099-r-code-and-zero-state/notes.md"
+      }
+    }
+  ]
+}

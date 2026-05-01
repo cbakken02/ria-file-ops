@@ -1,0 +1,201 @@
+{
+  "schemaVersion": "synthetic-answer-key-v1",
+  "caseId": "case-03-fidelity-summary-brokerage-roth-ira",
+  "title": "Fidelity multi-account summary | Brokerage and Roth IRA",
+  "documentTypeId": "account_statement",
+  "documentSubtype": "multi_account_summary",
+  "parties": [
+    {
+      "id": "party-1",
+      "kind": "person",
+      "displayName": "Samuel J Lee",
+      "rawName": "Samuel J Lee",
+      "addresses": [
+        {
+          "kind": "mailing",
+          "rawText": "2410 JUNIPER RIDGE AVE, MADISON WI 53705",
+          "lines": [
+            "2410 JUNIPER RIDGE AVE",
+            "MADISON WI 53705"
+          ],
+          "city": "MADISON",
+          "state": "WI",
+          "postalCode": "53705",
+          "country": "US"
+        }
+      ]
+    }
+  ],
+  "institutions": [
+    {
+      "id": "institution-1",
+      "name": "Fidelity",
+      "rawName": "Fidelity Investments",
+      "addresses": []
+    }
+  ],
+  "contacts": [
+    {
+      "id": "contact-1",
+      "institutionId": "institution-1",
+      "method": "phone",
+      "purpose": "customer_service",
+      "label": "Customer service phone",
+      "value": "800-555-3438",
+      "address": null,
+      "hoursText": null
+    },
+    {
+      "id": "contact-2",
+      "institutionId": "institution-1",
+      "method": "website",
+      "purpose": "general_support",
+      "label": "Portfolio website",
+      "value": "www.fidelity.com",
+      "address": null,
+      "hoursText": null
+    }
+  ],
+  "accounts": [
+    {
+      "id": "account-1",
+      "institutionIds": [
+        "institution-1"
+      ],
+      "accountNumber": "321654987788",
+      "maskedAccountNumber": "xxxxxxxx7788",
+      "accountLast4": "7788",
+      "accountType": "Roth IRA",
+      "registrationType": "Individual retirement account",
+      "statementStartDateId": "date-period-start",
+      "statementEndDateId": "date-period-end",
+      "values": [
+        {
+          "kind": "market_value",
+          "label": "Market value",
+          "money": {
+            "amount": "125441.23",
+            "currency": "USD"
+          },
+          "dateId": "date-document"
+        },
+        {
+          "kind": "current_balance",
+          "label": "Current balance",
+          "money": {
+            "amount": "125441.23",
+            "currency": "USD"
+          },
+          "dateId": "date-document"
+        }
+      ]
+    },
+    {
+      "id": "account-2",
+      "institutionIds": [
+        "institution-1"
+      ],
+      "accountNumber": "908877664411",
+      "maskedAccountNumber": "xxxxxxxx4411",
+      "accountLast4": "4411",
+      "accountType": "Brokerage",
+      "registrationType": "Individual",
+      "statementStartDateId": "date-period-start",
+      "statementEndDateId": "date-period-end",
+      "values": [
+        {
+          "kind": "ending_balance",
+          "label": "Ending balance",
+          "money": {
+            "amount": "28550.44",
+            "currency": "USD"
+          },
+          "dateId": "date-document"
+        },
+        {
+          "kind": "market_value",
+          "label": "Market value",
+          "money": {
+            "amount": "28550.44",
+            "currency": "USD"
+          },
+          "dateId": "date-document"
+        }
+      ]
+    }
+  ],
+  "accountParties": [
+    {
+      "id": "account-1-party-1",
+      "accountId": "account-1",
+      "partyId": "party-1",
+      "roles": [
+        "owner"
+      ],
+      "relationshipLabel": "Owner",
+      "allocationPercent": null
+    },
+    {
+      "id": "account-2-party-1",
+      "accountId": "account-2",
+      "partyId": "party-1",
+      "roles": [
+        "owner"
+      ],
+      "relationshipLabel": "Owner",
+      "allocationPercent": null
+    }
+  ],
+  "dates": [
+    {
+      "id": "date-document",
+      "kind": "document_date",
+      "value": "2026-03-31",
+      "rawValue": "Mar 31, 2026",
+      "entityType": "document",
+      "entityId": null
+    },
+    {
+      "id": "date-period-start",
+      "kind": "statement_period_start",
+      "value": "2026-01-01",
+      "rawValue": "Jan 1, 2026",
+      "entityType": "document",
+      "entityId": null
+    },
+    {
+      "id": "date-period-end",
+      "kind": "statement_period_end",
+      "value": "2026-03-31",
+      "rawValue": "Mar 31, 2026",
+      "entityType": "document",
+      "entityId": null
+    }
+  ],
+  "normalized": {
+    "primaryFacts": {
+      "detectedClient": "Samuel J Lee",
+      "detectedClient2": null,
+      "ownershipType": "single",
+      "accountLast4": null,
+      "accountType": null,
+      "custodian": "Fidelity",
+      "documentDate": "2026-03-31",
+      "entityName": null,
+      "idType": null,
+      "taxYear": null
+    }
+  },
+  "expectedAmbiguities": [
+    {
+      "fieldPath": "normalized.primaryFacts.accountLast4",
+      "reason": "Two accounts are equally primary in the same summary statement",
+      "expected": "null"
+    },
+    {
+      "fieldPath": "normalized.primaryFacts.accountType",
+      "reason": "Two distinct account types are present in the same summary statement",
+      "expected": "null"
+    }
+  ]
+}

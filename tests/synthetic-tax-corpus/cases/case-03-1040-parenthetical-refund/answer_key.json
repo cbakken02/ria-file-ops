@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "synthetic-tax-answer-key-v1",
+  "caseId": "case-03-1040-parenthetical-refund",
+  "title": "Form 1040 | Parenthetical values",
+  "documentTypeId": "tax_document",
+  "documentSubtype": "individual_return",
+  "normalized": {
+    "primaryFacts": {
+      "detectedClient": "Jordan Parker",
+      "custodian": null,
+      "documentDate": null,
+      "idType": "1040 Return",
+      "taxYear": "2024"
+    }
+  },
+  "taxFacts": [
+    { "fieldId": "form_1040.adjusted_gross_income", "form": "1040", "label": "Adjusted gross income", "line": "11", "box": null, "valueType": "money", "value": "-5432.10", "amount": "-5432.10", "currency": "USD" },
+    { "fieldId": "form_1040.taxable_income", "form": "1040", "label": "Taxable income", "line": "15", "box": null, "valueType": "money", "value": "12000.50", "amount": "12000.50", "currency": "USD" },
+    { "fieldId": "form_1040.total_tax", "form": "1040", "label": "Total tax", "line": "24", "box": null, "valueType": "money", "value": "2100.25", "amount": "2100.25", "currency": "USD" },
+    { "fieldId": "form_1040.refund", "form": "1040", "label": "Refund", "line": "34", "box": null, "valueType": "money", "value": "-125.00", "amount": "-125.00", "currency": "USD" },
+    { "fieldId": "form_1040.amount_owed", "form": "1040", "label": "Amount owed", "line": "37", "box": null, "valueType": "money", "value": "2000.12", "amount": "2000.12", "currency": "USD" }
+  ],
+  "expectedAmbiguities": []
+}

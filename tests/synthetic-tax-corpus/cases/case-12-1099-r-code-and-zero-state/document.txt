@@ -1,0 +1,10 @@
+Form 1099-R Distributions from pensions annuities retirement
+Tax year 2024
+Payer's name The Vanguard Group, Inc.
+Recipient's name Nora Kim
+Box 1 Gross distribution 9,000
+Box 2a Taxable amount 9,000
+Box 4 Federal income tax withheld 0
+Box 7 Distribution code(s) 2
+Box 14 State tax withheld 0
+Box 16 State distribution 0

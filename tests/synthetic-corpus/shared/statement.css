@@ -1,0 +1,310 @@
+@page {
+  size: letter;
+  margin: 0.45in;
+}
+
+:root {
+  --ink: #1f2933;
+  --muted: #66788a;
+  --line: #cfd8e3;
+  --panel: #f7f9fc;
+  --panel-strong: #eef3f9;
+  --accent: #173f5f;
+  --accent-soft: #e8f0f7;
+  --warning: #8a4b08;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  background: #fff;
+  font-family: "Aptos", "Segoe UI", Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.35;
+}
+
+body {
+  counter-reset: page;
+}
+
+.page {
+  min-height: 10in;
+  padding-bottom: 0.15in;
+}
+
+.page + .page {
+  page-break-before: always;
+}
+
+.statement-header {
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 0.18in;
+  margin-bottom: 0.22in;
+}
+
+.brand-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.35in;
+  margin-bottom: 0.18in;
+}
+
+.brand-name {
+  font-size: 20pt;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.brand-subtitle,
+.statement-subtitle,
+.small-note,
+.footer-note {
+  color: var(--muted);
+}
+
+.statement-title {
+  font-size: 17pt;
+  font-weight: 700;
+  margin: 0 0 0.03in;
+}
+
+.header-grid,
+.two-col,
+.three-col {
+  display: grid;
+  gap: 0.16in;
+}
+
+.header-grid {
+  grid-template-columns: 1.35fr 0.95fr;
+}
+
+.two-col {
+  grid-template-columns: 1fr 1fr;
+}
+
+.three-col {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.panel,
+.snapshot-card,
+.callout,
+.notice-box,
+.account-card,
+.contact-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.15in 0.16in;
+}
+
+.snapshot-card {
+  background: var(--panel-strong);
+}
+
+.eyebrow {
+  color: var(--muted);
+  font-size: 8.4pt;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 0.05in;
+}
+
+.owner-name {
+  font-size: 13pt;
+  font-weight: 700;
+  margin-bottom: 0.04in;
+}
+
+.address-line {
+  white-space: pre-wrap;
+}
+
+.fact-list,
+.compact-list {
+  display: grid;
+  gap: 0.06in;
+}
+
+.fact-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.16in;
+  border-bottom: 1px solid rgba(207, 216, 227, 0.7);
+  padding-bottom: 0.04in;
+}
+
+.fact-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.section {
+  margin-bottom: 0.2in;
+}
+
+.section h2 {
+  margin: 0 0 0.08in;
+  font-size: 12.6pt;
+}
+
+.section h3 {
+  margin: 0 0 0.06in;
+  font-size: 11pt;
+}
+
+.section p {
+  margin: 0.05in 0 0;
+}
+
+.account-grid {
+  display: grid;
+  gap: 0.14in;
+}
+
+.account-card {
+  background: #fff;
+}
+
+.account-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.14in;
+  align-items: baseline;
+  margin-bottom: 0.08in;
+}
+
+.account-title {
+  font-size: 12pt;
+  font-weight: 700;
+}
+
+.account-chip {
+  font-size: 8.5pt;
+  font-weight: 700;
+  padding: 0.04in 0.08in;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.05in 0.04in;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-size: 8.8pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.money,
+.right {
+  text-align: right;
+}
+
+.emphasis {
+  font-weight: 700;
+}
+
+.callout {
+  background: #fff7ec;
+  border-color: #f0d2a7;
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.12in;
+}
+
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.07in;
+}
+
+.pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.03in 0.08in;
+  background: #fff;
+  font-size: 8.8pt;
+}
+
+.notice-box {
+  background: #fff;
+}
+
+.notice-box ul {
+  margin: 0.05in 0 0 0.18in;
+  padding: 0;
+}
+
+.disclosure-page .notice-box + .notice-box {
+  margin-top: 0.12in;
+}
+
+.footer-note {
+  font-size: 8.4pt;
+  margin-top: 0.12in;
+}
+
+body.layout-retirement .brand-name,
+body.layout-annuity .brand-name {
+  letter-spacing: 0;
+}
+
+body.layout-annuity .snapshot-card {
+  background: #f8f4ff;
+}
+
+body.layout-messy .statement-header {
+  border-bottom-style: dashed;
+}
+
+body.layout-messy .page {
+  background:
+    linear-gradient(180deg, rgba(245, 249, 253, 0.65), rgba(255, 255, 255, 0)),
+    #fff;
+}
+
+body.layout-messy .noise-banner {
+  border: 1px dashed #a7b7c7;
+  border-radius: 8px;
+  padding: 0.08in 0.1in;
+  margin-bottom: 0.12in;
+  font-size: 9pt;
+  color: #415567;
+  background: #fafcff;
+}
+
+body.layout-messy .all-caps {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.page-number::after {
+  counter-increment: page;
+  content: "Page " counter(page);
+}

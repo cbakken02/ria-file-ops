@@ -1,0 +1,9 @@
+Form 1099-DIV Dividends and Distributions
+Tax year 2025
+Payer's name Vanguard Brokerage Services
+Recipient's name Thomas Nguyen
+1a Total ordinary dividends 86.40
+1b Qualified dividends 70.00
+2a Total capital gain distributions 0
+4 Federal income tax withheld 0
+7 Foreign tax paid 0

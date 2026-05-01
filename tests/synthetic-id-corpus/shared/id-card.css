@@ -1,0 +1,185 @@
+@page {
+  size: letter;
+  margin: 0.55in;
+}
+
+:root {
+  --ink: #17202a;
+  --muted: #5f6b76;
+  --line: #d4dce5;
+  --card: #f7fafc;
+  --accent: #204b78;
+  --accent-soft: #e6eef7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  background: white;
+  font-family: "Aptos", "Segoe UI", Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.35;
+}
+
+.page {
+  min-height: 10in;
+}
+
+.doc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.35in;
+  margin-bottom: 0.24in;
+  padding-bottom: 0.14in;
+  border-bottom: 2px solid var(--accent);
+}
+
+.issuer {
+  font-size: 20pt;
+  font-weight: 700;
+}
+
+.doc-type {
+  margin-top: 0.05in;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.badge {
+  padding: 0.08in 0.13in;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.id-card {
+  background: linear-gradient(180deg, #ffffff 0%, var(--card) 100%);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0.22in;
+  margin-bottom: 0.22in;
+}
+
+.identity-strip {
+  display: grid;
+  grid-template-columns: 1.1in 1fr;
+  gap: 0.18in;
+  align-items: start;
+  margin-bottom: 0.18in;
+}
+
+.portrait-box {
+  height: 1.35in;
+  border-radius: 12px;
+  border: 1px dashed #8ea4bc;
+  background: #eef4fb;
+  color: #47688b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.eyebrow {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 8.5pt;
+  font-weight: 700;
+  margin-bottom: 0.04in;
+}
+
+.name {
+  font-size: 18pt;
+  font-weight: 800;
+  line-height: 1.08;
+  margin-bottom: 0.08in;
+}
+
+.address-block {
+  font-size: 11pt;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.12in;
+}
+
+.field {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+  padding: 0.11in 0.12in;
+}
+
+.field-label {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 8.4pt;
+  font-weight: 700;
+  margin-bottom: 0.03in;
+}
+
+.field-value {
+  font-size: 12pt;
+}
+
+.field-value.strong {
+  font-weight: 700;
+}
+
+.field-value.mono {
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 11pt;
+}
+
+.callout-list {
+  display: grid;
+  gap: 0.08in;
+  margin-top: 0.16in;
+}
+
+.callout {
+  border-left: 4px solid var(--accent);
+  background: #f5f8fc;
+  padding: 0.08in 0.1in;
+  color: #23384f;
+}
+
+.detail-panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.16in 0.18in;
+}
+
+.detail-panel h2 {
+  margin: 0 0 0.08in;
+  font-size: 12.5pt;
+}
+
+.detail-panel ul {
+  margin: 0;
+  padding-left: 0.2in;
+}
+
+.detail-panel li + li {
+  margin-top: 0.05in;
+}
+
+.footer {
+  margin-top: 0.18in;
+  color: var(--muted);
+  font-size: 9pt;
+}
+

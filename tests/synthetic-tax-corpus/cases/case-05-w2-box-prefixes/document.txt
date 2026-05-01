@@ -1,0 +1,12 @@
+Form W-2 Wage and Tax Statement
+Tax year 2025
+Employer's name Harbor Dental Group
+Employee's name Sam Rivera
+Box 1 Wages, tips, other compensation 104,000
+Box 2 Federal income tax withheld 18,800
+Box 3 Social security wages 104,000
+Box 4 Social security tax withheld 6,448
+Box 5 Medicare wages and tips 104,000
+Box 6 Medicare tax withheld 1,508
+Box 16 State wages, tips, etc. 104,000
+Box 17 State income tax 5,100

@@ -1,0 +1,12 @@
+Form W 2 Wage and Tax Statement
+Tax year: 2024
+Employee name: Priya Shah
+Employer name: Lakeside Manufacturing Inc
+1 Wages tips other compensation 67000
+2 Federal income tax withheld 9200
+3 Social security wages 67000
+4 Social security tax withheld 4154
+5 Medicare wages 67000
+6 Medicare tax withheld 971.50
+16 State wages tips etc 67000
+17 State income tax 3500

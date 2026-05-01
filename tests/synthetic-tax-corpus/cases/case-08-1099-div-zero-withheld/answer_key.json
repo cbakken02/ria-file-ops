@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "synthetic-tax-answer-key-v1",
+  "caseId": "case-08-1099-div-zero-withheld",
+  "title": "1099-DIV | Zero withholding boxes",
+  "documentTypeId": "tax_document",
+  "documentSubtype": "form_1099_div",
+  "normalized": {
+    "primaryFacts": {
+      "detectedClient": "Thomas Nguyen",
+      "custodian": "Vanguard",
+      "documentDate": null,
+      "idType": "1099-DIV",
+      "taxYear": "2025"
+    }
+  },
+  "taxFacts": [
+    { "fieldId": "form_1099_div.total_ordinary_dividends", "form": "1099-DIV", "label": "Total ordinary dividends", "line": null, "box": "1a", "valueType": "money", "value": "86.40", "amount": "86.40", "currency": "USD" },
+    { "fieldId": "form_1099_div.qualified_dividends", "form": "1099-DIV", "label": "Qualified dividends", "line": null, "box": "1b", "valueType": "money", "value": "70.00", "amount": "70.00", "currency": "USD" },
+    { "fieldId": "form_1099_div.total_capital_gain_distributions", "form": "1099-DIV", "label": "Total capital gain distributions", "line": null, "box": "2a", "valueType": "money", "value": "0.00", "amount": "0.00", "currency": "USD" },
+    { "fieldId": "form_1099_div.federal_income_tax_withheld", "form": "1099-DIV", "label": "Federal income tax withheld", "line": null, "box": "4", "valueType": "money", "value": "0.00", "amount": "0.00", "currency": "USD" },
+    { "fieldId": "form_1099_div.foreign_tax_paid", "form": "1099-DIV", "label": "Foreign tax paid", "line": null, "box": "7", "valueType": "money", "value": "0.00", "amount": "0.00", "currency": "USD" }
+  ],
+  "expectedAmbiguities": []
+}

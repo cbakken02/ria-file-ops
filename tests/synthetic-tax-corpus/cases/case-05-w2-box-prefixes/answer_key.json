@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "synthetic-tax-answer-key-v1",
+  "caseId": "case-05-w2-box-prefixes",
+  "title": "W-2 | Explicit box prefixes",
+  "documentTypeId": "tax_document",
+  "documentSubtype": "form_w2",
+  "normalized": {
+    "primaryFacts": {
+      "detectedClient": "Sam Rivera",
+      "custodian": "Harbor Dental Group",
+      "documentDate": null,
+      "idType": "W-2",
+      "taxYear": "2025"
+    }
+  },
+  "taxFacts": [
+    { "fieldId": "form_w2.wages_tips_other_compensation", "form": "W-2", "label": "Wages, tips, other compensation", "line": null, "box": "1", "valueType": "money", "value": "104000.00", "amount": "104000.00", "currency": "USD" },
+    { "fieldId": "form_w2.federal_income_tax_withheld", "form": "W-2", "label": "Federal income tax withheld", "line": null, "box": "2", "valueType": "money", "value": "18800.00", "amount": "18800.00", "currency": "USD" },
+    { "fieldId": "form_w2.social_security_wages", "form": "W-2", "label": "Social security wages", "line": null, "box": "3", "valueType": "money", "value": "104000.00", "amount": "104000.00", "currency": "USD" },
+    { "fieldId": "form_w2.social_security_tax_withheld", "form": "W-2", "label": "Social security tax withheld", "line": null, "box": "4", "valueType": "money", "value": "6448.00", "amount": "6448.00", "currency": "USD" },
+    { "fieldId": "form_w2.medicare_wages_and_tips", "form": "W-2", "label": "Medicare wages and tips", "line": null, "box": "5", "valueType": "money", "value": "104000.00", "amount": "104000.00", "currency": "USD" },
+    { "fieldId": "form_w2.medicare_tax_withheld", "form": "W-2", "label": "Medicare tax withheld", "line": null, "box": "6", "valueType": "money", "value": "1508.00", "amount": "1508.00", "currency": "USD" },
+    { "fieldId": "form_w2.state_wages_tips", "form": "W-2", "label": "State wages, tips, etc.", "line": null, "box": "16", "valueType": "money", "value": "104000.00", "amount": "104000.00", "currency": "USD" },
+    { "fieldId": "form_w2.state_income_tax", "form": "W-2", "label": "State income tax", "line": null, "box": "17", "valueType": "money", "value": "5100.00", "amount": "5100.00", "currency": "USD" }
+  ],
+  "expectedAmbiguities": []
+}
