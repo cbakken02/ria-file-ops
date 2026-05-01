@@ -17,6 +17,7 @@ import {
 import {
   writeCanonicalAccountStatement,
   writeCanonicalIdentityDocument,
+  writeCanonicalTaxDocument,
 } from "@/lib/firm-document-store";
 import {
   readPreviewAnalysisCache,
@@ -390,7 +391,7 @@ async function buildPreviewItem(
   const detectedClient2 = insight.detectedClient2;
   const detectedDocumentSubtype = getDetectedDocumentSubtype(
     insight.documentTypeId,
-    insight.documentLabel,
+    insight.documentSubtype ?? insight.documentLabel,
   );
   const clientMatch = resolveHouseholdFolderName(
     detectedClient,
@@ -418,7 +419,8 @@ async function buildPreviewItem(
     detectedClient,
     detectedClient2,
     documentDate: insight.metadata.documentDate ?? modifiedDate,
-    documentTypeLabel: insight.documentLabel,
+    documentTypeId: insight.documentTypeId,
+    documentTypeLabel: detectedDocumentSubtype ?? insight.documentLabel,
     entityName: insight.metadata.entityName,
     extension,
     fallbackName: file.name,
@@ -647,6 +649,18 @@ async function loadPreviewArtifacts(input: {
           });
         } catch (error) {
           console.error("Canonical identity-document SQLite write failed.", error);
+        }
+      } else if (canonicalDocumentTypeId === "tax_document") {
+        try {
+          await writeCanonicalTaxDocument({
+            ownerEmail: input.ownerEmail,
+            analysisProfile: input.analysisProfile,
+            analysisVersion: DOCUMENT_ANALYSIS_VERSION,
+            analysisRanAt,
+            canonical,
+          });
+        } catch (error) {
+          console.error("Canonical tax-document SQLite write failed.", error);
         }
       }
     }

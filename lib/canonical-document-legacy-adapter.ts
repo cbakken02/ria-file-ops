@@ -6,6 +6,7 @@ import {
 } from "@/lib/canonical-extracted-document";
 import type { AccountStatementClientSource } from "@/lib/document-extractors/account-statement";
 import type { DocumentInsight } from "@/lib/document-intelligence";
+import { getTaxDocumentSubtypeLabel } from "@/lib/tax-document-types";
 
 export function adaptCanonicalToLegacyDocumentInsight(
   canonical: CanonicalExtractedDocument,
@@ -13,6 +14,7 @@ export function adaptCanonicalToLegacyDocumentInsight(
   const primaryFacts = canonical.normalized.primaryFacts;
   const presentation = getLegacyPresentationForDocumentType(
     canonical.classification.normalized.documentTypeId,
+    canonical.classification.normalized.documentSubtype,
   );
   const reasons = [...canonical.diagnostics.reasons];
   let confidence = Math.max(
@@ -38,6 +40,7 @@ export function adaptCanonicalToLegacyDocumentInsight(
     ownershipType: primaryFacts.ownershipType === "joint" ? "joint" : "single",
     documentTypeId: presentation.documentTypeId,
     documentLabel: presentation.documentLabel,
+    documentSubtype: canonical.classification.normalized.documentSubtype,
     filenameLabel: presentation.filenameLabel,
     topLevelFolder: presentation.topLevelFolder,
     confidence,
@@ -103,6 +106,7 @@ export function adaptCanonicalToLegacyDocumentInsight(
 
 function getLegacyPresentationForDocumentType(
   documentTypeId: CanonicalExtractedDocument["classification"]["normalized"]["documentTypeId"],
+  documentSubtype: string | null,
 ) {
   switch (documentTypeId) {
     case "account_statement":
@@ -121,19 +125,12 @@ function getLegacyPresentationForDocumentType(
         topLevelFolder: "Money Movement",
         defaultConfidence: 0.82,
       };
-    case "tax_return":
-      return {
-        documentTypeId: "tax_return" as const,
-        documentLabel: "Tax return",
-        filenameLabel: "Tax_Return",
-        topLevelFolder: "Tax",
-        defaultConfidence: 0.76,
-      };
     case "tax_document":
       return {
         documentTypeId: "tax_document" as const,
         documentLabel: "Tax document",
-        filenameLabel: "Tax_Document",
+        filenameLabel:
+          getTaxDocumentSubtypeLabel(documentSubtype) ?? "Tax_Document",
         topLevelFolder: "Tax",
         defaultConfidence: 0.75,
       };

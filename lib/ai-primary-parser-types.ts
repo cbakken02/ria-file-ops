@@ -2,7 +2,6 @@ export type ParsedDocumentTypeId =
   | "default"
   | "account_statement"
   | "money_movement_form"
-  | "tax_return"
   | "tax_document"
   | "identity_document"
   | "planning_document"

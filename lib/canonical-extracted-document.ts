@@ -416,6 +416,12 @@ export function deriveCanonicalPartyNames(
   const partiesById = new Map(parties.map((party) => [party.id, party.displayName]));
   const orderedNames: string[] = [];
 
+  if (accountParties.length === 0) {
+    return parties
+      .map((party) => party.displayName)
+      .filter((value): value is string => Boolean(value));
+  }
+
   for (const relationship of accountParties) {
     if (!relationship.roles.some((role) => role === "owner" || role === "joint_owner")) {
       continue;
