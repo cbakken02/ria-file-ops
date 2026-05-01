@@ -6,6 +6,7 @@ import type {
   CanonicalNormalizationRecord,
   CanonicalPrimaryFacts,
   CanonicalSourceRef,
+  CanonicalTaxFact,
 } from "@/lib/canonical-extracted-document";
 
 const REDACTION_POLICY_VERSION = "canonical-redaction-v1";
@@ -18,6 +19,7 @@ const OMITTED_FIELD_GROUPS = [
   "beneficiary_details",
   "contact_values",
   "account_values",
+  "tax_fact_values",
 ] as const;
 
 export type PreviewSafeCanonicalPersistedShape = {
@@ -33,6 +35,7 @@ export type PreviewSafeCanonicalPersistedShape = {
     institutions: PreviewSafeCanonicalInstitution[];
     dates: PreviewSafeCanonicalDate[];
     documentFacts: CanonicalDocumentFacts;
+    taxFacts: PreviewSafeCanonicalTaxFact[];
   };
   diagnostics: {
     parserVersion: string | null;
@@ -54,6 +57,7 @@ export type RedactedCanonicalDebugShape = PreviewSafeCanonicalPersistedShape & {
     institutions: RedactedCanonicalInstitution[];
     dates: PreviewSafeCanonicalDate[];
     documentFacts: CanonicalDocumentFacts;
+    taxFacts: PreviewSafeCanonicalTaxFact[];
   };
   provenance: {
     fields: Record<string, RedactedCanonicalFieldProvenance>;
@@ -71,6 +75,7 @@ type CanonicalEntitySummary = {
   institutionCount: number;
   contactCount: number;
   dateCount: number;
+  taxFactCount: number;
 };
 
 type PreviewSafeCanonicalParty = {
@@ -125,6 +130,15 @@ type PreviewSafeCanonicalDate = {
   value: string | null;
   entityType: CanonicalExtractedDocument["normalized"]["dates"][number]["entityType"];
   entityId: string | null;
+};
+
+type PreviewSafeCanonicalTaxFact = Pick<
+  CanonicalTaxFact,
+  "id" | "form" | "fieldId" | "label" | "line" | "box" | "valueType"
+> & {
+  rawValue: null;
+  value: null;
+  money: null;
 };
 
 type RedactedCanonicalFieldProvenance = Omit<CanonicalFieldProvenance, "raw"> & {
@@ -193,6 +207,7 @@ export function projectCanonicalToPreviewSafePersistedShape(
         entityId: date.entityId,
       })),
       documentFacts: canonical.normalized.documentFacts,
+      taxFacts: (canonical.normalized.taxFacts ?? []).map(redactTaxFact),
     },
     diagnostics: {
       parserVersion: canonical.diagnostics.parserVersion,
@@ -263,6 +278,7 @@ export function projectCanonicalToRedactedDebugShape(
         entityId: date.entityId,
       })),
       documentFacts: canonical.extracted.documentFacts,
+      taxFacts: (canonical.extracted.taxFacts ?? []).map(redactTaxFact),
     },
     provenance: {
       fields: Object.fromEntries(
@@ -295,6 +311,22 @@ function buildEntitySummary(
     institutionCount: section.institutions.length,
     contactCount: section.contacts.length,
     dateCount: section.dates.length,
+    taxFactCount: section.taxFacts?.length ?? 0,
+  };
+}
+
+function redactTaxFact(fact: CanonicalTaxFact): PreviewSafeCanonicalTaxFact {
+  return {
+    id: fact.id,
+    form: fact.form,
+    fieldId: fact.fieldId,
+    label: fact.label,
+    line: fact.line,
+    box: fact.box,
+    valueType: fact.valueType,
+    rawValue: null,
+    value: null,
+    money: null,
   };
 }
 
@@ -343,6 +375,7 @@ function redactValueForFieldPath(fieldPath: string | null, value: string | null)
     lowerPath.includes("birthdate") ||
     lowerPath.includes("beneficiary") ||
     lowerPath.includes("contact") ||
+    lowerPath.includes("taxfacts") ||
     lowerPath.includes("values") ||
     lowerPath.includes("money")
   ) {

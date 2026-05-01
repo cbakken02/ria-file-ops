@@ -239,6 +239,17 @@ database.exec(`
     ON cleanup_file_states (applied_filing_event_id);
 `);
 
+database.exec(`
+  UPDATE cleanup_file_states
+  SET document_type_id = 'tax_document',
+      recognized_file_type = CASE
+        WHEN recognized_file_type = 'Tax return' THEN 'Tax document'
+        ELSE recognized_file_type
+      END
+  WHERE document_type_id = 'tax_return'
+     OR recognized_file_type = 'Tax return';
+`);
+
 ensureTableColumn(
   "firm_settings",
   "review_instruction",

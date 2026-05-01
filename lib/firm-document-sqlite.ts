@@ -7,6 +7,7 @@ import type {
   CanonicalAccountPartyRole,
   CanonicalAddress,
   CanonicalExtractedDocument,
+  CanonicalTaxFact,
   ExtractedAccount,
   ExtractedContact,
   NormalizedAccount,
@@ -26,6 +27,8 @@ const ACCOUNT_STATEMENT_CANONICAL_PAYLOAD_SCHEMA_VERSION =
   "canonical-account-statement-v1";
 const IDENTITY_DOCUMENT_CANONICAL_PAYLOAD_SCHEMA_VERSION =
   "canonical-identity-document-v1";
+const TAX_DOCUMENT_CANONICAL_PAYLOAD_SCHEMA_VERSION =
+  "canonical-tax-document-v2";
 
 type SqliteConnection = InstanceType<typeof Database>;
 
@@ -405,6 +408,137 @@ export function writeCanonicalIdentityDocumentToSqlite(
   return transaction(input);
 }
 
+export function writeCanonicalTaxDocumentToSqlite(
+  input: CanonicalSqliteWriteInput,
+): CanonicalSqliteWriteResult | null {
+  if (input.canonical.classification.normalized.documentTypeId !== "tax_document") {
+    return null;
+  }
+
+  const dbPath = input.dbPath?.trim() || getFirmDocumentSqlitePath(input.ownerEmail);
+  const db = getFirmDocumentDatabase(dbPath);
+
+  const transaction = db.transaction(
+    (transactionInput: CanonicalSqliteWriteInput): CanonicalSqliteWriteResult => {
+      const now = new Date().toISOString();
+      const ownerEmail = transactionInput.ownerEmail.trim().toLowerCase();
+      const sourceFileId = resolveSourceFileId(transactionInput.canonical);
+      const documentId = stableId("doc", ownerEmail, sourceFileId);
+      const preferredDocumentDate =
+        transactionInput.canonical.normalized.primaryFacts.documentDate ??
+        resolveFirstDateValue(
+          transactionInput.canonical.normalized.dates,
+          "document_date",
+        ) ??
+        resolveFirstDateValue(
+          transactionInput.canonical.normalized.dates,
+          "issue_date",
+        );
+
+      upsertDocument(db, {
+        documentId,
+        ownerEmail,
+        sourceFileId,
+        canonical: transactionInput.canonical,
+        analysisProfile: transactionInput.analysisProfile,
+        analysisVersion: transactionInput.analysisVersion,
+        analysisRanAt: transactionInput.analysisRanAt,
+        now,
+        documentDate: preferredDocumentDate,
+      });
+      upsertCanonicalPayload(db, {
+        documentId,
+        canonical: transactionInput.canonical,
+        now,
+      });
+
+      const stablePartyIdByCanonicalId = new Map<string, string>();
+      const stableAccountIdByCanonicalId = new Map<string, string>();
+      const stableInstitutionIdByCanonicalId = new Map<string, string>();
+
+      const documentInstitutionRows = buildDocumentInstitutions({
+        ownerEmail,
+        documentId,
+        canonical: transactionInput.canonical,
+        stableInstitutionIdByCanonicalId,
+        now,
+      });
+      for (const row of documentInstitutionRows) {
+        upsertInstitution(db, row.stableUpsert);
+      }
+
+      const documentPartyRows = buildDocumentParties({
+        ownerEmail,
+        documentId,
+        canonical: transactionInput.canonical,
+        stablePartyIdByCanonicalId,
+        now,
+      });
+      for (const row of documentPartyRows) {
+        upsertParty(db, row.stableUpsert);
+      }
+
+      replaceDocumentScopedRows(db, documentId);
+
+      for (const row of documentInstitutionRows) {
+        insertDocumentInstitution(db, row.documentInsert);
+      }
+
+      const documentPartyIdByCanonicalId = new Map<string, string>();
+      const stablePartyIdByNormalizedName = new Map<string, string>();
+      for (const row of documentPartyRows) {
+        insertDocumentParty(db, row.documentInsert);
+        for (const key of row.canonicalReferenceIds) {
+          documentPartyIdByCanonicalId.set(key, row.documentInsert.documentPartyId);
+        }
+        if (row.documentInsert.normalizedDisplayName && row.documentInsert.partyId) {
+          stablePartyIdByNormalizedName.set(
+            normalizeResolverValue(row.documentInsert.normalizedDisplayName),
+            row.documentInsert.partyId,
+          );
+        }
+      }
+
+      const documentPartyFactRows = buildDocumentPartyFacts({
+        documentId,
+        canonical: transactionInput.canonical,
+        documentPartyIdByCanonicalId,
+        stablePartyIdByCanonicalId,
+      });
+      for (const row of documentPartyFactRows) {
+        insertDocumentPartyFact(db, row);
+      }
+
+      const documentTaxFactRows = buildDocumentTaxFacts({
+        documentId,
+        canonical: transactionInput.canonical,
+      });
+      for (const row of documentTaxFactRows) {
+        insertDocumentTaxFact(db, row);
+      }
+
+      upsertDocumentPrimaryFacts(db, {
+        documentId,
+        ownerEmail,
+        canonical: transactionInput.canonical,
+        stablePartyIdByNormalizedName,
+        stableAccountIdByCanonicalId,
+        stableInstitutionIdByCanonicalId,
+        analysisVersion: transactionInput.analysisVersion,
+        updatedAt: now,
+      });
+
+      return {
+        dbPath,
+        documentId,
+        ownerEmail,
+      };
+    },
+  );
+
+  return transaction(input);
+}
+
 function getFirmDocumentDatabase(dbPath: string) {
   const cached = connectionCache.get(dbPath);
   if (cached) {
@@ -559,6 +693,23 @@ function ensureFirmDocumentSchema(db: SqliteConnection) {
       UNIQUE(document_id, source_index)
     );
 
+    CREATE TABLE IF NOT EXISTS document_tax_facts (
+      document_tax_fact_id TEXT PRIMARY KEY,
+      document_id TEXT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
+      source_index INTEGER NOT NULL,
+      form TEXT,
+      field_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      line TEXT,
+      box TEXT,
+      value_type TEXT NOT NULL,
+      raw_value TEXT,
+      normalized_value TEXT,
+      amount TEXT,
+      currency TEXT,
+      UNIQUE(document_id, source_index)
+    );
+
     CREATE TABLE IF NOT EXISTS document_account_snapshots (
       document_account_snapshot_id TEXT PRIMARY KEY,
       document_id TEXT NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
@@ -654,6 +805,8 @@ function ensureFirmDocumentSchema(db: SqliteConnection) {
       ON parties(owner_email, canonical_display_name);
     CREATE INDEX IF NOT EXISTS idx_document_party_facts_party
       ON document_party_facts(party_id, expiration_date);
+    CREATE INDEX IF NOT EXISTS idx_document_tax_facts_document_field
+      ON document_tax_facts(document_id, field_id);
     CREATE INDEX IF NOT EXISTS idx_institutions_owner_name
       ON institutions(owner_email, canonical_name);
     CREATE INDEX IF NOT EXISTS idx_accounts_owner_last4
@@ -751,6 +904,84 @@ function ensureFirmDocumentSchema(db: SqliteConnection) {
       latest.observed_account_last4
     FROM latest_account_snapshot_v AS latest;
   `);
+
+  backfillTaxReturnDocumentType(db);
+}
+
+function backfillTaxReturnDocumentType(db: SqliteConnection) {
+  const rows = db.prepare(`
+    SELECT document_id, source_name, normalized_document_subtype, extracted_document_subtype
+    FROM documents
+    WHERE normalized_document_type_id = 'tax_return'
+       OR extracted_document_type_id = 'tax_return'
+  `).all() as Array<{
+    document_id: string;
+    source_name: string | null;
+    normalized_document_subtype: string | null;
+    extracted_document_subtype: string | null;
+  }>;
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const updateDocument = db.prepare(`
+    UPDATE documents
+    SET
+      normalized_document_type_id = CASE
+        WHEN normalized_document_type_id = 'tax_return' THEN 'tax_document'
+        ELSE normalized_document_type_id
+      END,
+      extracted_document_type_id = CASE
+        WHEN extracted_document_type_id = 'tax_return' THEN 'tax_document'
+        ELSE extracted_document_type_id
+      END,
+      normalized_document_subtype = COALESCE(normalized_document_subtype, @subtype),
+      extracted_document_subtype = COALESCE(extracted_document_subtype, @subtype)
+    WHERE document_id = @documentId
+  `);
+  const updatePayload = db.prepare(`
+    UPDATE document_canonical_payloads
+    SET canonical_json = replace(
+      replace(canonical_json, '"documentTypeId":"tax_return"', '"documentTypeId":"tax_document"'),
+      '"documentLabel":"Tax return"',
+      '"documentLabel":"Tax document"'
+    )
+    WHERE document_id = @documentId
+  `);
+
+  const transaction = db.transaction(() => {
+    for (const row of rows) {
+      updateDocument.run({
+        documentId: row.document_id,
+        subtype:
+          row.normalized_document_subtype ??
+          row.extracted_document_subtype ??
+          inferLegacyTaxReturnSubtype(row.source_name),
+      });
+      updatePayload.run({ documentId: row.document_id });
+    }
+  });
+
+  transaction();
+}
+
+function inferLegacyTaxReturnSubtype(sourceName: string | null | undefined) {
+  const normalized = sourceName?.toLowerCase() ?? "";
+  if (/\b1040x\b|\bamended\b/.test(normalized)) {
+    return "amended_individual_return";
+  }
+  if (/\bstate\b/.test(normalized)) {
+    return "state_return";
+  }
+  if (/\bextension\b/.test(normalized)) {
+    return "extension";
+  }
+  if (/\bestimated\b/.test(normalized)) {
+    return "estimated_payment";
+  }
+
+  return "individual_return";
 }
 
 function upsertDocument(
@@ -1418,6 +1649,57 @@ function insertAccountValue(
   `).run(input);
 }
 
+function insertDocumentTaxFact(
+  db: SqliteConnection,
+  input: {
+    documentTaxFactId: string;
+    documentId: string;
+    sourceIndex: number;
+    form: string | null;
+    fieldId: string;
+    label: string;
+    line: string | null;
+    box: string | null;
+    valueType: string;
+    rawValue: string | null;
+    normalizedValue: string | null;
+    amount: string | null;
+    currency: string | null;
+  },
+) {
+  db.prepare(`
+    INSERT INTO document_tax_facts (
+      document_tax_fact_id,
+      document_id,
+      source_index,
+      form,
+      field_id,
+      label,
+      line,
+      box,
+      value_type,
+      raw_value,
+      normalized_value,
+      amount,
+      currency
+    ) VALUES (
+      @documentTaxFactId,
+      @documentId,
+      @sourceIndex,
+      @form,
+      @fieldId,
+      @label,
+      @line,
+      @box,
+      @valueType,
+      @rawValue,
+      @normalizedValue,
+      @amount,
+      @currency
+    )
+  `).run(input);
+}
+
 function upsertDocumentPrimaryFacts(
   db: SqliteConnection,
   input: {
@@ -1546,6 +1828,7 @@ function replaceDocumentScopedRows(db: SqliteConnection, documentId: string) {
   db.prepare(`DELETE FROM document_primary_facts WHERE document_id = ?`).run(documentId);
   db.prepare(`DELETE FROM document_contacts WHERE document_id = ?`).run(documentId);
   db.prepare(`DELETE FROM document_account_parties WHERE document_id = ?`).run(documentId);
+  db.prepare(`DELETE FROM document_tax_facts WHERE document_id = ?`).run(documentId);
   db.prepare(`DELETE FROM document_party_facts WHERE document_id = ?`).run(documentId);
   db.prepare(`
     DELETE FROM account_values
@@ -1705,6 +1988,8 @@ function buildDocumentParties(input: {
     );
     const governmentIdValue =
       normalized?.governmentIds[0]?.value ?? extracted?.governmentIds[0]?.value ?? null;
+    const taxIdentifierValue =
+      normalized?.taxIdentifiers[0]?.value ?? extracted?.taxIdentifiers[0]?.value ?? null;
     const birthDateValue = resolveNormalizedDateValue(
       normalizedDatesById,
       normalized?.birthDateId ?? extracted?.birthDateId ?? null,
@@ -1714,9 +1999,11 @@ function buildDocumentParties(input: {
         ? "normalized_name_with_birth_date"
         : governmentIdValue
           ? "normalized_name_with_government_id"
-          : addressSignature
-            ? "normalized_name_with_address_signature"
-            : "provisional_document_scoped"
+          : taxIdentifierValue
+            ? "normalized_name_with_tax_identifier"
+            : addressSignature
+              ? "normalized_name_with_address_signature"
+              : "provisional_document_scoped"
       : "provisional_document_scoped";
     const resolverKey = displayName
       ? birthDateValue
@@ -1725,9 +2012,13 @@ function buildDocumentParties(input: {
           ? `normalized:${normalizeResolverValue(displayName)}::govid:${sha1(
               governmentIdValue,
             )}`
-          : addressSignature
-            ? `normalized:${normalizeResolverValue(displayName)}::address:${addressSignature}`
-            : `provisional:${input.documentId}:party:${index}`
+          : taxIdentifierValue
+            ? `normalized:${normalizeResolverValue(displayName)}::taxid:${sha1(
+                taxIdentifierValue,
+              )}`
+            : addressSignature
+              ? `normalized:${normalizeResolverValue(displayName)}::address:${addressSignature}`
+              : `provisional:${input.documentId}:party:${index}`
       : `provisional:${input.documentId}:party:${index}`;
     const partyId = stableId("party", input.ownerEmail, resolverKey);
 
@@ -1814,6 +2105,28 @@ function buildDocumentPartyFacts(input: {
     );
     const normalizedGovernmentId = normalized?.governmentIds[0] ?? null;
     const extractedGovernmentId = extracted?.governmentIds[0] ?? null;
+    const normalizedTaxIdentifier = normalized?.taxIdentifiers[0] ?? null;
+    const extractedTaxIdentifier = extracted?.taxIdentifiers[0] ?? null;
+    const idKind =
+      normalizedGovernmentId?.kind ??
+      extractedGovernmentId?.kind ??
+      normalizedTaxIdentifier?.kind ??
+      extractedTaxIdentifier?.kind ??
+      null;
+    const rawIdValue =
+      extractedGovernmentId?.value ??
+      normalizedGovernmentId?.value ??
+      extractedTaxIdentifier?.value ??
+      normalizedTaxIdentifier?.value ??
+      null;
+    const maskedTaxIdentifierValue =
+      normalizedTaxIdentifier?.kind === "masked_ssn" ||
+      normalizedTaxIdentifier?.kind === "ssn_last4"
+        ? normalizedTaxIdentifier.value
+        : extractedTaxIdentifier?.kind === "masked_ssn" ||
+            extractedTaxIdentifier?.kind === "ssn_last4"
+          ? extractedTaxIdentifier.value
+          : null;
     const partyCanonicalId = normalized?.id ?? extracted?.id ?? null;
     const expirationDateValue =
       resolveNormalizedDateValue(
@@ -1832,15 +2145,16 @@ function buildDocumentPartyFacts(input: {
       documentPartyId,
       partyId,
       sourceIndex: index,
-      idKind: normalizedGovernmentId?.kind ?? extractedGovernmentId?.kind ?? null,
+      idKind,
       idType:
         input.canonical.normalized.documentFacts.idType ??
         input.canonical.extracted.documentFacts.idType ??
         null,
-      rawIdValue: extractedGovernmentId?.value ?? normalizedGovernmentId?.value ?? null,
+      rawIdValue,
       maskedIdValue:
         normalizedGovernmentId?.maskedValue ??
         extractedGovernmentId?.maskedValue ??
+        maskedTaxIdentifierValue ??
         null,
       issuingAuthority:
         normalizedGovernmentId?.issuingAuthority ??
@@ -2272,6 +2586,35 @@ function buildDocumentContacts(input: {
   return rows;
 }
 
+function buildDocumentTaxFacts(input: {
+  documentId: string;
+  canonical: CanonicalExtractedDocument;
+}) {
+  const normalizedFacts = input.canonical.normalized.taxFacts ?? [];
+  const extractedFacts = input.canonical.extracted.taxFacts ?? [];
+  const facts = normalizedFacts.length > 0 ? normalizedFacts : extractedFacts;
+
+  return facts.map((fact, index) => {
+    const extractedFact = extractedFacts[index] as CanonicalTaxFact | undefined;
+
+    return {
+      documentTaxFactId: stableId("doctaxfact", input.documentId, String(index)),
+      documentId: input.documentId,
+      sourceIndex: index,
+      form: fact.form,
+      fieldId: fact.fieldId,
+      label: fact.label,
+      line: fact.line,
+      box: fact.box,
+      valueType: fact.valueType,
+      rawValue: extractedFact?.rawValue ?? fact.rawValue ?? null,
+      normalizedValue: fact.value ?? null,
+      amount: fact.money?.amount ?? null,
+      currency: fact.money?.currency ?? null,
+    };
+  });
+}
+
 function buildAccountValues(input: {
   ownerEmail: string;
   canonical: CanonicalExtractedDocument;
@@ -2396,6 +2739,8 @@ function resolveCanonicalPayloadSchemaVersion(canonical: CanonicalExtractedDocum
   switch (canonical.classification.normalized.documentTypeId) {
     case "identity_document":
       return IDENTITY_DOCUMENT_CANONICAL_PAYLOAD_SCHEMA_VERSION;
+    case "tax_document":
+      return TAX_DOCUMENT_CANONICAL_PAYLOAD_SCHEMA_VERSION;
     case "account_statement":
     default:
       return ACCOUNT_STATEMENT_CANONICAL_PAYLOAD_SCHEMA_VERSION;

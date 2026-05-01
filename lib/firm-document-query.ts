@@ -18,6 +18,8 @@ export type {
   FirmDocumentLatestIdentityFacts,
   FirmDocumentPartyMatch,
   FirmDocumentResolvedParty,
+  FirmDocumentTaxDocument,
+  FirmDocumentTaxFact,
 } from "@/lib/firm-document-sqlite-query";
 
 type SqliteDocumentQueryStoreModule = typeof import("@/lib/firm-document-sqlite-query");
@@ -76,6 +78,14 @@ export const findLatestIdentityExpirationForParty = (
 export const findLatestDriverLicenseStatusForParty = (
   ...args: Parameters<SqliteDocumentQueryStoreModule["findLatestDriverLicenseStatusForParty"]>
 ) => getActiveDocumentQueryStore().findLatestDriverLicenseStatusForParty(...args);
+
+export const findTaxDocumentsForParty = (
+  ...args: Parameters<SqliteDocumentQueryStoreModule["findTaxDocumentsForParty"]>
+) => getActiveDocumentQueryStore().findTaxDocumentsForParty(...args);
+
+export const findTaxFactsForDocument = (
+  ...args: Parameters<SqliteDocumentQueryStoreModule["findTaxFactsForDocument"]>
+) => getActiveDocumentQueryStore().findTaxFactsForDocument(...args);
 
 export const inspectFirmDocumentBySourceFileId = (
   ...args: Parameters<SqliteDocumentQueryStoreModule["inspectFirmDocumentBySourceFileId"]>
