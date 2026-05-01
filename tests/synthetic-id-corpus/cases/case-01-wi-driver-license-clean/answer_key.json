@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "synthetic-answer-key-v1",
+  "caseId": "case-01-wi-driver-license-clean",
+  "title": "Wisconsin driver license | Clean front-only ID",
+  "documentTypeId": "identity_document",
+  "documentSubtype": "driver_license",
+  "parties": [
+    {
+      "id": "party-1",
+      "kind": "person",
+      "displayName": "Melissa A Rivera",
+      "rawName": "MELISSA A RIVERA",
+      "birthDateId": "date-birth",
+      "addresses": [
+        {
+          "kind": "identity",
+          "rawText": "4478 MAPLE TRACE DR, MIDDLETON WI 53562-1940",
+          "lines": [
+            "4478 MAPLE TRACE DR",
+            "MIDDLETON WI 53562-1940"
+          ],
+          "city": "MIDDLETON",
+          "state": "WI",
+          "postalCode": "53562-1940",
+          "country": "US"
+        }
+      ],
+      "governmentIds": [
+        {
+          "kind": "driver_license",
+          "value": "RIVRM910714WI",
+          "maskedValue": "xxxxxxxxx14WI",
+          "issuingAuthority": "WI",
+          "expirationDateId": "date-expiration"
+        }
+      ]
+    }
+  ],
+  "institutions": [],
+  "contacts": [],
+  "accounts": [],
+  "accountParties": [],
+  "dates": [
+    {
+      "id": "date-document",
+      "kind": "document_date",
+      "value": "2024-05-09",
+      "rawValue": "05/09/2024",
+      "entityType": "document",
+      "entityId": null
+    },
+    {
+      "id": "date-birth",
+      "kind": "birth_date",
+      "value": "1991-07-14",
+      "rawValue": "07/14/1991",
+      "entityType": "party",
+      "entityId": "party-1"
+    },
+    {
+      "id": "date-issue",
+      "kind": "issue_date",
+      "value": "2024-05-09",
+      "rawValue": "05/09/2024",
+      "entityType": "party",
+      "entityId": "party-1"
+    },
+    {
+      "id": "date-expiration",
+      "kind": "expiration_date",
+      "value": "2032-07-14",
+      "rawValue": "07/14/2032",
+      "entityType": "party",
+      "entityId": "party-1"
+    }
+  ],
+  "documentFacts": {
+    "entityName": null,
+    "idType": "Driver License",
+    "taxYear": null
+  },
+  "normalized": {
+    "documentFacts": {
+      "entityName": null,
+      "idType": "Driver License",
+      "taxYear": null
+    },
+    "primaryFacts": {
+      "detectedClient": "Melissa A Rivera",
+      "detectedClient2": null,
+      "ownershipType": "single",
+      "accountLast4": null,
+      "accountType": null,
+      "custodian": null,
+      "documentDate": "2024-05-09",
+      "entityName": null,
+      "idType": "Driver License",
+      "taxYear": null
+    }
+  },
+  "expectedAmbiguities": []
+}

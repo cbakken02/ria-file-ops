@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "synthetic-answer-key-v1",
+  "caseId": "case-02-co-state-id-clean",
+  "title": "Colorado state ID | Clean front-only ID",
+  "documentTypeId": "identity_document",
+  "documentSubtype": "state_id",
+  "parties": [
+    {
+      "id": "party-1",
+      "kind": "person",
+      "displayName": "Jordan P Ellis",
+      "rawName": "JORDAN P ELLIS",
+      "birthDateId": "date-birth",
+      "addresses": [
+        {
+          "kind": "identity",
+          "rawText": "1187 CEDAR POINT AVE, LAKEWOOD CO 80228",
+          "lines": [
+            "1187 CEDAR POINT AVE",
+            "LAKEWOOD CO 80228"
+          ],
+          "city": "LAKEWOOD",
+          "state": "CO",
+          "postalCode": "80228",
+          "country": "US"
+        }
+      ],
+      "governmentIds": [
+        {
+          "kind": "state_id",
+          "value": "COID-882211-547",
+          "maskedValue": "xxxxxxxxxxx-547",
+          "issuingAuthority": "CO",
+          "expirationDateId": "date-expiration"
+        }
+      ]
+    }
+  ],
+  "institutions": [],
+  "contacts": [],
+  "accounts": [],
+  "accountParties": [],
+  "dates": [
+    {
+      "id": "date-document",
+      "kind": "document_date",
+      "value": "2023-08-18",
+      "rawValue": "08/18/2023",
+      "entityType": "document",
+      "entityId": null
+    },
+    {
+      "id": "date-birth",
+      "kind": "birth_date",
+      "value": "1988-11-22",
+      "rawValue": "11/22/1988",
+      "entityType": "party",
+      "entityId": "party-1"
+    },
+    {
+      "id": "date-issue",
+      "kind": "issue_date",
+      "value": "2023-08-18",
+      "rawValue": "08/18/2023",
+      "entityType": "party",
+      "entityId": "party-1"
+    },
+    {
+      "id": "date-expiration",
+      "kind": "expiration_date",
+      "value": "2031-11-22",
+      "rawValue": "11/22/2031",
+      "entityType": "party",
+      "entityId": "party-1"
+    }
+  ],
+  "documentFacts": {
+    "entityName": null,
+    "idType": "State ID",
+    "taxYear": null
+  },
+  "normalized": {
+    "documentFacts": {
+      "entityName": null,
+      "idType": "State ID",
+      "taxYear": null
+    },
+    "primaryFacts": {
+      "detectedClient": "Jordan P Ellis",
+      "detectedClient2": null,
+      "ownershipType": "single",
+      "accountLast4": null,
+      "accountType": null,
+      "custodian": null,
+      "documentDate": "2023-08-18",
+      "entityName": null,
+      "idType": "State ID",
+      "taxYear": null
+    }
+  },
+  "expectedAmbiguities": []
+}

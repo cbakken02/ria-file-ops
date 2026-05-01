@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "synthetic-corpus-manifest-v1",
+  "generationPath": {
+    "source": "Reusable HTML/CSS templates rendered to PDF with headless Chrome",
+    "script": "scripts/generate-synthetic-statement-corpus.mjs",
+    "stylesheet": "tests/synthetic-corpus/shared/statement.css"
+  },
+  "cases": [
+    {
+      "id": "case-01-us-bank-smartly-checking-single",
+      "title": "U.S. Bank Smartly Checking | Single-owner retail bank statement",
+      "category": "Simple single-account bank statement",
+      "documentTypeId": "account_statement",
+      "documentSubtype": "bank_statement",
+      "layout": "bank",
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "html": "tests/synthetic-corpus/cases/case-01-us-bank-smartly-checking-single/statement.html",
+        "pdf": "tests/synthetic-corpus/cases/case-01-us-bank-smartly-checking-single/statement.pdf",
+        "answerKey": "tests/synthetic-corpus/cases/case-01-us-bank-smartly-checking-single/answer_key.json",
+        "notes": "tests/synthetic-corpus/cases/case-01-us-bank-smartly-checking-single/notes.md"
+      }
+    },
+    {
+      "id": "case-02-harbor-state-premier-savings-single",
+      "title": "Harbor State Premier Savings | Single-owner savings statement",
+      "category": "Simple single-account bank statement",
+      "documentTypeId": "account_statement",
+      "documentSubtype": "bank_statement",
+      "layout": "bank",
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "html": "tests/synthetic-corpus/cases/case-02-harbor-state-premier-savings-single/statement.html",
+        "pdf": "tests/synthetic-corpus/cases/case-02-harbor-state-premier-savings-single/statement.pdf",
+        "answerKey": "tests/synthetic-corpus/cases/case-02-harbor-state-premier-savings-single/answer_key.json",
+        "notes": "tests/synthetic-corpus/cases/case-02-harbor-state-premier-savings-single/notes.md"
+      }
+    },
+    {
+      "id": "case-03-fidelity-summary-brokerage-roth-ira",
+      "title": "Fidelity multi-account summary | Brokerage and Roth IRA",
+      "category": "Multi-account summary statement",
+      "documentTypeId": "account_statement",
+      "documentSubtype": "multi_account_summary",
+      "layout": "summary",
+      "expectedAmbiguousFields": [
+        "normalized.primaryFacts.accountLast4",
+        "normalized.primaryFacts.accountType"
+      ],
+      "artifacts": {
+        "html": "tests/synthetic-corpus/cases/case-03-fidelity-summary-brokerage-roth-ira/statement.html",
+        "pdf": "tests/synthetic-corpus/cases/case-03-fidelity-summary-brokerage-roth-ira/statement.pdf",
+        "answerKey": "tests/synthetic-corpus/cases/case-03-fidelity-summary-brokerage-roth-ira/answer_key.json",
+        "notes": "tests/synthetic-corpus/cases/case-03-fidelity-summary-brokerage-roth-ira/notes.md"
+      }
+    },
+    {
+      "id": "case-04-schwab-household-joint-summary",
+      "title": "Charles Schwab household summary | Joint brokerage and investor checking",
+      "category": "Multi-account summary statement",
+      "documentTypeId": "account_statement",
+      "documentSubtype": "multi_account_summary",
+      "layout": "summary",
+      "expectedAmbiguousFields": [
+        "normalized.primaryFacts.accountLast4",
+        "normalized.primaryFacts.accountType"
+      ],
+      "artifacts": {
+        "html": "tests/synthetic-corpus/cases/case-04-schwab-household-joint-summary/statement.html",
+        "pdf": "tests/synthetic-corpus/cases/case-04-schwab-household-joint-summary/statement.pdf",
+        "answerKey": "tests/synthetic-corpus/cases/case-04-schwab-household-joint-summary/answer_key.json",
+        "notes": "tests/synthetic-corpus/cases/case-04-schwab-household-joint-summary/notes.md"
+      }
+    },
+    {
+      "id": "case-05-vanguard-rollover-ira-quarterly",
+      "title": "Vanguard rollover IRA | Quarterly retirement statement",
+      "category": "Retirement / rollover-oriented statement",
+      "documentTypeId": "account_statement",
+      "documentSubtype": "retirement_statement",
+      "layout": "retirement",
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "html": "tests/synthetic-corpus/cases/case-05-vanguard-rollover-ira-quarterly/statement.html",
+        "pdf": "tests/synthetic-corpus/cases/case-05-vanguard-rollover-ira-quarterly/statement.pdf",
+        "answerKey": "tests/synthetic-corpus/cases/case-05-vanguard-rollover-ira-quarterly/answer_key.json",
+        "notes": "tests/synthetic-corpus/cases/case-05-vanguard-rollover-ira-quarterly/notes.md"
+      }
+    },
+    {
+      "id": "case-06-empower-401k-rollover-support",
+      "title": "Empower 401(k) rollover support | Former employer retirement statement",
+      "category": "Retirement / rollover-oriented statement",
+      "documentTypeId": "account_statement",
+      "documentSubtype": "retirement_statement",
+      "layout": "retirement",
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "html": "tests/synthetic-corpus/cases/case-06-empower-401k-rollover-support/statement.html",
+        "pdf": "tests/synthetic-corpus/cases/case-06-empower-401k-rollover-support/statement.pdf",
+        "answerKey": "tests/synthetic-corpus/cases/case-06-empower-401k-rollover-support/answer_key.json",
+        "notes": "tests/synthetic-corpus/cases/case-06-empower-401k-rollover-support/notes.md"
+      }
+    },
+    {
+      "id": "case-07-jackson-fixed-indexed-annuity-annual",
+      "title": "Jackson fixed indexed annuity | Annual contract statement",
+      "category": "Annuity statement",
+      "documentTypeId": "account_statement",
+      "documentSubtype": "annuity_statement",
+      "layout": "annuity",
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "html": "tests/synthetic-corpus/cases/case-07-jackson-fixed-indexed-annuity-annual/statement.html",
+        "pdf": "tests/synthetic-corpus/cases/case-07-jackson-fixed-indexed-annuity-annual/statement.pdf",
+        "answerKey": "tests/synthetic-corpus/cases/case-07-jackson-fixed-indexed-annuity-annual/answer_key.json",
+        "notes": "tests/synthetic-corpus/cases/case-07-jackson-fixed-indexed-annuity-annual/notes.md"
+      }
+    },
+    {
+      "id": "case-08-lakeside-credit-union-noisy-layout",
+      "title": "Lakeside Community Credit Union | Noisy disclosure-heavy checking statement",
+      "category": "Messy / noisy statement layout",
+      "documentTypeId": "account_statement",
+      "documentSubtype": "bank_statement",
+      "layout": "messy",
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "html": "tests/synthetic-corpus/cases/case-08-lakeside-credit-union-noisy-layout/statement.html",
+        "pdf": "tests/synthetic-corpus/cases/case-08-lakeside-credit-union-noisy-layout/statement.pdf",
+        "answerKey": "tests/synthetic-corpus/cases/case-08-lakeside-credit-union-noisy-layout/answer_key.json",
+        "notes": "tests/synthetic-corpus/cases/case-08-lakeside-credit-union-noisy-layout/notes.md"
+      }
+    }
+  ]
+}

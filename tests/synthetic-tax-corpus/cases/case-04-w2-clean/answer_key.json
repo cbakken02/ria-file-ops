@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "synthetic-tax-answer-key-v1",
+  "caseId": "case-04-w2-clean",
+  "title": "W-2 | Clean wage statement",
+  "documentTypeId": "tax_document",
+  "documentSubtype": "form_w2",
+  "normalized": {
+    "primaryFacts": {
+      "detectedClient": "Harper Stone",
+      "custodian": "Northstar Payroll LLC",
+      "documentDate": "2026-01-31",
+      "idType": "W-2",
+      "taxYear": "2025"
+    }
+  },
+  "taxFacts": [
+    { "fieldId": "form_w2.wages_tips_other_compensation", "form": "W-2", "label": "Wages, tips, other compensation", "line": null, "box": "1", "valueType": "money", "value": "88000.00", "amount": "88000.00", "currency": "USD" },
+    { "fieldId": "form_w2.federal_income_tax_withheld", "form": "W-2", "label": "Federal income tax withheld", "line": null, "box": "2", "valueType": "money", "value": "12345.67", "amount": "12345.67", "currency": "USD" },
+    { "fieldId": "form_w2.social_security_wages", "form": "W-2", "label": "Social security wages", "line": null, "box": "3", "valueType": "money", "value": "88000.00", "amount": "88000.00", "currency": "USD" },
+    { "fieldId": "form_w2.social_security_tax_withheld", "form": "W-2", "label": "Social security tax withheld", "line": null, "box": "4", "valueType": "money", "value": "5456.00", "amount": "5456.00", "currency": "USD" },
+    { "fieldId": "form_w2.medicare_wages_and_tips", "form": "W-2", "label": "Medicare wages and tips", "line": null, "box": "5", "valueType": "money", "value": "88000.00", "amount": "88000.00", "currency": "USD" },
+    { "fieldId": "form_w2.medicare_tax_withheld", "form": "W-2", "label": "Medicare tax withheld", "line": null, "box": "6", "valueType": "money", "value": "1276.00", "amount": "1276.00", "currency": "USD" },
+    { "fieldId": "form_w2.state_wages_tips", "form": "W-2", "label": "State wages, tips, etc.", "line": null, "box": "16", "valueType": "money", "value": "88000.00", "amount": "88000.00", "currency": "USD" },
+    { "fieldId": "form_w2.state_income_tax", "form": "W-2", "label": "State income tax", "line": null, "box": "17", "valueType": "money", "value": "4321.00", "amount": "4321.00", "currency": "USD" }
+  ],
+  "expectedAmbiguities": []
+}

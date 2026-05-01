@@ -1,0 +1,9 @@
+Form 1040 U.S. Individual Income Tax Return
+Tax year: 2025
+Name shown on return
+Mia Chen
+Line 11 Adjusted gross income 72,345
+Line 15 Taxable income 0
+Line 24 Total tax 0
+Line 34 Refund 0
+Line 37 Amount owed 0

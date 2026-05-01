@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "synthetic-tax-answer-key-v1",
+  "caseId": "case-06-w2-ocr-spacing",
+  "title": "W-2 | OCR-ish spacing and whole-dollar values",
+  "documentTypeId": "tax_document",
+  "documentSubtype": "form_w2",
+  "normalized": {
+    "primaryFacts": {
+      "detectedClient": "Priya Shah",
+      "custodian": "Lakeside Manufacturing Inc",
+      "documentDate": null,
+      "idType": "W-2",
+      "taxYear": "2024"
+    }
+  },
+  "taxFacts": [
+    { "fieldId": "form_w2.wages_tips_other_compensation", "form": "W-2", "label": "Wages, tips, other compensation", "line": null, "box": "1", "valueType": "money", "value": "67000.00", "amount": "67000.00", "currency": "USD" },
+    { "fieldId": "form_w2.federal_income_tax_withheld", "form": "W-2", "label": "Federal income tax withheld", "line": null, "box": "2", "valueType": "money", "value": "9200.00", "amount": "9200.00", "currency": "USD" },
+    { "fieldId": "form_w2.social_security_wages", "form": "W-2", "label": "Social security wages", "line": null, "box": "3", "valueType": "money", "value": "67000.00", "amount": "67000.00", "currency": "USD" },
+    { "fieldId": "form_w2.social_security_tax_withheld", "form": "W-2", "label": "Social security tax withheld", "line": null, "box": "4", "valueType": "money", "value": "4154.00", "amount": "4154.00", "currency": "USD" },
+    { "fieldId": "form_w2.medicare_wages_and_tips", "form": "W-2", "label": "Medicare wages and tips", "line": null, "box": "5", "valueType": "money", "value": "67000.00", "amount": "67000.00", "currency": "USD" },
+    { "fieldId": "form_w2.medicare_tax_withheld", "form": "W-2", "label": "Medicare tax withheld", "line": null, "box": "6", "valueType": "money", "value": "971.50", "amount": "971.50", "currency": "USD" },
+    { "fieldId": "form_w2.state_wages_tips", "form": "W-2", "label": "State wages, tips, etc.", "line": null, "box": "16", "valueType": "money", "value": "67000.00", "amount": "67000.00", "currency": "USD" },
+    { "fieldId": "form_w2.state_income_tax", "form": "W-2", "label": "State income tax", "line": null, "box": "17", "valueType": "money", "value": "3500.00", "amount": "3500.00", "currency": "USD" }
+  ],
+  "expectedAmbiguities": []
+}

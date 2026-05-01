@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "synthetic-id-corpus-manifest-v1",
+  "generationPath": {
+    "source": "Reusable HTML/CSS identity-card templates rendered to PDF with headless Chrome",
+    "script": "scripts/generate-synthetic-identity-corpus.mjs",
+    "stylesheet": "tests/synthetic-id-corpus/shared/id-card.css"
+  },
+  "cases": [
+    {
+      "id": "case-01-wi-driver-license-clean",
+      "title": "Wisconsin driver license | Clean front-only ID",
+      "category": "Clean driver’s license",
+      "documentTypeId": "identity_document",
+      "documentSubtype": "driver_license",
+      "layout": "driver-license",
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "html": "tests/synthetic-id-corpus/cases/case-01-wi-driver-license-clean/document.html",
+        "pdf": "tests/synthetic-id-corpus/cases/case-01-wi-driver-license-clean/document.pdf",
+        "answerKey": "tests/synthetic-id-corpus/cases/case-01-wi-driver-license-clean/answer_key.json",
+        "notes": "tests/synthetic-id-corpus/cases/case-01-wi-driver-license-clean/notes.md"
+      }
+    },
+    {
+      "id": "case-02-co-state-id-clean",
+      "title": "Colorado state ID | Clean front-only ID",
+      "category": "Clean state ID",
+      "documentTypeId": "identity_document",
+      "documentSubtype": "state_id",
+      "layout": "state-id",
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "html": "tests/synthetic-id-corpus/cases/case-02-co-state-id-clean/document.html",
+        "pdf": "tests/synthetic-id-corpus/cases/case-02-co-state-id-clean/document.pdf",
+        "answerKey": "tests/synthetic-id-corpus/cases/case-02-co-state-id-clean/answer_key.json",
+        "notes": "tests/synthetic-id-corpus/cases/case-02-co-state-id-clean/notes.md"
+      }
+    },
+    {
+      "id": "case-05-alex-demo-driver-license-old-expired",
+      "title": "Alex Demo driver license | Older expired Wisconsin license",
+      "category": "Older expired license for the same person",
+      "documentTypeId": "identity_document",
+      "documentSubtype": "driver_license",
+      "layout": "driver-license",
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "html": "tests/synthetic-id-corpus/cases/case-05-alex-demo-driver-license-old-expired/document.html",
+        "pdf": "tests/synthetic-id-corpus/cases/case-05-alex-demo-driver-license-old-expired/document.pdf",
+        "answerKey": "tests/synthetic-id-corpus/cases/case-05-alex-demo-driver-license-old-expired/answer_key.json",
+        "notes": "tests/synthetic-id-corpus/cases/case-05-alex-demo-driver-license-old-expired/notes.md"
+      }
+    },
+    {
+      "id": "case-06-alex-demo-driver-license-renewed-current",
+      "title": "Alex Demo driver license | Renewed current Wisconsin license",
+      "category": "Newer renewed/current license for the same person",
+      "documentTypeId": "identity_document",
+      "documentSubtype": "driver_license",
+      "layout": "driver-license",
+      "expectedAmbiguousFields": [],
+      "artifacts": {
+        "html": "tests/synthetic-id-corpus/cases/case-06-alex-demo-driver-license-renewed-current/document.html",
+        "pdf": "tests/synthetic-id-corpus/cases/case-06-alex-demo-driver-license-renewed-current/document.pdf",
+        "answerKey": "tests/synthetic-id-corpus/cases/case-06-alex-demo-driver-license-renewed-current/answer_key.json",
+        "notes": "tests/synthetic-id-corpus/cases/case-06-alex-demo-driver-license-renewed-current/notes.md"
+      }
+    },
+    {
+      "id": "case-08-state-id-missing-expiration-or-unclear-id-number",
+      "title": "State ID | Missing expiration and unclear ID number",
+      "category": "Incomplete / unclear ID",
+      "documentTypeId": "identity_document",
+      "documentSubtype": "state_id",
+      "layout": "state-id incomplete",
+      "expectedAmbiguousFields": [
+        "parties[0].governmentIds[0].value",
+        "dates[expiration_date].value"
+      ],
+      "artifacts": {
+        "html": "tests/synthetic-id-corpus/cases/case-08-state-id-missing-expiration-or-unclear-id-number/document.html",
+        "pdf": "tests/synthetic-id-corpus/cases/case-08-state-id-missing-expiration-or-unclear-id-number/document.pdf",
+        "answerKey": "tests/synthetic-id-corpus/cases/case-08-state-id-missing-expiration-or-unclear-id-number/answer_key.json",
+        "notes": "tests/synthetic-id-corpus/cases/case-08-state-id-missing-expiration-or-unclear-id-number/notes.md"
+      }
+    }
+  ]
+}

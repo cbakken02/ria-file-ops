@@ -1,0 +1,156 @@
+{
+  "schemaVersion": "synthetic-answer-key-v1",
+  "caseId": "case-02-harbor-state-premier-savings-single",
+  "title": "Harbor State Premier Savings | Single-owner savings statement",
+  "documentTypeId": "account_statement",
+  "documentSubtype": "bank_statement",
+  "parties": [
+    {
+      "id": "party-1",
+      "kind": "person",
+      "displayName": "Danielle M Ortiz",
+      "rawName": "Danielle M Ortiz",
+      "addresses": [
+        {
+          "kind": "mailing",
+          "rawText": "847 SHORELINE PASS, TRAVERSE CITY MI 49684",
+          "lines": [
+            "847 SHORELINE PASS",
+            "TRAVERSE CITY MI 49684"
+          ],
+          "city": "TRAVERSE CITY",
+          "state": "MI",
+          "postalCode": "49684",
+          "country": "US"
+        }
+      ]
+    }
+  ],
+  "institutions": [
+    {
+      "id": "institution-1",
+      "name": "Harbor State Bank & Trust",
+      "rawName": "Harbor State Bank & Trust",
+      "addresses": []
+    }
+  ],
+  "contacts": [
+    {
+      "id": "contact-1",
+      "institutionId": "institution-1",
+      "method": "phone",
+      "purpose": "customer_service",
+      "label": "Savings support phone",
+      "value": "877-555-0194",
+      "address": null,
+      "hoursText": null
+    },
+    {
+      "id": "contact-2",
+      "institutionId": "institution-1",
+      "method": "website",
+      "purpose": "general_support",
+      "label": "Online banking website",
+      "value": "www.harborstatebank.com",
+      "address": null,
+      "hoursText": null
+    }
+  ],
+  "accounts": [
+    {
+      "id": "account-1",
+      "institutionIds": [
+        "institution-1"
+      ],
+      "accountNumber": "558800771234",
+      "maskedAccountNumber": "xxxxxxxx1234",
+      "accountLast4": "1234",
+      "accountType": "Savings",
+      "registrationType": "Individual",
+      "statementStartDateId": "date-period-start",
+      "statementEndDateId": "date-period-end",
+      "values": [
+        {
+          "kind": "beginning_balance",
+          "label": "Beginning balance",
+          "money": {
+            "amount": "12100.00",
+            "currency": "USD"
+          },
+          "dateId": "date-document"
+        },
+        {
+          "kind": "ending_balance",
+          "label": "Ending balance",
+          "money": {
+            "amount": "12345.67",
+            "currency": "USD"
+          },
+          "dateId": "date-document"
+        },
+        {
+          "kind": "available_balance",
+          "label": "Available balance",
+          "money": {
+            "amount": "12345.67",
+            "currency": "USD"
+          },
+          "dateId": "date-document"
+        }
+      ]
+    }
+  ],
+  "accountParties": [
+    {
+      "id": "account-1-party-1",
+      "accountId": "account-1",
+      "partyId": "party-1",
+      "roles": [
+        "owner"
+      ],
+      "relationshipLabel": "Owner",
+      "allocationPercent": null
+    }
+  ],
+  "dates": [
+    {
+      "id": "date-document",
+      "kind": "document_date",
+      "value": "2026-01-31",
+      "rawValue": "Jan 31, 2026",
+      "entityType": "document",
+      "entityId": null
+    },
+    {
+      "id": "date-period-start",
+      "kind": "statement_period_start",
+      "value": "2026-01-01",
+      "rawValue": "Jan 1, 2026",
+      "entityType": "document",
+      "entityId": null
+    },
+    {
+      "id": "date-period-end",
+      "kind": "statement_period_end",
+      "value": "2026-01-31",
+      "rawValue": "Jan 31, 2026",
+      "entityType": "document",
+      "entityId": null
+    }
+  ],
+  "normalized": {
+    "primaryFacts": {
+      "detectedClient": "Danielle M Ortiz",
+      "detectedClient2": null,
+      "ownershipType": "single",
+      "accountLast4": "1234",
+      "accountType": "Savings",
+      "custodian": "Harbor State Bank & Trust",
+      "documentDate": "2026-01-31",
+      "entityName": null,
+      "idType": null,
+      "taxYear": null
+    }
+  },
+  "expectedAmbiguities": []
+}

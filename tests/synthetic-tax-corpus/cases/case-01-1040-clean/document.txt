@@ -1,0 +1,8 @@
+Form 1040 U.S. Individual Income Tax Return
+Tax year 2025
+Taxpayer's name Alex Morgan
+11 Adjusted gross income $125,000.00
+15 Taxable income $98,500.00
+24 Total tax $18,400.00
+34 Refund $1,250.00
+37 Amount you owe $0.00

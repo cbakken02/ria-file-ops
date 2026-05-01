@@ -1,0 +1,10 @@
+2025 Form 1099-R Distributions From Pensions and Annuities
+Tax year: 2025
+Payer name: Jackson National Life Insurance Company
+Recipient name: Mateo Garcia
+1 Gross distribution 12,345.67
+2a Taxable amount 11,000.00
+4 Federal income tax withheld 1,500.00
+7 Distribution code(s) 7
+14 State tax withheld 500.50
+16 State distribution 11,000.00

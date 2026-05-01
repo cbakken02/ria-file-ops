@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "synthetic-answer-key-v1",
+  "caseId": "case-08-lakeside-credit-union-noisy-layout",
+  "title": "Lakeside Community Credit Union | Noisy disclosure-heavy checking statement",
+  "documentTypeId": "account_statement",
+  "documentSubtype": "bank_statement",
+  "parties": [
+    {
+      "id": "party-1",
+      "kind": "person",
+      "displayName": "Owen P Whitaker",
+      "rawName": "Owen P Whitaker",
+      "addresses": [
+        {
+          "kind": "mailing",
+          "rawText": "920 HARBOR VIEW DR, MILWAUKEE WI 53202",
+          "lines": [
+            "920 HARBOR VIEW DR",
+            "MILWAUKEE WI 53202"
+          ],
+          "city": "MILWAUKEE",
+          "state": "WI",
+          "postalCode": "53202",
+          "country": "US"
+        }
+      ]
+    }
+  ],
+  "institutions": [
+    {
+      "id": "institution-1",
+      "name": "Lakeside Community Credit Union",
+      "rawName": "Lakeside Community Credit Union",
+      "addresses": []
+    }
+  ],
+  "contacts": [
+    {
+      "id": "contact-1",
+      "institutionId": "institution-1",
+      "method": "phone",
+      "purpose": "customer_service",
+      "label": "Member service phone",
+      "value": "800-555-2210",
+      "address": null,
+      "hoursText": null
+    },
+    {
+      "id": "contact-2",
+      "institutionId": "institution-1",
+      "method": "website",
+      "purpose": "general_support",
+      "label": "Online banking website",
+      "value": "www.lakesidecu.com",
+      "address": null,
+      "hoursText": null
+    }
+  ],
+  "accounts": [
+    {
+      "id": "account-1",
+      "institutionIds": [
+        "institution-1"
+      ],
+      "accountNumber": "302200110044",
+      "maskedAccountNumber": "xxxxxxxx0044",
+      "accountLast4": "0044",
+      "accountType": "Checking",
+      "registrationType": "Individual",
+      "statementStartDateId": "date-period-start",
+      "statementEndDateId": "date-period-end",
+      "values": [
+        {
+          "kind": "ending_balance",
+          "label": "Ending balance",
+          "money": {
+            "amount": "2188.76",
+            "currency": "USD"
+          },
+          "dateId": "date-document"
+        },
+        {
+          "kind": "available_balance",
+          "label": "Available balance",
+          "money": {
+            "amount": "1905.12",
+            "currency": "USD"
+          },
+          "dateId": "date-document"
+        }
+      ]
+    }
+  ],
+  "accountParties": [
+    {
+      "id": "account-1-party-1",
+      "accountId": "account-1",
+      "partyId": "party-1",
+      "roles": [
+        "owner"
+      ],
+      "relationshipLabel": "Owner",
+      "allocationPercent": null
+    }
+  ],
+  "dates": [
+    {
+      "id": "date-document",
+      "kind": "document_date",
+      "value": "2026-02-28",
+      "rawValue": "Feb 28, 2026",
+      "entityType": "document",
+      "entityId": null
+    },
+    {
+      "id": "date-period-start",
+      "kind": "statement_period_start",
+      "value": "2026-02-01",
+      "rawValue": "Feb 1, 2026",
+      "entityType": "document",
+      "entityId": null
+    },
+    {
+      "id": "date-period-end",
+      "kind": "statement_period_end",
+      "value": "2026-02-28",
+      "rawValue": "Feb 28, 2026",
+      "entityType": "document",
+      "entityId": null
+    }
+  ],
+  "normalized": {
+    "primaryFacts": {
+      "detectedClient": "Owen P Whitaker",
+      "detectedClient2": null,
+      "ownershipType": "single",
+      "accountLast4": "0044",
+      "accountType": "Checking",
+      "custodian": "Lakeside Community Credit Union",
+      "documentDate": "2026-02-28",
+      "entityName": null,
+      "idType": null,
+      "taxYear": null
+    }
+  },
+  "expectedAmbiguities": []
+}
