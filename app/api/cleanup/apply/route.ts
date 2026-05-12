@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error:
-          "Reconnect the active storage connection with write access before applying Cleanup suggestions.",
+          "Reconnect the active storage connection with write access before applying Clean Up suggestions.",
       },
       { status: 400 },
     );
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
   if (selectedIds.length === 0) {
     return Response.json(
-      { error: "Choose suggested files before applying Cleanup." },
+      { error: "Choose suggested files before applying Clean Up." },
       { status: 400 },
     );
   }
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
 
     if (candidates.length === 0) {
       return Response.json(
-        { error: "No selected files have ready Cleanup suggestions to apply." },
+        { error: "No selected files have ready Clean Up suggestions to apply." },
         { status: 400 },
       );
     }
@@ -88,10 +88,10 @@ export async function POST(request: Request) {
       });
     }
 
-    revalidatePath("/cleanup");
+    revalidatePath("/clean-up");
     revalidatePath("/history");
     revalidatePath("/dashboard");
-    revalidatePath("/preview");
+    revalidatePath("/intake");
 
     return Response.json({
       failedCount: result.failedCount,
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Cleanup suggestions could not be applied.",
+            : "Clean Up suggestions could not be applied.",
       },
       { status: 500 },
     );

@@ -40,7 +40,7 @@ function buildPreviewRedirect(tab: string, notice: string) {
     params.set("tab", tab);
   }
   params.set("notice", notice);
-  return `/preview?${params.toString()}`;
+  return `/intake?${params.toString()}`;
 }
 
 function getApprovedClientFolder(
@@ -164,13 +164,13 @@ export async function prepareReadyItemsFilingRedirect(
   }
 
   if (!storageConnectionHasWriteAccess(activeConnection)) {
-    return "/preview?notice=Reconnect+the+active+storage+connection+with+write+access+before+filing.";
+    return "/intake?notice=Reconnect+the+active+storage+connection+with+write+access+before+filing.";
   }
 
   const settings = getFirmSettingsByOwnerEmail(ownerEmail);
   const clientMemoryRules = getClientMemoryRulesByOwnerEmail(ownerEmail);
   if (!settings?.sourceFolderId || !settings.destinationFolderId) {
-    return "/preview?notice=Complete+setup+before+filing+ready+items.";
+    return "/intake?notice=Complete+setup+before+filing+ready+items.";
   }
 
   let sourceFiles: GoogleDriveFile[] = [];
@@ -180,7 +180,7 @@ export async function prepareReadyItemsFilingRedirect(
       settings.sourceFolderId,
     );
   } catch (error) {
-    return `/preview?notice=${encodeURIComponent(
+    return `/intake?notice=${encodeURIComponent(
       error instanceof Error
         ? `Google Drive could not load the source folder: ${error.message}`
         : "Google Drive could not load the source folder.",
@@ -194,7 +194,7 @@ export async function prepareReadyItemsFilingRedirect(
       settings.destinationFolderId,
     );
   } catch (error) {
-    return `/preview?notice=${encodeURIComponent(
+    return `/intake?notice=${encodeURIComponent(
       error instanceof Error
         ? `Google Drive could not load the destination root: ${error.message}`
         : "Google Drive could not load the destination root.",
@@ -217,7 +217,7 @@ export async function prepareReadyItemsFilingRedirect(
   if (!readyItems.length) {
     const tabSuffix =
       mode === "auto" && preview.reviewCount > 0 ? "&tab=review" : "";
-    return `/preview?notice=There+are+no+ready-to-stage+items+to+file+right+now.${tabSuffix}`;
+    return `/intake?notice=There+are+no+ready-to-stage+items+to+file+right+now.${tabSuffix}`;
   }
 
   const result = await executeFilingBatch({
@@ -264,17 +264,17 @@ export async function prepareReadyItemsFilingRedirect(
 
   revalidatePath("/dashboard");
   revalidatePath("/history");
-  revalidatePath("/preview");
+  revalidatePath("/intake");
   revalidatePath("/review");
 
   if (mode === "auto") {
     const tab = preview.reviewCount > 0 ? "review" : "filed";
-    return `/preview?tab=${tab}&notice=${encodeURIComponent(
+    return `/intake?tab=${tab}&notice=${encodeURIComponent(
       `Auto-file moved ${result.succeededCount} high-confidence items and ${result.failedCount} failed.`,
     )}`;
   }
 
-  return `/preview?notice=${encodeURIComponent(
+  return `/intake?notice=${encodeURIComponent(
     `Ready-item filing finished. ${result.succeededCount} succeeded and ${result.failedCount} failed.`,
   )}`;
 }
@@ -392,7 +392,7 @@ async function approvePreviewItemsForIds(input: {
 
   revalidatePath("/dashboard");
   revalidatePath("/history");
-  revalidatePath("/preview");
+  revalidatePath("/intake");
   revalidatePath("/review");
 
   const notice =

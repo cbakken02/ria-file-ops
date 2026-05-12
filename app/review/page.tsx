@@ -8,8 +8,8 @@ export default async function ReviewRedirectPage({
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
   if (resolvedSearchParams?.notice) {
-    redirect(`/preview?notice=${encodeURIComponent(resolvedSearchParams.notice)}`);
+    redirect(`/intake?notice=${encodeURIComponent(resolvedSearchParams.notice)}`);
   }
 
-  redirect("/preview");
+  redirect("/intake");
 }

@@ -37,7 +37,7 @@ function makeFirmSettings(overrides = {}) {
 
 test("Intake page does not render the old visible Refresh Intake control", () => {
   const queueSource = readRepoFile("app/preview/intake-queue.tsx");
-  const pageSource = readRepoFile("app/preview/page.tsx");
+  const pageSource = readRepoFile("app/preview/intake-workspace-page.tsx");
 
   assert.equal(queueSource.includes("RefreshIntakeButton"), false);
   assert.equal(queueSource.includes("Refresh Intake"), false);
@@ -57,7 +57,7 @@ test("preview refresh API is wired to the shared Intake refresh helper", () => {
   const source = readRepoFile("app/api/preview/refresh/route.ts");
 
   assert.match(source, /refreshIntakeQueueForSession/);
-  assert.match(source, /revalidatePath\("\/preview"\)/);
+  assert.match(source, /revalidatePath\("\/intake"\)/);
 });
 
 test("refreshIntakeQueue lists Drive folders, builds a preview, and writes the cached snapshot", async () => {

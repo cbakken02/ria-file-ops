@@ -1,8 +1,8 @@
 export type ProductNavPath =
   | "/dashboard"
-  | "/preview"
+  | "/intake"
   | "/data-intelligence"
-  | "/cleanup"
+  | "/clean-up"
   | "/history"
   | "/security"
   | "/setup";
@@ -18,13 +18,13 @@ export const PRODUCT_NAV_ITEMS: Array<{
     hint: "Overview",
   },
   {
-    href: "/preview",
+    href: "/intake",
     label: "Intake",
     hint: "New Files",
   },
   {
-    href: "/cleanup",
-    label: "Cleanup",
+    href: "/clean-up",
+    label: "Clean Up",
     hint: "Existing Files",
   },
   {

@@ -16,7 +16,7 @@ export async function POST() {
 
   try {
     const result = await refreshIntakeQueueForSession(session);
-    revalidatePath("/preview");
+    revalidatePath("/intake");
 
     return Response.json(result);
   } catch (error) {

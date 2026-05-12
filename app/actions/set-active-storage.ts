@@ -28,8 +28,8 @@ export async function setActiveStorageForPathAction(formData: FormData) {
   setPrimaryStorageConnectionForOwner({ ownerEmail, connectionId });
 
   revalidatePath("/dashboard");
-  revalidatePath("/preview");
-  revalidatePath("/cleanup");
+  revalidatePath("/intake");
+  revalidatePath("/clean-up");
   revalidatePath("/history");
   revalidatePath("/setup");
   revalidatePath("/setup/google-drive");
@@ -39,6 +39,14 @@ export async function setActiveStorageForPathAction(formData: FormData) {
 function normalizeReturnPath(raw: string) {
   if (!raw.startsWith("/") || raw.startsWith("//")) {
     return "/setup?section=workspace";
+  }
+
+  if (raw === "/preview") {
+    return "/intake";
+  }
+
+  if (raw === "/cleanup") {
+    return "/clean-up";
   }
 
   return raw;

@@ -29,6 +29,9 @@ export function StorageSwitcher({
 }: StorageSwitcherProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const settingsHref = `/setup?section=workspace&returnTo=${encodeURIComponent(
+    currentPath,
+  )}`;
 
   useEffect(() => {
     if (!open) {
@@ -150,7 +153,7 @@ export function StorageSwitcher({
           <div className={styles.popoverFooter}>
             <Link
               className={styles.footerLink}
-              href="/setup?section=workspace"
+              href={settingsHref}
               onClick={() => setOpen(false)}
             >
               Manage storage connections
