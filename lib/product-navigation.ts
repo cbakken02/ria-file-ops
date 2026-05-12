@@ -7,11 +7,13 @@ export type ProductNavPath =
   | "/security"
   | "/setup";
 
-export const PRODUCT_NAV_ITEMS: Array<{
+export type ProductNavItem = {
   href: ProductNavPath;
   label: string;
   hint: string;
-}> = [
+};
+
+export const PRODUCT_NAV_ITEMS: ProductNavItem[] = [
   {
     href: "/dashboard",
     label: "Dashboard",
