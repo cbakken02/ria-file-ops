@@ -175,28 +175,35 @@ export async function readPreviewSnapshot(ownerEmail?: string | null) {
     return null;
   }
 
-  const result = await queryPostgres<PreviewSnapshotRow>(
-    `
-      SELECT
-        id,
-        owner_email AS "ownerEmail",
-        generated_at AS "generatedAt",
-        source_folder AS "sourceFolder",
-        destination_root AS "destinationRoot",
-        review_posture AS "reviewPosture",
-        ready_count AS "readyCount",
-        review_count AS "reviewCount",
-        snapshot_json AS "snapshotJson",
-        created_at AS "createdAt",
-        updated_at AS "updatedAt"
-      FROM public.preview_snapshots
-      WHERE owner_email = $1
-      LIMIT 1
-    `,
-    [normalizedOwnerEmail],
-  );
+  try {
+    const result = await queryPostgres<PreviewSnapshotRow>(
+      `
+        SELECT
+          id,
+          owner_email AS "ownerEmail",
+          generated_at AS "generatedAt",
+          source_folder AS "sourceFolder",
+          destination_root AS "destinationRoot",
+          review_posture AS "reviewPosture",
+          ready_count AS "readyCount",
+          review_count AS "reviewCount",
+          snapshot_json AS "snapshotJson",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM public.preview_snapshots
+        WHERE owner_email = $1
+        LIMIT 1
+      `,
+      [normalizedOwnerEmail],
+    );
 
-  return normalizeSnapshotValue(result.rows[0]?.snapshotJson);
+    return normalizeSnapshotValue(result.rows[0]?.snapshotJson);
+  } catch (error) {
+    console.warn("[preview-snapshot] read failed", {
+      message: error instanceof Error ? error.message : "Unknown preview snapshot read error",
+    });
+    return null;
+  }
 }
 
 export function restorePreviewItemsFromSnapshot(

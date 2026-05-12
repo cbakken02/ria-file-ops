@@ -189,10 +189,36 @@ function unsupportedSupabaseOperation(name: string): never {
   );
 }
 
+function readAppStateValue<T>(
+  name: string,
+  fallback: T,
+  reader: () => T,
+): T {
+  try {
+    return reader();
+  } catch (error) {
+    if (!isSupabasePersistence()) {
+      throw error;
+    }
+
+    console.warn("[app-state] read failed", {
+      message: getErrorMessage(error),
+      name,
+    });
+    return fallback;
+  }
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown app-state read error";
+}
+
 export function getFirmSettingsByOwnerEmail(
   ownerEmail: string,
 ): FirmSettings | undefined {
-  return getActiveAppStateStore().getFirmSettingsByOwnerEmail(ownerEmail);
+  return readAppStateValue("firm settings", undefined, () =>
+    getActiveAppStateStore().getFirmSettingsByOwnerEmail(ownerEmail),
+  );
 }
 
 export function saveFirmSettingsForOwner(input: {
@@ -213,22 +239,28 @@ export function saveFirmSettingsForOwner(input: {
 export function getReviewDecisionsByOwnerEmail(
   ownerEmail: string,
 ): ReviewDecision[] {
-  return getActiveAppStateStore().getReviewDecisionsByOwnerEmail(ownerEmail);
+  return readAppStateValue("review decisions", [], () =>
+    getActiveAppStateStore().getReviewDecisionsByOwnerEmail(ownerEmail),
+  );
 }
 
 export function getClientMemoryRulesByOwnerEmail(
   ownerEmail: string,
 ): ClientMemoryRule[] {
-  return getActiveAppStateStore().getClientMemoryRulesByOwnerEmail(ownerEmail);
+  return readAppStateValue("client memory rules", [], () =>
+    getActiveAppStateStore().getClientMemoryRulesByOwnerEmail(ownerEmail),
+  );
 }
 
 export function getReviewDecisionByOwnerAndFile(
   ownerEmail: string,
   fileId: string,
 ): ReviewDecision | undefined {
-  return getActiveAppStateStore().getReviewDecisionByOwnerAndFile(
-    ownerEmail,
-    fileId,
+  return readAppStateValue("review decision", undefined, () =>
+    getActiveAppStateStore().getReviewDecisionByOwnerAndFile(
+      ownerEmail,
+      fileId,
+    ),
   );
 }
 
@@ -272,9 +304,11 @@ export function getCleanupFileStatesByOwnerAndFileIds(
 ): CleanupFileState[] {
   ensureSupabaseCleanupFileStateSchema();
 
-  return getActiveAppStateStore()
-    .getCleanupFileStatesByOwnerAndFileIds(ownerEmail, fileIds)
-    .filter((state): state is CleanupFileState => Boolean(state));
+  return readAppStateValue("cleanup file states", [], () =>
+    getActiveAppStateStore()
+      .getCleanupFileStatesByOwnerAndFileIds(ownerEmail, fileIds)
+      .filter((state): state is CleanupFileState => Boolean(state)),
+  );
 }
 
 export function upsertCleanupFileStateForOwner(
@@ -297,14 +331,18 @@ export function markCleanupFileStateComplete(input: {
 }
 
 export function getFilingEventsByOwnerEmail(ownerEmail: string): FilingEvent[] {
-  return getActiveAppStateStore().getFilingEventsByOwnerEmail(ownerEmail);
+  return readAppStateValue("filing events", [], () =>
+    getActiveAppStateStore().getFilingEventsByOwnerEmail(ownerEmail),
+  );
 }
 
 export function getFilingEventByOwnerAndId(
   ownerEmail: string,
   eventId: string,
 ): FilingEvent | null {
-  return getActiveAppStateStore().getFilingEventByOwnerAndId(ownerEmail, eventId);
+  return readAppStateValue("filing event", null, () =>
+    getActiveAppStateStore().getFilingEventByOwnerAndId(ownerEmail, eventId),
+  );
 }
 
 export function createFilingEvent(input: {
@@ -373,22 +411,28 @@ export function upsertClientMemoryRule(input: {
 export function getStorageConnectionsByOwnerEmail(
   ownerEmail: string,
 ): StorageConnection[] {
-  return getActiveAppStateStore().getStorageConnectionsByOwnerEmail(ownerEmail);
+  return readAppStateValue("storage connections", [], () =>
+    getActiveAppStateStore().getStorageConnectionsByOwnerEmail(ownerEmail),
+  );
 }
 
 export function getPrimaryStorageConnectionByOwnerEmail(
   ownerEmail: string,
 ): StorageConnection | undefined {
-  return getActiveAppStateStore().getPrimaryStorageConnectionByOwnerEmail(ownerEmail);
+  return readAppStateValue("primary storage connection", undefined, () =>
+    getActiveAppStateStore().getPrimaryStorageConnectionByOwnerEmail(ownerEmail),
+  );
 }
 
 export function getStorageConnectionByOwnerAndId(
   ownerEmail: string,
   connectionId: string,
 ): StorageConnection | undefined {
-  return getActiveAppStateStore().getStorageConnectionByOwnerAndId(
-    ownerEmail,
-    connectionId,
+  return readAppStateValue("storage connection", undefined, () =>
+    getActiveAppStateStore().getStorageConnectionByOwnerAndId(
+      ownerEmail,
+      connectionId,
+    ),
   );
 }
 
