@@ -172,8 +172,8 @@ export async function saveReviewDecisionAction(formData: FormData) {
 
   revalidatePath("/review");
   revalidatePath("/dashboard");
-  revalidatePath("/preview");
-  redirect("/preview?notice=Review+changes+saved.");
+  revalidatePath("/intake");
+  redirect("/intake?notice=Review+changes+saved.");
 }
 
 export async function fileApprovedDecisionsAction() {
@@ -186,7 +186,7 @@ export async function fileApprovedDecisionsAction() {
   }
 
   if (!storageConnectionHasWriteAccess(activeConnection)) {
-    redirect("/preview?notice=Reconnect+the+active+storage+connection+with+write+access+before+filing.");
+    redirect("/intake?notice=Reconnect+the+active+storage+connection+with+write+access+before+filing.");
   }
 
   const settings = getFirmSettingsByOwnerEmail(ownerEmail);
@@ -200,7 +200,7 @@ export async function fileApprovedDecisionsAction() {
   );
 
   if (!approvedDecisions.length) {
-    redirect("/preview?notice=There+are+no+approved+items+to+file+right+now.");
+    redirect("/intake?notice=There+are+no+approved+items+to+file+right+now.");
   }
 
   let sourceFiles: GoogleDriveFile[] = [];
@@ -211,7 +211,7 @@ export async function fileApprovedDecisionsAction() {
     );
   } catch (error) {
     redirect(
-      `/preview?notice=${encodeURIComponent(
+      `/intake?notice=${encodeURIComponent(
         error instanceof Error
           ? `Google Drive could not load the source folder: ${error.message}`
           : "Google Drive could not load the source folder.",
@@ -227,7 +227,7 @@ export async function fileApprovedDecisionsAction() {
     );
   } catch (error) {
     redirect(
-      `/preview?notice=${encodeURIComponent(
+      `/intake?notice=${encodeURIComponent(
         error instanceof Error
           ? `Google Drive could not load the destination root: ${error.message}`
           : "Google Drive could not load the destination root.",
@@ -316,10 +316,10 @@ export async function fileApprovedDecisionsAction() {
 
   revalidatePath("/review");
   revalidatePath("/dashboard");
-  revalidatePath("/preview");
+  revalidatePath("/intake");
   revalidatePath("/history");
   redirect(
-    `/preview?notice=${encodeURIComponent(
+    `/intake?notice=${encodeURIComponent(
       `Approved filing finished. ${result.succeededCount} succeeded and ${result.failedCount} failed.`,
     )}`,
   );

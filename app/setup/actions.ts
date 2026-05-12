@@ -84,13 +84,13 @@ export async function saveFirmSettings(
 
     revalidatePath("/setup");
     revalidatePath("/dashboard");
-    revalidatePath("/preview");
-    revalidatePath("/cleanup");
+    revalidatePath("/intake");
+    revalidatePath("/clean-up");
 
     return {
       status: "success",
       message:
-        "Settings saved. Intake and Cleanup will use these conventions going forward.",
+        "Settings saved. Intake and Clean Up will use these conventions going forward.",
       savedSettings: {
         firmName,
         namingConvention: namingSummary,
@@ -144,8 +144,8 @@ export async function removeStorageConnectionAction(connectionId: string) {
     revalidatePath("/setup");
     revalidatePath("/setup/google-drive");
     revalidatePath("/dashboard");
-    revalidatePath("/preview");
-    revalidatePath("/cleanup");
+    revalidatePath("/intake");
+    revalidatePath("/clean-up");
 
     return {
       status: "success" as const,

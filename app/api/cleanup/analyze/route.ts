@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
   if (!targetKind || selectedIds.length === 0) {
     return Response.json(
-      { error: "Choose files or folders before analyzing Cleanup suggestions." },
+      { error: "Choose files or folders before analyzing Clean Up suggestions." },
       { status: 400 },
     );
   }
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
       }
     }
 
-    revalidatePath("/cleanup");
+    revalidatePath("/clean-up");
 
     return Response.json({
       analyzedCount,
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Cleanup analysis could not be completed.",
+            : "Clean Up analysis could not be completed.",
       },
       { status: 500 },
     );

@@ -37,6 +37,10 @@ export function AccountMenu({
   });
   const [isSubmittingBug, startBugSubmitTransition] = useTransition();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const settingsHref =
+    currentPath === "/setup"
+      ? "/setup"
+      : `/setup?returnTo=${encodeURIComponent(currentPath)}`;
 
   useEffect(() => {
     if (!open) {
@@ -224,7 +228,7 @@ export function AccountMenu({
                   ? styles.activeAccountLink
                   : styles.accountLink
               }
-              href="/setup"
+              href={settingsHref}
               onClick={() => setOpen(false)}
               prefetch={false}
               role="menuitem"

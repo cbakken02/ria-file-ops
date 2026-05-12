@@ -60,7 +60,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Cleanup preview could not be generated.",
+            : "Clean Up preview could not be generated.",
       },
       { status: 500 },
     );

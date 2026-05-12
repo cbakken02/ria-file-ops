@@ -25,7 +25,7 @@ export async function setActiveStorageConnectionAction(formData: FormData) {
   setPrimaryStorageConnectionForOwner({ ownerEmail, connectionId });
 
   revalidatePath("/dashboard");
-  revalidatePath("/preview");
+  revalidatePath("/intake");
   revalidatePath("/setup");
   revalidatePath("/setup/google-drive");
   redirect("/setup?section=workspace&notice=Active+storage+connection+updated.");

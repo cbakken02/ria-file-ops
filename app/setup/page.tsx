@@ -40,7 +40,12 @@ const sectionAliases: Record<string, SettingsSectionId> = {
 export default async function SetupPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ dialog?: string; notice?: string; section?: string }>;
+  searchParams?: Promise<{
+    dialog?: string;
+    notice?: string;
+    returnTo?: string;
+    section?: string;
+  }>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const requestedSection = resolvedSearchParams?.section?.trim() ?? "";
@@ -52,6 +57,7 @@ export default async function SetupPage({
     resolvedSearchParams?.dialog === "data-handling"
       ? ("data-handling" as const)
       : null;
+  const closeHref = resolveSetupCloseHref(resolvedSearchParams?.returnTo);
   const session = await requireSession();
   const ownerEmail = session.user?.email;
   const activeConnection = getCachedActiveStorageConnectionForSession(session);
@@ -76,6 +82,7 @@ export default async function SetupPage({
     <ProductShell currentPath="/setup" session={session}>
       <main className={styles.page}>
         <SetupForm
+          closeHref={closeHref}
           initialDialog={initialDialog}
           initialSection={initialSection}
           notice={notice}
@@ -124,6 +131,34 @@ export default async function SetupPage({
       </main>
     </ProductShell>
   );
+}
+
+function resolveSetupCloseHref(returnTo: string | undefined) {
+  const candidate = returnTo?.trim();
+
+  if (!candidate) {
+    return "/dashboard";
+  }
+
+  if (candidate === "/preview") {
+    return "/intake";
+  }
+
+  if (candidate === "/cleanup") {
+    return "/clean-up";
+  }
+
+  if (
+    candidate === "/dashboard" ||
+    candidate === "/intake" ||
+    candidate === "/clean-up" ||
+    candidate === "/data-intelligence" ||
+    candidate === "/history"
+  ) {
+    return candidate;
+  }
+
+  return "/dashboard";
 }
 
 function getProviderLabel(provider: string) {

@@ -377,7 +377,7 @@ export function CleanupPlanner({
 
       if (!response.ok) {
         const error = new Error(
-          data.error || "Cleanup could not be completed.",
+          data.error || "Clean Up could not be completed.",
         ) as Error & { storageUnavailable?: boolean };
         if (response.status === 401 || response.status === 403) {
           error.storageUnavailable = true;
@@ -385,7 +385,7 @@ export function CleanupPlanner({
         throw error;
       }
 
-      setRunNotice(data.message || "Cleanup finished.");
+      setRunNotice(data.message || "Clean Up finished.");
       setPreview(null);
       setSelectedTargets([]);
       setPlannerOpen(false);
@@ -403,7 +403,7 @@ export function CleanupPlanner({
         setPlannerOpen(false);
       }
       setRunError(
-        error instanceof Error ? error.message : "Cleanup could not be completed.",
+        error instanceof Error ? error.message : "Clean Up could not be completed.",
       );
     } finally {
       setRunLoading(false);
@@ -457,7 +457,7 @@ export function CleanupPlanner({
 
       if (!response.ok) {
         const error = new Error(
-          data.error || "Cleanup preview could not be generated.",
+          data.error || "Clean Up preview could not be generated.",
         ) as Error & { storageUnavailable?: boolean };
         if (response.status === 401 || response.status === 403) {
           error.storageUnavailable = true;
@@ -481,7 +481,7 @@ export function CleanupPlanner({
       setPreviewError(
         error instanceof Error
           ? error.message
-          : "Cleanup preview could not be generated.",
+          : "Clean Up preview could not be generated.",
       );
     } finally {
       setPreviewLoading(false);
@@ -526,7 +526,7 @@ export function CleanupPlanner({
 
       if (!response.ok) {
         const error = new Error(
-          data.error || "Cleanup analysis could not be completed.",
+          data.error || "Clean Up analysis could not be completed.",
         ) as Error & { storageUnavailable?: boolean };
         if (response.status === 401 || response.status === 403) {
           error.storageUnavailable = true;
@@ -534,7 +534,7 @@ export function CleanupPlanner({
         throw error;
       }
 
-      setRunNotice(data.message || "Cleanup analysis finished.");
+      setRunNotice(data.message || "Clean Up analysis finished.");
       setPreview(null);
       setPlannerOpen(false);
       await openFolder(currentFolderId, safeFolderTrail, { forceRefresh: true });
@@ -553,7 +553,7 @@ export function CleanupPlanner({
       setRunError(
         error instanceof Error
           ? error.message
-          : "Cleanup analysis could not be completed.",
+          : "Clean Up analysis could not be completed.",
       );
     } finally {
       setActionLoading(false);
@@ -595,7 +595,7 @@ export function CleanupPlanner({
 
       if (!response.ok) {
         const error = new Error(
-          data.error || "Cleanup suggestions could not be applied.",
+          data.error || "Clean Up suggestions could not be applied.",
         ) as Error & { storageUnavailable?: boolean };
         if (response.status === 401 || response.status === 403) {
           error.storageUnavailable = true;
@@ -603,7 +603,7 @@ export function CleanupPlanner({
         throw error;
       }
 
-      setRunNotice(data.message || "Cleanup suggestions applied.");
+      setRunNotice(data.message || "Clean Up suggestions applied.");
       setPreview(null);
       setPlannerOpen(false);
       setSelectedTargets([]);
@@ -623,7 +623,7 @@ export function CleanupPlanner({
       setRunError(
         error instanceof Error
           ? error.message
-          : "Cleanup suggestions could not be applied.",
+          : "Clean Up suggestions could not be applied.",
       );
     } finally {
       setActionLoading(false);
@@ -1327,7 +1327,7 @@ export function CleanupPlanner({
           >
             <div className={styles.plannerModalHeader}>
               <div>
-                <p className={styles.panelLabel}>Cleanup planner</p>
+                <p className={styles.panelLabel}>Clean Up planner</p>
                 <div className={styles.modalTitleRow}>
                   {selectedItem ? (
                     <FileKindIcon

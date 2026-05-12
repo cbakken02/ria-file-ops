@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   if (!storageConnectionHasWriteAccess(activeConnection)) {
     return Response.json(
       {
-        error: "Reconnect the active storage connection with write access before running Cleanup.",
+        error: "Reconnect the active storage connection with write access before running Clean Up.",
       },
       { status: 400 },
     );
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   if (!settings?.destinationFolderId) {
     return Response.json(
       {
-        error: "Choose a destination root in Settings before running Cleanup.",
+        error: "Choose a destination root in Settings before running Clean Up.",
       },
       { status: 400 },
     );
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
   if (!scope || !mode || selectedIds.length === 0) {
     return Response.json(
       {
-        error: "Choose a file or folder before running Cleanup.",
+        error: "Choose a file or folder before running Clean Up.",
       },
       { status: 400 },
     );
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error:
-          "Cleanup execution is live for single files and folders of files first. Larger folder reorganization stays preview-only for now.",
+          "Clean Up execution is live for single files and folders of files first. Larger folder reorganization stays preview-only for now.",
       },
       { status: 400 },
     );
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
         {
           error:
             plan.preview.blockedCount > 0
-              ? "Cleanup cannot run yet because some files still need review in the preview."
+              ? "Clean Up cannot run yet because some files still need review in the preview."
               : "Nothing in this selection is ready to clean yet.",
         },
         { status: 400 },
@@ -115,14 +115,14 @@ export async function POST(request: Request) {
       candidates: filingCandidates,
     });
 
-    revalidatePath("/cleanup");
+    revalidatePath("/clean-up");
     revalidatePath("/history");
     revalidatePath("/dashboard");
-    revalidatePath("/preview");
+    revalidatePath("/intake");
 
     return Response.json({
       failedCount: result.failedCount,
-      message: `Cleanup finished. ${result.succeededCount} succeeded and ${result.failedCount} failed.`,
+      message: `Clean Up finished. ${result.succeededCount} succeeded and ${result.failedCount} failed.`,
       succeededCount: result.succeededCount,
     });
   } catch (error) {
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Cleanup could not be completed.",
+            : "Clean Up could not be completed.",
       },
       { status: 500 },
     );

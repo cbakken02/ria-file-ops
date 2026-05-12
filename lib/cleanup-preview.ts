@@ -90,7 +90,7 @@ export async function buildCleanupPlan(input: {
         scopeCount: "0 files",
         selectionLabel: selection.selectionLabel,
         summary:
-          "Choose a file or folder with processable documents to see what Cleanup would change.",
+          "Choose a file or folder with processable documents to see what Clean Up would change.",
         title: getCleanupTitle(input.scope),
       } satisfies CleanupPreviewData,
     } satisfies CleanupPlan;
@@ -163,9 +163,9 @@ export async function buildCleanupPlan(input: {
       selectionLabel: selection.selectionLabel,
       summary:
         needsReviewCount > 0
-          ? `${needsReviewCount} of ${fileRows.length} files still need a human before Cleanup should run.`
+          ? `${needsReviewCount} of ${fileRows.length} files still need a human before Clean Up should run.`
           : executionSupported
-            ? `All ${fileRows.length} previewed files look structured enough for Cleanup to run.`
+            ? `All ${fileRows.length} previewed files look structured enough for Clean Up to run.`
             : `Preview is ready. Execution for this larger scope comes next.`,
       title: getCleanupTitle(input.scope),
     } satisfies CleanupPreviewData,
@@ -547,7 +547,7 @@ function buildSelectionNotes(input: {
 
   if (input.truncated) {
     notes.push(
-      `${prefix}Preview capped at ${input.shownFileCount} files so Cleanup stays fast and readable.`,
+      `${prefix}Preview capped at ${input.shownFileCount} files so Clean Up stays fast and readable.`,
     );
   } else if (input.totalFileCount > input.shownFileCount) {
     notes.push(
@@ -560,7 +560,7 @@ function buildSelectionNotes(input: {
 
 function getCleanupTitle(scope: CleanupScope) {
   if (scope === "single_file") {
-    return "Preview one file cleanup";
+    return "Preview Clean Up for one file";
   }
 
   if (scope === "folder_of_files") {
@@ -568,10 +568,10 @@ function getCleanupTitle(scope: CleanupScope) {
   }
 
   if (scope === "multiple_client_folders") {
-    return "Preview a multi-household cleanup batch";
+    return "Preview a multi-household Clean Up batch";
   }
 
-  return "Preview one household folder cleanup";
+  return "Preview Clean Up for one household folder";
 }
 
 function formatScopeCount(fileCount: number) {

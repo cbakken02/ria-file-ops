@@ -24,6 +24,7 @@ import { NamingRulesEditor } from "./naming-rules-editor";
 import styles from "./page.module.css";
 
 type Props = {
+  closeHref: string;
   driveConnected: boolean;
   driveFolders: GoogleDriveFile[];
   initialDialog: "data-handling" | null;
@@ -91,6 +92,7 @@ const sectionDefinitions: Array<{
 ];
 
 export function SetupForm({
+  closeHref,
   driveConnected,
   driveFolders,
   initialDialog,
@@ -273,16 +275,7 @@ export function SetupForm({
       return;
     }
 
-    const referrer = document.referrer ? new URL(document.referrer) : null;
-    const isInternalReferrer =
-      referrer && referrer.origin === window.location.origin;
-
-    if (window.history.length > 1 && isInternalReferrer) {
-      router.back();
-      return;
-    }
-
-    router.push("/dashboard");
+    router.push(closeHref);
   }
 
   async function loadDriveFolders() {
@@ -491,19 +484,19 @@ export function SetupForm({
               </SettingsGroup>
 
               <SettingsGroup
-                description="Cleanup uses the same file rules, then shows a plan before changes."
-                title="Cleanup"
+                description="Clean Up uses the same file rules, then shows a plan before changes."
+                title="Clean Up"
               >
                 <div className={styles.settingsList}>
                   <SettingsRowStatic
-                    label="Cleanup safety"
+                    label="Clean Up safety"
                     value="Preview before changes"
                   />
                   <SettingsRowStatic
                     label="Shared filing rules"
                     value="Uses File Rules settings"
                   />
-                  <SettingsRowLink href="/cleanup" label="Cleanup tool" value="Open" />
+                  <SettingsRowLink href="/clean-up" label="Clean Up tool" value="Open" />
                 </div>
               </SettingsGroup>
             </div>
@@ -1425,7 +1418,7 @@ function getSectionDescription(section: SettingsSectionId) {
   }
 
   if (section === "workflow") {
-    return "Review behavior and cleanup defaults.";
+    return "Review behavior and Clean Up defaults.";
   }
 
   return "Data handling and audit references.";
