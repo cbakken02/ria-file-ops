@@ -6,8 +6,11 @@ import {
   getFilingEventsByOwnerEmail,
   getFirmSettingsByOwnerEmail,
   getReviewDecisionsByOwnerEmail,
+  type FilingEvent,
+  type FirmSettings,
+  type ReviewDecision,
 } from "@/lib/db";
-import { readPreviewSnapshot } from "@/lib/preview-snapshot";
+import { readPreviewSnapshot, type PreviewSnapshot } from "@/lib/preview-snapshot";
 import { requireSession } from "@/lib/session";
 import {
   getCachedStorageConnectionsForSession,
@@ -29,18 +32,34 @@ export default async function DashboardPage() {
     ? "Dashboard can show cached app state, but live storage actions need a reconnect."
     : "Connect storage to use Dashboard.";
 
-  const [settings, previewSnapshot, reviewDecisions, filingEvents] = await Promise.all([
-    ownerEmail
-      ? Promise.resolve(getFirmSettingsByOwnerEmail(ownerEmail) ?? null)
-      : Promise.resolve(null),
-    readPreviewSnapshot(ownerEmail),
-    ownerEmail
-      ? Promise.resolve(getReviewDecisionsByOwnerEmail(ownerEmail))
-      : Promise.resolve([]),
-    ownerEmail
-      ? Promise.resolve(getFilingEventsByOwnerEmail(ownerEmail))
-      : Promise.resolve([]),
-  ]);
+  const settings = ownerEmail
+    ? await readDashboardValue<FirmSettings | null>(
+        "firm settings",
+        null,
+        () => getFirmSettingsByOwnerEmail(ownerEmail) ?? null,
+      )
+    : null;
+
+  const [previewSnapshot, reviewDecisions, filingEvents] =
+    ownerEmail && hasCachedStorageAccess
+      ? await Promise.all([
+          readDashboardValue<PreviewSnapshot | null>(
+            "preview snapshot",
+            null,
+            () => readPreviewSnapshot(ownerEmail),
+          ),
+          readDashboardValue<ReviewDecision[]>(
+            "review decisions",
+            [],
+            () => getReviewDecisionsByOwnerEmail(ownerEmail),
+          ),
+          readDashboardValue<FilingEvent[]>(
+            "filing events",
+            [],
+            () => getFilingEventsByOwnerEmail(ownerEmail),
+          ),
+        ])
+      : ([null, [], []] satisfies [PreviewSnapshot | null, ReviewDecision[], FilingEvent[]]);
 
   const visiblePreviewSnapshot = hasCachedStorageAccess ? previewSnapshot : null;
   const visibleReviewDecisions = hasCachedStorageAccess ? reviewDecisions : [];
@@ -315,6 +334,22 @@ function formatWholeNumber(value: number) {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+async function readDashboardValue<T>(
+  label: string,
+  fallback: T,
+  reader: () => T | Promise<T>,
+) {
+  try {
+    return await reader();
+  } catch (error) {
+    console.warn("[dashboard] optional data read failed", {
+      label,
+      message: error instanceof Error ? error.message : "Unknown dashboard read error",
+    });
+    return fallback;
+  }
 }
 
 function sumSavedMinutes(

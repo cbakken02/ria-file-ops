@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { getPrimaryStorageConnectionByOwnerEmail, getStorageConnectionsByOwnerEmail } from "@/lib/db";
+import { getSafeStorageConnectionsByOwnerEmail } from "@/lib/storage-connections";
 
 export async function GET() {
   const session = await auth();
@@ -9,8 +9,11 @@ export async function GET() {
   }
 
   const ownerEmail = session.user.email;
-  const activeConnection = getPrimaryStorageConnectionByOwnerEmail(ownerEmail) ?? null;
-  const connections = getStorageConnectionsByOwnerEmail(ownerEmail);
+  const connections = getSafeStorageConnectionsByOwnerEmail(ownerEmail, {
+    source: "api-storage-connections",
+  });
+  const activeConnection =
+    connections.find((connection) => connection.isPrimary) ?? connections[0] ?? null;
 
   return Response.json({
     activeConnection: activeConnection
