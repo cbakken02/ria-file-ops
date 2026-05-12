@@ -31,10 +31,13 @@ test("product navigation uses current workspace route names", () => {
 test("product shell prefetches workspace navigation instead of blocking clicks", () => {
   const shellSource = readRepoFile("components/product-shell.tsx");
   const navSource = readRepoFile("components/product-nav.tsx");
+  const shellStyles = readRepoFile("components/product-shell.module.css");
 
   assert.equal(shellSource.includes("prefetch={false}"), false);
   assert.match(navSource, /prefetch=\{true\}/);
   assert.match(navSource, /router\.prefetch\(item\.href\)/);
   assert.match(navSource, /onNavigate=\{setOptimisticPath\}/);
   assert.match(navSource, /onNavigate=\{\(\) => onNavigate\(item\.href\)\}/);
+  assert.match(navSource, /styles\.routeProgress/);
+  assert.match(shellStyles, /\.routeProgress/);
 });
