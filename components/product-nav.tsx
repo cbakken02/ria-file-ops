@@ -68,6 +68,12 @@ export function ProductNav({
           />
         ))}
       </nav>
+
+      {pendingPath ? (
+        <div className={styles.routeProgress} aria-hidden="true">
+          <span />
+        </div>
+      ) : null}
     </>
   );
 }

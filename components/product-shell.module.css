@@ -82,7 +82,7 @@
   font-size: 0.94rem;
   font-weight: 580;
   text-decoration: none;
-  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  transition: background-color 80ms ease, color 80ms ease, border-color 80ms ease;
 }
 
 .navLink:hover {
@@ -100,6 +100,37 @@
   background: #2a2a2a;
   border-color: #3a3a3a;
   color: #ffffff;
+}
+
+.routeProgress {
+  position: fixed;
+  top: 0;
+  left: 264px;
+  right: 0;
+  z-index: 50;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.routeProgress span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  background: #f5f5f5;
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.42);
+  animation: route-progress-sweep 860ms ease-in-out infinite;
+}
+
+@keyframes route-progress-sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  100% {
+    transform: translateX(260%);
+  }
 }
 
 .navHint {
@@ -515,6 +546,10 @@
 
   .navLabel {
     padding-bottom: 10px;
+  }
+
+  .routeProgress {
+    left: 0;
   }
 
   .sidebarSpacer {
