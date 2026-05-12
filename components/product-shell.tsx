@@ -1,6 +1,6 @@
-import Link from "next/link";
 import type { Session } from "next-auth";
 import { AccountMenu } from "@/components/account-menu";
+import { ProductNav } from "@/components/product-nav";
 import { PRODUCT_NAV_ITEMS, type ProductNavPath } from "@/lib/product-navigation";
 import styles from "./product-shell.module.css";
 
@@ -41,45 +41,11 @@ export async function ProductShell({
         </div>
 
         <div className={styles.navLabel}>Workspace</div>
-        <nav className={styles.navSection}>
-          {primaryNavItems.map((item) => {
-            const isActive = item.href === currentPath;
-
-            return (
-              <Link
-                key={item.href}
-                aria-current={isActive ? "page" : undefined}
-                className={isActive ? styles.activeNavLink : styles.navLink}
-                href={item.href}
-                prefetch={false}
-              >
-                <span>{item.label}</span>
-                <span className={styles.navHint}>{item.hint}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className={styles.sidebarSpacer} />
-
-        <nav className={`${styles.navSection} ${styles.bottomNavSection}`}>
-          {bottomNavItems.map((item) => {
-            const isActive = item.href === currentPath;
-
-            return (
-              <Link
-                key={item.href}
-                aria-current={isActive ? "page" : undefined}
-                className={isActive ? styles.activeNavLink : styles.navLink}
-                href={item.href}
-                prefetch={false}
-              >
-                <span>{item.label}</span>
-                <span className={styles.navHint}>{item.hint}</span>
-              </Link>
-            );
-          })}
-        </nav>
+        <ProductNav
+          bottomItems={bottomNavItems}
+          currentPath={currentPath}
+          primaryItems={primaryNavItems}
+        />
 
         <AccountMenu
           accountMeta={null}
