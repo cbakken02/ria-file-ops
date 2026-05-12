@@ -11,12 +11,29 @@ import {
   verifyDriveBrowserAccess,
 } from "@/lib/google-drive";
 
+type StorageConnectionReadOptions = {
+  source?: string;
+  readConnections?: (ownerEmail: string) => StorageConnection[];
+};
+
+type StorageConnectionReadResult = {
+  connections: StorageConnection[];
+  unavailable: boolean;
+};
+
 export function storageConnectionHasWriteAccess(connection: StorageConnection | null) {
   if (!connection) {
     return false;
   }
 
   return connection.grantedScopes.includes(GOOGLE_DRIVE_WRITE_SCOPE);
+}
+
+export function getSafeStorageConnectionsByOwnerEmail(
+  ownerEmail: string,
+  options: StorageConnectionReadOptions = {},
+) {
+  return readStorageConnectionsByOwnerEmail(ownerEmail, options).connections;
 }
 
 export function getCachedActiveStorageConnectionForSession(
@@ -27,13 +44,17 @@ export function getCachedActiveStorageConnectionForSession(
 
 export function getCachedStorageConnectionsForSession(
   session: Session,
+  options: StorageConnectionReadOptions = {},
 ): StorageConnection[] {
   const ownerEmail = session.user?.email ?? "";
   if (!ownerEmail) {
     return [];
   }
 
-  return getStorageConnectionsByOwnerEmail(ownerEmail);
+  return getSafeStorageConnectionsByOwnerEmail(ownerEmail, {
+    ...options,
+    source: options.source ?? "cached-storage-connections",
+  });
 }
 
 export async function getActiveStorageConnectionForSession(
@@ -110,8 +131,36 @@ export async function getStorageConnectionsForSession(session: Session) {
 function getSessionStorageConnections(session: Session) {
   return (
     syncSessionGoogleConnection(session) ??
-    getStorageConnectionsByOwnerEmail(session.user?.email ?? "")
+    getSafeStorageConnectionsByOwnerEmail(session.user?.email ?? "", {
+      source: "session-storage-connections",
+    })
   );
+}
+
+function readStorageConnectionsByOwnerEmail(
+  ownerEmail: string,
+  options: StorageConnectionReadOptions = {},
+): StorageConnectionReadResult {
+  const normalizedOwnerEmail = ownerEmail.trim();
+  if (!normalizedOwnerEmail) {
+    return { connections: [], unavailable: false };
+  }
+
+  try {
+    return {
+      connections: (options.readConnections ?? getStorageConnectionsByOwnerEmail)(
+        normalizedOwnerEmail,
+      ),
+      unavailable: false,
+    };
+  } catch (error) {
+    logStorageConnectionPersistenceFailure(
+      error,
+      options.source ?? "storage-connections",
+      "read",
+    );
+    return { connections: [], unavailable: true };
+  }
 }
 
 function getPrimaryConnection(connections: StorageConnection[]) {
@@ -247,7 +296,15 @@ function syncSessionGoogleConnection(session: Session) {
     return null;
   }
 
-  const connections = getStorageConnectionsByOwnerEmail(ownerEmail);
+  const readResult = readStorageConnectionsByOwnerEmail(ownerEmail, {
+    source: "sync-session-google-connection",
+  });
+  const connections = readResult.connections;
+
+  if (readResult.unavailable) {
+    return connections;
+  }
+
   const existingConnection = connections.find((connection) =>
     matchesCurrentSession(connection, session),
   );
@@ -264,26 +321,38 @@ function syncSessionGoogleConnection(session: Session) {
     return connections;
   }
 
-  const savedConnection = saveStorageConnectionForOwner({
-    ownerEmail,
-    provider: "google_drive",
-    accountEmail: session.user?.email ?? null,
-    accountName: session.user?.name ?? null,
-    accountImage: session.user?.image ?? null,
-    externalAccountId: session.user?.id ?? session.user?.email ?? null,
-    accessToken: session.accessToken,
-    refreshToken: null,
-    expiresAt: null,
-    grantedScopes: sessionDriveScopes,
-    status: nextStatus,
-    makePrimary: !hasPrimaryConnection,
-  });
+  let savedConnection: StorageConnection | null = null;
+  try {
+    savedConnection = saveStorageConnectionForOwner({
+      ownerEmail,
+      provider: "google_drive",
+      accountEmail: session.user?.email ?? null,
+      accountName: session.user?.name ?? null,
+      accountImage: session.user?.image ?? null,
+      externalAccountId: session.user?.id ?? session.user?.email ?? null,
+      accessToken: session.accessToken,
+      refreshToken: null,
+      expiresAt: null,
+      grantedScopes: sessionDriveScopes,
+      status: nextStatus,
+      makePrimary: !hasPrimaryConnection,
+    });
+  } catch (error) {
+    logStorageConnectionPersistenceFailure(
+      error,
+      "sync-session-google-connection",
+      "write",
+    );
+    return connections;
+  }
 
   if (!savedConnection) {
     return connections;
   }
 
-  return getStorageConnectionsByOwnerEmail(ownerEmail);
+  return getSafeStorageConnectionsByOwnerEmail(ownerEmail, {
+    source: "sync-session-google-connection-after-save",
+  });
 }
 
 export function markStorageConnectionNeedsReauth(connection: StorageConnection) {
@@ -347,4 +416,20 @@ function haveSameScopes(left: string[], right: string[]) {
 
   const rightScopes = new Set(right);
   return left.every((scope) => rightScopes.has(scope));
+}
+
+function logStorageConnectionPersistenceFailure(
+  error: unknown,
+  source: string,
+  operation: "read" | "write",
+) {
+  console.warn("[storage-connections] persistence failure", {
+    message: getErrorMessage(error),
+    operation,
+    source,
+  });
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown storage persistence error";
 }
