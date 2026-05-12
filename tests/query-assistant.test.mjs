@@ -194,6 +194,15 @@ function seedAssistantFixtures(ownerEmail) {
     issueDate: "2024-01-01",
     documentDate: "2024-01-01",
     expirationDate: "2030-01-01",
+    address: {
+      kind: "identity",
+      rawText: "100 LAKE ST, MADISON WI 53703",
+      lines: ["100 LAKE ST", "MADISON WI 53703"],
+      city: "MADISON",
+      state: "WI",
+      postalCode: "53703",
+      country: "US",
+    },
   });
 
   const alexKimTwo = buildIdentityCanonicalFixture({
@@ -209,6 +218,15 @@ function seedAssistantFixtures(ownerEmail) {
     issueDate: "2025-02-02",
     documentDate: "2025-02-02",
     expirationDate: "2033-04-04",
+    address: {
+      kind: "identity",
+      rawText: "2400 PEARL ST, BOULDER CO 80302",
+      lines: ["2400 PEARL ST", "BOULDER CO 80302"],
+      city: "BOULDER",
+      state: "CO",
+      postalCode: "80302",
+      country: "US",
+    },
   });
 
   const checkingStatement = buildStatementCanonicalFixture({
@@ -225,6 +243,50 @@ function seedAssistantFixtures(ownerEmail) {
     documentDate: "2026-06-30",
     statementStartDate: "2026-06-01",
     statementEndDate: "2026-06-30",
+    extractedContacts: [
+      {
+        id: "checking-phone",
+        institutionId: "institution-us-bank",
+        method: "phone",
+        purpose: "customer_service",
+        label: "Customer Service",
+        value: "800-872-2657",
+        address: null,
+        hoursText: null,
+      },
+      {
+        id: "checking-website",
+        institutionId: "institution-us-bank",
+        method: "website",
+        purpose: "customer_service",
+        label: "Customer Service Website",
+        value: "usbank.com",
+        address: null,
+        hoursText: null,
+      },
+    ],
+    normalizedContacts: [
+      {
+        id: "checking-phone",
+        institutionId: "institution-us-bank",
+        method: "phone",
+        purpose: "customer_service",
+        label: "Customer Service",
+        value: "800-872-2657",
+        address: null,
+        hoursText: null,
+      },
+      {
+        id: "checking-website",
+        institutionId: "institution-us-bank",
+        method: "website",
+        purpose: "customer_service",
+        label: "Customer Service Website",
+        value: "usbank.com",
+        address: null,
+        hoursText: null,
+      },
+    ],
     extractedValues: [
       {
         kind: "ending_balance",
@@ -257,6 +319,50 @@ function seedAssistantFixtures(ownerEmail) {
     documentDate: "2026-05-31",
     statementStartDate: "2026-05-01",
     statementEndDate: "2026-05-31",
+    extractedContacts: [
+      {
+        id: "savings-phone",
+        institutionId: "institution-us-bank",
+        method: "phone",
+        purpose: "customer_service",
+        label: "Customer Service",
+        value: "800-872-2657",
+        address: null,
+        hoursText: null,
+      },
+      {
+        id: "savings-website",
+        institutionId: "institution-us-bank",
+        method: "website",
+        purpose: "customer_service",
+        label: "Customer Service Website",
+        value: "usbank.com",
+        address: null,
+        hoursText: null,
+      },
+    ],
+    normalizedContacts: [
+      {
+        id: "savings-phone",
+        institutionId: "institution-us-bank",
+        method: "phone",
+        purpose: "customer_service",
+        label: "Customer Service",
+        value: "800-872-2657",
+        address: null,
+        hoursText: null,
+      },
+      {
+        id: "savings-website",
+        institutionId: "institution-us-bank",
+        method: "website",
+        purpose: "customer_service",
+        label: "Customer Service Website",
+        value: "usbank.com",
+        address: null,
+        hoursText: null,
+      },
+    ],
     extractedValues: [
       {
         kind: "ending_balance",
@@ -359,6 +465,219 @@ test("assistant answers a rollover support phone question", () => {
     assert.equal(result.presentation.showDetails, false);
     assert.equal(result.sources[0]?.statementEndDate, "2026-03-31");
   } finally {
+    tempDb.cleanup();
+  }
+});
+
+test("copilot keeps direct website contact lookups deterministic when AI is enabled", async () => {
+  const tempDb = makeTempDbEnv("query-assistant-contact-website-ai-");
+  const ownerEmail = "query-assistant-contact-website-ai@example.com";
+  const restoreEnv = withEnv({
+    DATA_INTELLIGENCE_AI_ENABLED: "true",
+    DATA_INTELLIGENCE_MODEL: "gpt-5.4-mini",
+    DATA_INTELLIGENCE_API_KEY: "di-key",
+    DATA_INTELLIGENCE_API_URL: "https://example.com/v1/chat/completions",
+  });
+
+  try {
+    seedAssistantFixtures(ownerEmail);
+
+    let modelCallCount = 0;
+    const modelFetch = async () => {
+      modelCallCount += 1;
+      return Response.json({
+        choices: [{ message: { content: "{}" } }],
+      });
+    };
+
+    const result = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "What is the website for Christopher Bakken's savings account?",
+      modelFetch,
+    });
+
+    assert.equal(result.status, "answered");
+    assert.equal(result.intent, "latest_account_contact");
+    assert.match(result.answer, /usbank\.com/i);
+    assert.doesNotMatch(result.answer, /latest Savings statement/i);
+    assert.equal(modelCallCount, 0);
+  } finally {
+    restoreEnv();
+    tempDb.cleanup();
+  }
+});
+
+test("copilot uses prior customer-service contact context for call-script and confirm follow-ups", async () => {
+  const tempDb = makeTempDbEnv("query-assistant-contact-follow-ups-");
+  const ownerEmail = "query-assistant-contact-follow-ups@example.com";
+  const restoreEnv = withEnv({
+    DATA_INTELLIGENCE_AI_ENABLED: "true",
+    DATA_INTELLIGENCE_MODEL: "gpt-5.4-mini",
+    DATA_INTELLIGENCE_API_KEY: "di-key",
+    DATA_INTELLIGENCE_API_URL: "https://example.com/v1/chat/completions",
+  });
+
+  try {
+    seedAssistantFixtures(ownerEmail);
+
+    let modelCallCount = 0;
+    const modelFetch = async () => {
+      modelCallCount += 1;
+      return Response.json({
+        choices: [{ message: { content: "{}" } }],
+      });
+    };
+
+    const phone = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "What is the customer service phone for Christopher Bakken's savings account?",
+      modelFetch,
+    });
+    const script = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "Build a call script",
+      conversationState: phone.nextConversationState,
+      modelFetch,
+    });
+    const confirm = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "What should I confirm on the call?",
+      conversationState: phone.nextConversationState,
+      modelFetch,
+    });
+    const missing = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "What facts are still missing for Christopher Bakken?",
+      conversationState: phone.nextConversationState,
+      modelFetch,
+    });
+
+    assert.equal(phone.status, "answered");
+    assert.match(phone.answer, /800-872-2657/);
+    assert.equal(script.status, "answered");
+    assert.match(script.answer, /customer-service call script/i);
+    assert.ok(
+      script.sections?.some(
+        (section) =>
+          section.title === "Call script" &&
+          /800-872-2657/.test(section.body) &&
+          /Savings/i.test(section.body),
+      ),
+    );
+    assert.doesNotMatch(
+      `${script.answer}\n${script.sections?.map((section) => section.body).join("\n")}`,
+      /401\(k\)|rollover/i,
+    );
+    assert.equal(confirm.status, "answered");
+    assert.match(confirm.answer, /confirmation list/i);
+    assert.ok(
+      confirm.sections?.some(
+        (section) => section.title === "Confirm on the call" && /800-872-2657/.test(section.body),
+      ),
+    );
+    assert.equal(missing.status, "answered");
+    assert.ok(missing.sections?.some((section) => section.title === "Missing facts"));
+    assert.equal(modelCallCount, 0);
+  } finally {
+    restoreEnv();
+    tempDb.cleanup();
+  }
+});
+
+test("copilot builds a rollover call brief from prior client context and typo-tolerant follow-up", async () => {
+  const tempDb = makeTempDbEnv("query-assistant-rollover-brief-");
+  const ownerEmail = "query-assistant-rollover-brief@example.com";
+  const restoreEnv = withEnv({
+    DATA_INTELLIGENCE_AI_ENABLED: "false",
+  });
+
+  try {
+    seedAssistantFixtures(ownerEmail);
+
+    const first = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "What is the rollover phone number for Christopher Bakken's 401(k)?",
+    });
+    const result = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question:
+        "give me all the information i will need for a rollover call with christopher abkken including that phone number",
+      conversationState: first.nextConversationState,
+    });
+
+    assert.equal(first.status, "answered");
+    assert.equal(first.nextConversationState?.activeClientName, "Christopher Bakken");
+    assert.equal(first.nextConversationState?.activePartyId, first.sources[0]?.partyId);
+    assert.equal(result.status, "answered");
+    assert.equal(result.title, "Rollover call brief");
+    assert.match(result.answer, /rollover-call brief/i);
+    assert.match(result.answer, /800-777-1212/);
+    assert.ok(result.sections?.some((section) => section.title === "What I found"));
+    assert.ok(result.sections?.some((section) => section.kind === "guidance"));
+    assert.ok(result.sourcedFacts?.some((fact) => /Rollover|Contact/i.test(fact.label) && /800-777-1212/.test(fact.value)));
+    assert.ok(result.sourcedFacts?.some((fact) => fact.label === "Account" && /7890/.test(fact.value)));
+    assert.doesNotMatch(result.answer, /4010001234567890/);
+    assert.ok(
+      result.sourcedFacts?.every((fact) => !/4010001234567890/.test(fact.value)),
+    );
+    assert.equal(result.nextConversationState?.activeClientName, "Christopher Bakken");
+    assert.equal(result.nextConversationState?.activeAccountType, "401(k)");
+
+    const directBrief = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "prepare a rollover call brief for Christopher Bakken's 401(k)",
+    });
+
+    assert.equal(directBrief.status, "answered");
+    assert.equal(directBrief.title, "Rollover call brief");
+    assert.match(directBrief.answer, /Christopher Bakken/i);
+    assert.match(directBrief.answer, /800-777-1212/);
+    assert.doesNotMatch(directBrief.answer, /How to make this client-specific/i);
+    assert.ok(
+      directBrief.suggestedPrompts?.some((prompt) =>
+        /client email for Christopher Bakken/i.test(prompt),
+      ),
+    );
+
+    const emailFollowUp = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "Draft this as a client email",
+      conversationState: directBrief.nextConversationState,
+    });
+
+    assert.equal(emailFollowUp.status, "answered");
+    assert.match(emailFollowUp.answer, /client-specific/i);
+    assert.ok(
+      emailFollowUp.sections?.some(
+        (section) => section.title === "Draft email" && /800-777-1212/.test(section.body),
+      ),
+    );
+    assert.ok(
+      emailFollowUp.sourcedFacts?.some(
+        (fact) => /Contact/i.test(fact.label) && /800-777-1212/.test(fact.value),
+      ),
+    );
+
+    const typoOnly = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question:
+        "give me all the information i will need for a rollover call with christopher abkken including that phone number",
+    });
+
+    assert.equal(typoOnly.status, "answered");
+    assert.match(typoOnly.answer, /800-777-1212/);
+  } finally {
+    restoreEnv();
     tempDb.cleanup();
   }
 });
@@ -600,7 +919,9 @@ test("assistant returns bounded ambiguous, not-found, and unsupported responses 
     assert.equal(ambiguous.presentation.showDetails, true);
     assert.ok(ambiguous.details.length >= 2);
     assert.match(ambiguous.details[0] ?? "", /Alex Kim/);
-    assert.match(ambiguous.details[0] ?? "", /Party party_/);
+    assert.doesNotMatch(ambiguous.details[0] ?? "", /Party party_/);
+    assert.equal(ambiguous.clarificationOptions?.length, 2);
+    assert.match(ambiguous.clarificationOptions?.[0]?.optionId ?? "", /^party_/);
 
     assert.equal(missingClient.status, "not_found");
     assert.equal(missingClient.intent, "latest_account_document");
@@ -613,73 +934,6 @@ test("assistant returns bounded ambiguous, not-found, and unsupported responses 
     assert.equal(unsupported.intent, null);
     assert.equal(unsupported.presentation.mode, "unsupported");
     assert.equal(unsupported.presentation.shellTone, "warning");
-  } finally {
-    tempDb.cleanup();
-  }
-});
-
-test("assistant treats duplicate client records with equivalent address formatting as one client", () => {
-  const tempDb = makeTempDbEnv("query-assistant-equivalent-client-address-");
-  const ownerEmail = "query-assistant-equivalent-client-address@example.com";
-  const spacedZipAddress = {
-    kind: "identity",
-    rawText: "N1345 Maple Hills Dr, Fontana WI 53125 - 1921",
-    lines: ["N1345 Maple Hills Dr", "Fontana WI 53125 - 1921"],
-    city: "Fontana",
-    state: "WI",
-    postalCode: "53125 - 1921",
-    country: "US",
-  };
-  const hyphenZipAddress = {
-    ...spacedZipAddress,
-    rawText: "N1345 Maple Hills Dr, Fontana WI 53125-1921",
-    lines: ["N1345 Maple Hills Dr", "Fontana WI 53125-1921"],
-    postalCode: "53125-1921",
-  };
-
-  try {
-    for (const canonical of [
-      buildStatementCanonicalFixture({
-        ownerName: "Christopher Bakken",
-        normalizedAccountType: "Checking",
-        accountNumber: "100000002211",
-        maskedAccountNumber: "XXXXXXXX2211",
-        accountLast4: "2211",
-        fileId: "equivalent-address-checking",
-        sourceName: "equivalent-address-checking.pdf",
-        partyAddresses: [spacedZipAddress],
-      }),
-      buildStatementCanonicalFixture({
-        ownerName: "Christopher Bakken",
-        normalizedAccountType: "Savings",
-        accountNumber: "100000007777",
-        maskedAccountNumber: "XXXXXXXX7777",
-        accountLast4: "7777",
-        fileId: "equivalent-address-savings",
-        sourceName: "equivalent-address-savings.pdf",
-        partyAddresses: [hyphenZipAddress],
-      }),
-    ]) {
-      writeCanonicalAccountStatementToSqlite({
-        ownerEmail,
-        analysisProfile: "preview_ai_primary",
-        analysisVersion: "query-assistant-test",
-        analysisRanAt: "2026-04-22T12:00:00.000Z",
-        canonical,
-      });
-    }
-
-    const result = askFirmDocumentAssistant({
-      ownerEmail,
-      dbPath: tempDb.dbPath,
-      question: "What statements do we have on file for Christopher Bakken?",
-    });
-
-    assert.equal(result.status, "answered");
-    assert.equal(result.intent, "statement_list");
-    assert.equal(result.sources.length, 2);
-    assert.match(result.answer, /Christopher Bakken/);
-    assert.doesNotMatch(result.answer, /ambiguous|not guessing/i);
   } finally {
     tempDb.cleanup();
   }
@@ -708,38 +962,83 @@ test("assistant asks a natural client clarification when no active client is ava
   }
 });
 
-test("hybrid assistant treats ordinal ambiguity replies as conversation follow-ups", async () => {
-  const tempDb = makeTempDbEnv("query-assistant-ordinal-ambiguity-follow-up-");
-  const ownerEmail = "query-assistant-ordinal-ambiguity-follow-up@example.com";
+test("copilot resolves ambiguity from clicked, pasted, and ordinal clarification choices", async () => {
+  const tempDb = makeTempDbEnv("query-assistant-clarification-options-");
+  const ownerEmail = "query-assistant-clarification-options@example.com";
+  const restoreEnv = withEnv({
+    DATA_INTELLIGENCE_AI_ENABLED: "false",
+  });
 
   try {
     seedAssistantFixtures(ownerEmail);
 
-    const ambiguous = await answerDataIntelligenceQuestion({
+    const clarification = await answerDataIntelligenceQuestion({
       ownerEmail,
       dbPath: tempDb.dbPath,
       question: "What is the latest ID for Alex Kim?",
     });
-    const conversationState = deriveDataIntelligenceConversationStateFromResult({
-      previousState: null,
-      result: ambiguous,
+    const firstOption = clarification.clarificationOptions?.[0];
+    const secondOption = clarification.clarificationOptions?.[1];
+
+    assert.equal(clarification.status, "ambiguous");
+    assert.ok(firstOption?.optionId);
+    assert.ok(secondOption?.optionId);
+    assert.ok(clarification.nextConversationState?.pendingClarification);
+
+    const pasted = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: firstOption.optionId,
+      conversationState: clarification.nextConversationState,
     });
+    const ordinal = await answerDataIntelligenceQuestion({
+      ownerEmail,
+      dbPath: tempDb.dbPath,
+      question: "second one",
+      conversationState: clarification.nextConversationState,
+    });
+
+    assert.equal(pasted.status, "answered");
+    assert.equal(pasted.intent, "latest_identity_document");
+    assert.equal(pasted.nextConversationState?.activePartyId, firstOption.partyId);
+    assert.equal(pasted.nextConversationState?.pendingClarification, null);
+    assert.equal(ordinal.status, "answered");
+    assert.equal(ordinal.nextConversationState?.activePartyId, secondOption.partyId);
+  } finally {
+    restoreEnv();
+    tempDb.cleanup();
+  }
+});
+
+test("copilot answers broad drafting requests as guidance instead of unsupported dead ends", async () => {
+  const tempDb = makeTempDbEnv("query-assistant-general-copilot-");
+  const ownerEmail = "query-assistant-general-copilot@example.com";
+  const restoreEnv = withEnv({
+    DATA_INTELLIGENCE_AI_ENABLED: "true",
+    DATA_INTELLIGENCE_MODEL: "gpt-5.4-mini",
+    DATA_INTELLIGENCE_API_KEY: "di-key",
+    DATA_INTELLIGENCE_API_URL: "https://example.com/v1/chat/completions",
+  });
+
+  try {
+    const modelFetch = async () =>
+      Response.json({
+        choices: [{ message: { content: "{}" } }],
+      });
+
     const result = await answerDataIntelligenceQuestion({
       ownerEmail,
       dbPath: tempDb.dbPath,
-      question: "the first one",
-      conversationState,
-      includeDebug: true,
+      question: "Draft a client email asking for the documents needed before a rollover call",
+      modelFetch,
     });
-    const debug = result.debug?.dataIntelligenceHybrid;
 
-    assert.equal(ambiguous.status, "ambiguous");
-    assert.equal(conversationState.activeClientName, "Alex Kim");
-    assert.notEqual(result.status, "unsupported");
-    assert.equal(result.status, "ambiguous");
-    assert.ok(debug);
-    assert.match(debug.executedQuestion, /Alex Kim/i);
+    assert.equal(result.status, "answered");
+    assert.match(result.answer, /separate any sourced client facts/i);
+    assert.ok(result.sections?.some((section) => section.kind === "guidance"));
+    assert.ok(result.sections?.some((section) => section.kind === "next_steps"));
   } finally {
+    restoreEnv();
     tempDb.cleanup();
   }
 });

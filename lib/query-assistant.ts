@@ -9,13 +9,19 @@ import {
   findLatestIdentityDobForParty,
   findLatestIdentityDocumentForParty,
   findLatestIdentityExpirationForParty,
+  findTaxDocumentsForParty,
   listFirmDocumentParties,
   type FirmDocumentAccountValue,
-  type FirmDocumentLatestAccountIdentifier,
   type FirmDocumentLatestAccountSnapshot,
   type FirmDocumentLatestContact,
   type FirmDocumentPartyMatch,
+  type FirmDocumentTaxDocument,
 } from "@/lib/firm-document-query";
+import type { DataIntelligenceConversationState } from "@/lib/data-intelligence-conversation";
+import {
+  getTaxDocumentSubtypeLabel,
+  normalizeTaxDocumentSubtype,
+} from "@/lib/tax-document-types";
 
 export type QueryAssistantIntent =
   | "statement_existence"
@@ -26,6 +32,9 @@ export type QueryAssistantIntent =
   | "latest_account_contact"
   | "identity_document_existence"
   | "latest_identity_document"
+  | "tax_document_existence"
+  | "tax_document_list"
+  | "latest_tax_document"
   | "latest_identity_dob"
   | "latest_identity_address"
   | "latest_identity_expiration"
@@ -33,11 +42,16 @@ export type QueryAssistantIntent =
 
 export type QueryAssistantResultStatus =
   | "answered"
+  | "needs_clarification"
+  | "partial"
   | "not_found"
   | "ambiguous"
-  | "unsupported";
+  | "unsupported"
+  | "error";
 
 export type QueryAssistantSource = {
+  partyId?: string | null;
+  accountId?: string | null;
   sourceFileId?: string | null;
   sourceName: string | null;
   documentDate: string | null;
@@ -57,6 +71,8 @@ export type QueryAssistantSource = {
   issuingAuthority?: string | null;
   expirationDate?: string | null;
   idType?: string | null;
+  taxYear?: string | null;
+  documentSubtype?: string | null;
 };
 
 export type QueryAssistantPresentationMode =
@@ -88,11 +104,37 @@ export type QueryAssistantResult = {
   details: string[];
   sources: QueryAssistantSource[];
   presentation: QueryAssistantPresentation;
+  sections?: QueryAssistantSection[];
+  sourcedFacts?: QueryAssistantSourcedFact[];
+  clarificationOptions?: QueryAssistantClarificationOption[];
+  suggestedPrompts?: string[];
+  nextConversationState?: DataIntelligenceConversationState;
   debug?: Record<string, unknown>;
 };
 
 type QueryAssistantDraftResult = Omit<QueryAssistantResult, "presentation"> & {
   presentation?: Partial<QueryAssistantPresentation>;
+};
+
+export type QueryAssistantSection = {
+  title: string;
+  body: string;
+  kind: "sourced" | "guidance" | "missing" | "next_steps";
+};
+
+export type QueryAssistantSourcedFact = {
+  label: string;
+  value: string;
+  sourceIndex: number;
+  sensitivity?: "normal" | "masked" | "restricted";
+};
+
+export type QueryAssistantClarificationOption = {
+  optionId: string;
+  label: string;
+  description: string;
+  partyId?: string | null;
+  accountId?: string | null;
 };
 
 export type AskFirmDocumentAssistantInput = {
@@ -132,6 +174,7 @@ export type QueryAssistantQuestionType =
 
 export type QueryAssistantDocumentFamily =
   | "account_statement"
+  | "tax_document"
   | "identity_document"
   | null;
 
@@ -139,6 +182,7 @@ export type QueryAssistantFamilyScope =
   | "statement"
   | "bank_statement"
   | "credit_card_statement"
+  | "tax_document"
   | "identity_document"
   | "driver_license"
   | "state_id"
@@ -154,6 +198,8 @@ export type QueryAssistantRetrievalPlan = {
   contactPurpose: "rollover_support" | "customer_service" | null;
   contactMethod: "phone" | "website" | null;
   identityKind: "driver_license" | "state_id" | null;
+  taxYear: string | null;
+  taxDocumentSubtype: string | null;
   valuePreference: string | null;
   clarificationTarget: "account_type" | "identity_kind" | null;
   preferredResponseMode: QueryAssistantResponseMode;
@@ -241,9 +287,9 @@ export function askFirmDocumentAssistant(
   if (!plan.intent) {
     return presentResult(
       unsupportedResult(
-      question,
-      "Unsupported question",
-      "I can only answer a small set of statement and identity-document questions right now.",
+        question,
+        "I can help with that differently",
+        "I do not have a source-backed lookup for that exact request yet, but I can still help with general guidance, drafting, or by checking available client documents.",
       ),
       plan,
     );
@@ -265,16 +311,24 @@ export function askFirmDocumentAssistant(
   }
 
   if (partyResolution.status === "ambiguous") {
+    const clarificationOptions = buildPartyClarificationOptions({
+      ownerEmail: input.ownerEmail,
+      dbPath: input.dbPath ?? null,
+      matches: partyResolution.matches,
+    });
+
     return presentResult({
       status: "ambiguous",
       intent: plan.intent,
       question,
       title: "Client match is ambiguous",
-      answer: "I found more than one possible client match, so I'm not guessing.",
-      details: partyResolution.matches
-        .slice(0, 5)
-        .map((match) => formatPartyMatchDetail(match)),
+      answer:
+        "I found more than one possible client match. Pick the matching client and I'll continue from there.",
+      details: clarificationOptions.map((option) =>
+        compact([option.label, option.description]).join(" | "),
+      ),
       sources: [],
+      clarificationOptions,
     }, plan);
   }
 
@@ -319,6 +373,21 @@ export function askFirmDocumentAssistant(
         answerLatestIdentityDocument(executionInput, partyResolution.party, plan),
         plan,
       );
+    case "tax_document_existence":
+      return presentResult(
+        answerTaxDocumentExistence(executionInput, partyResolution.party, plan),
+        plan,
+      );
+    case "tax_document_list":
+      return presentResult(
+        answerTaxDocumentList(executionInput, partyResolution.party, plan),
+        plan,
+      );
+    case "latest_tax_document":
+      return presentResult(
+        answerLatestTaxDocument(executionInput, partyResolution.party, plan),
+        plan,
+      );
     case "latest_identity_dob":
       return presentResult(
         answerLatestIdentityDob(executionInput, partyResolution.party, plan),
@@ -357,7 +426,14 @@ export function buildQueryAssistantRetrievalPlan(
   const normalized = normalizeQuestion(question);
   const accountType = extractAccountType(question);
   const identityKind = extractIdentityKind(normalized);
-  const familyScope = resolveFamilyScope(question, accountType, identityKind);
+  const taxDocumentSubtype = extractTaxDocumentSubtype(question);
+  const taxYear = extractQuestionTaxYear(question);
+  const familyScope = resolveFamilyScope(
+    question,
+    accountType,
+    identityKind,
+    taxDocumentSubtype,
+  );
   const accountFieldRequest = extractAccountFieldRequest(question);
   const contactMethod = /\bwebsite\b|\bweb site\b|\burl\b|\bsite\b/i.test(question)
     ? "website"
@@ -396,12 +472,37 @@ export function buildQueryAssistantRetrievalPlan(
     /\bid\b|\bidentity\b|\blicense\b|\bdriver'?s?\s+license\b|\bstate id\b/i.test(
       question,
     );
+  const mentionsTaxDocument =
+    taxDocumentSubtype !== null ||
+    /\btax\b|\b1040x?\b|\b1099\b|\b1098\b|\bw[-\s]?2\b|\bk[-\s]?1\b|\bschedule\s+k[-\s]?1\b|\birs\b|\bcp\d{2,4}\b/i.test(
+      question,
+    );
 
   if (/\bdob\b|\bdate of birth\b|\bborn\b/i.test(question)) {
     intent = "latest_identity_dob";
     documentFamily = "identity_document";
     questionType = "latest_fact";
     preferredResponseMode = "direct_answer";
+  } else if (mentionsTaxDocument && asksCountList) {
+    intent = "tax_document_list";
+    documentFamily = "tax_document";
+    questionType = "count_list";
+    preferredResponseMode = "summary_with_matches";
+  } else if (mentionsTaxDocument && asksExistence) {
+    intent = "tax_document_existence";
+    documentFamily = "tax_document";
+    questionType = "existence";
+    preferredResponseMode = "summary_with_matches";
+  } else if (mentionsTaxDocument && asksLatest) {
+    intent = "latest_tax_document";
+    documentFamily = "tax_document";
+    questionType = "latest_document";
+    preferredResponseMode = "direct_answer";
+  } else if (mentionsTaxDocument) {
+    intent = "tax_document_existence";
+    documentFamily = "tax_document";
+    questionType = "existence";
+    preferredResponseMode = "summary_with_matches";
   } else if (accountFieldRequest) {
     intent = "account_identifier_lookup";
     documentFamily = "account_statement";
@@ -517,6 +618,8 @@ export function buildQueryAssistantRetrievalPlan(
     contactPurpose,
     contactMethod,
     identityKind,
+    taxYear,
+    taxDocumentSubtype,
     valuePreference,
     clarificationTarget,
     preferredResponseMode,
@@ -781,12 +884,17 @@ function answerLatestAccountContact(
     details: buildContactFollowUpSuggestion(contactMatches, plan),
     sources: [
       {
+        partyId: primary.snapshot.partyId,
+        accountId: primary.snapshot.accountId,
         sourceFileId: primary.contact.sourceFileId,
         sourceName: primary.contact.sourceName,
         documentDate: primary.contact.documentDate,
         statementEndDate: primary.contact.statementEndDate,
         institutionName: primary.contact.institutionName,
         accountType: accountLabel,
+        partyDisplayName: primary.snapshot.partyDisplayName,
+        accountLast4: primary.snapshot.accountLast4,
+        maskedAccountNumber: primary.snapshot.maskedAccountNumber,
         contactValue:
           primary.contact.normalizedValue ?? primary.contact.rawValue ?? null,
       },
@@ -887,6 +995,8 @@ function answerAccountIdentifierLookup(
     details: [],
     sources: [
       {
+        partyId: party.partyId,
+        accountId: identifier.accountId,
         sourceFileId: identifier.sourceFileId,
         sourceName: identifier.sourceName,
         documentDate: identifier.documentDate,
@@ -932,6 +1042,8 @@ function answerIdentityDocumentExistence(
     details: [],
     sources: [
       {
+        partyId: party.partyId,
+        accountId: null,
         sourceFileId: latestIdentityDocument.sourceFileId,
         sourceName: latestIdentityDocument.sourceName,
         documentDate: latestIdentityDocument.documentDate,
@@ -977,6 +1089,8 @@ function answerLatestIdentityDocument(
     details: [],
     sources: [
       {
+        partyId: party.partyId,
+        accountId: null,
         sourceFileId: latestIdentityDocument.sourceFileId,
         sourceName: latestIdentityDocument.sourceName,
         documentDate: latestIdentityDocument.documentDate,
@@ -989,6 +1103,90 @@ function answerLatestIdentityDocument(
         idType: latestIdentityDocument.idType,
       },
     ],
+  };
+}
+
+function answerTaxDocumentExistence(
+  input: AskFirmDocumentAssistantInput,
+  party: FirmDocumentPartyMatch,
+  plan: QueryAssistantRetrievalPlan,
+): QueryAssistantDraftResult {
+  const taxDocuments = getMatchingTaxDocuments(input, party, plan);
+  if (taxDocuments.length === 0) {
+    return notFoundResult(
+      input.question,
+      plan.intent,
+      "No matching tax document found",
+      `I couldn't find ${withIndefiniteArticle(describeTaxDocumentScope(plan, 1))} for ${party.canonicalDisplayName}.`,
+    );
+  }
+
+  const latest = taxDocuments[0]!;
+  return {
+    status: "answered",
+    intent: plan.intent,
+    question: input.question,
+    title: `${capitalizeLabel(describeTaxDocumentScope(plan, 1))} on file`,
+    answer:
+      taxDocuments.length === 1
+        ? `Yes. I found ${withIndefiniteArticle(describeTaxDocumentScope(plan, 1))} for ${party.canonicalDisplayName}: ${describeTaxDocumentRecord(latest)}.`
+        : `Yes. I found ${taxDocuments.length} ${describeTaxDocumentScope(plan, taxDocuments.length)} for ${party.canonicalDisplayName}. The latest is ${describeTaxDocumentRecord(latest)}.`,
+    details:
+      taxDocuments.length > 1 ? buildTaxDocumentMatchDetails(taxDocuments) : [],
+    sources: buildTaxDocumentSources(taxDocuments),
+  };
+}
+
+function answerTaxDocumentList(
+  input: AskFirmDocumentAssistantInput,
+  party: FirmDocumentPartyMatch,
+  plan: QueryAssistantRetrievalPlan,
+): QueryAssistantDraftResult {
+  const taxDocuments = getMatchingTaxDocuments(input, party, plan);
+  if (taxDocuments.length === 0) {
+    return notFoundResult(
+      input.question,
+      plan.intent,
+      "No matching tax documents found",
+      `I couldn't find any matching ${describeTaxDocumentScope(plan, 2)} for ${party.canonicalDisplayName}.`,
+    );
+  }
+
+  return {
+    status: "answered",
+    intent: plan.intent,
+    question: input.question,
+    title: `${capitalizeLabel(describeTaxDocumentScope(plan, 2))} on file`,
+    answer: `I found ${taxDocuments.length} ${describeTaxDocumentScope(plan, taxDocuments.length)} for ${party.canonicalDisplayName}. The latest is ${describeTaxDocumentRecord(taxDocuments[0]!)}.`,
+    details: buildTaxDocumentMatchDetails(taxDocuments),
+    sources: buildTaxDocumentSources(taxDocuments),
+  };
+}
+
+function answerLatestTaxDocument(
+  input: AskFirmDocumentAssistantInput,
+  party: FirmDocumentPartyMatch,
+  plan: QueryAssistantRetrievalPlan,
+): QueryAssistantDraftResult {
+  const taxDocuments = getMatchingTaxDocuments(input, party, plan);
+  if (taxDocuments.length === 0) {
+    return notFoundResult(
+      input.question,
+      plan.intent,
+      "No matching tax document found",
+      `I couldn't find ${withIndefiniteArticle(describeTaxDocumentScope(plan, 1))} for ${party.canonicalDisplayName}.`,
+    );
+  }
+
+  const latest = taxDocuments[0]!;
+  return {
+    status: "answered",
+    intent: plan.intent,
+    question: input.question,
+    title: `Latest ${describeTaxDocumentScope(plan, 1)}`,
+    answer: `The latest ${describeTaxDocumentScope(plan, 1)} for ${party.canonicalDisplayName} is ${latest.sourceName ?? "an unknown file"}${formatTaxDocumentDateSuffix(latest)}.`,
+    details: [],
+    sources: buildTaxDocumentSources([latest]),
   };
 }
 
@@ -1021,6 +1219,8 @@ function answerLatestIdentityDob(
     details: [],
     sources: [
       {
+        partyId: party.partyId,
+        accountId: null,
         sourceFileId: latestDob.sourceFileId,
         sourceName: latestDob.sourceName,
         documentDate: latestDob.documentDate,
@@ -1061,6 +1261,8 @@ function answerLatestIdentityAddress(
     details: [],
     sources: [
       {
+        partyId: party.partyId,
+        accountId: null,
         sourceFileId: latestAddress.sourceFileId,
         sourceName: latestAddress.sourceName,
         documentDate: latestAddress.documentDate,
@@ -1103,6 +1305,8 @@ function answerLatestIdentityExpiration(
     details: [],
     sources: [
       {
+        partyId: party.partyId,
+        accountId: null,
         sourceFileId: latestExpiration.sourceFileId,
         sourceName: latestExpiration.sourceName,
         documentDate: latestExpiration.documentDate,
@@ -1145,6 +1349,8 @@ function answerDriverLicenseStatus(
       details: [],
       sources: [
         {
+          partyId: party.partyId,
+          accountId: null,
           sourceFileId: licenseStatus.sourceFileId,
           sourceName: licenseStatus.sourceName,
           documentDate: licenseStatus.documentDate,
@@ -1168,6 +1374,8 @@ function answerDriverLicenseStatus(
     details: [],
     sources: [
       {
+        partyId: party.partyId,
+        accountId: null,
         sourceFileId: licenseStatus.sourceFileId,
         sourceName: licenseStatus.sourceName,
         documentDate: licenseStatus.documentDate,
@@ -1190,8 +1398,26 @@ function resolvePartyFromQuestion(input: {
     ownerEmail: input.ownerEmail,
     dbPath: input.dbPath,
   });
+  const explicitPartyId = extractPartyIdMention(input.question);
+  if (explicitPartyId) {
+    const explicitParty = parties.find(
+      (party) => party.partyId.toLowerCase() === explicitPartyId.toLowerCase(),
+    );
+
+    return explicitParty
+      ? {
+          status: "resolved",
+          party: explicitParty,
+        }
+      : {
+          status: "not_found",
+          matches: [],
+        };
+  }
+
   const normalizedQuestion = normalizeQuestion(input.question);
   const relaxedQuestion = dropSingleLetterTokens(normalizedQuestion);
+  const questionTokens = normalizedQuestion.split(/\s+/).filter(Boolean);
 
   const scoredMatches = parties
     .map((party) => {
@@ -1213,12 +1439,20 @@ function resolvePartyFromQuestion(input: {
         signatureName !== exactName &&
         signatureName !== relaxedName &&
         relaxedQuestion.includes(signatureName);
+      const fuzzyMatch =
+        exactName &&
+        !exactMatch &&
+        !exactMatchInRelaxedQuestion &&
+        !relaxedMatch &&
+        !signatureMatch &&
+        fuzzyNameMatchesQuestion(exactName, questionTokens);
 
       if (
         !exactMatch &&
         !exactMatchInRelaxedQuestion &&
         !relaxedMatch &&
-        !signatureMatch
+        !signatureMatch &&
+        !fuzzyMatch
       ) {
         return null;
       }
@@ -1229,11 +1463,21 @@ function resolvePartyFromQuestion(input: {
           ? exactName
           : relaxedMatch
             ? relaxedName
-            : signatureName;
+            : signatureMatch
+              ? signatureName
+              : exactName;
 
       return {
         party,
-        score: exactMatch ? 4 : exactMatchInRelaxedQuestion ? 3 : relaxedMatch ? 2 : 1,
+        score: exactMatch
+          ? 5
+          : exactMatchInRelaxedQuestion
+            ? 4
+            : relaxedMatch
+              ? 3
+              : signatureMatch
+                ? 2
+                : 1,
         length: matchedText.length,
       };
     })
@@ -1269,31 +1513,27 @@ function resolvePartyFromQuestion(input: {
 
   if (supportedMatches.length > 0) {
     const bestSupportedScore = supportedMatches[0]!.score;
-    const bestSupportedMatches = supportedMatches
+    const bestSupportedMatches = dedupePartyMatches(supportedMatches
       .filter((match) => match.score === bestSupportedScore)
-      .map((match) => match.party);
+      .map((match) => match.party));
 
-    const equivalentSupportedMatches = shouldCollapseEquivalentPartyMatches(input.plan)
-      ? collapseEquivalentPartyMatches(bestSupportedMatches)
-      : bestSupportedMatches;
-
-    if (equivalentSupportedMatches.length > 1) {
+    if (bestSupportedMatches.length > 1) {
       return {
         status: "ambiguous",
-        matches: equivalentSupportedMatches,
+        matches: bestSupportedMatches,
       };
     }
 
     return {
       status: "resolved",
-      party: equivalentSupportedMatches[0]!,
+      party: bestSupportedMatches[0]!,
     };
   }
 
   const bestScore = scoredMatches[0]!.score;
-  const bestMatches = scoredMatches
+  const bestMatches = dedupePartyMatches(scoredMatches
     .filter((match) => match.score === bestScore)
-    .map((match) => match.party);
+    .map((match) => match.party));
 
   if (bestMatches.length > 1) {
     return {
@@ -1308,49 +1548,100 @@ function resolvePartyFromQuestion(input: {
   };
 }
 
-function collapseEquivalentPartyMatches(matches: FirmDocumentPartyMatch[]) {
-  if (matches.length <= 1) {
-    return matches;
-  }
-
-  const firstKey = buildEquivalentPartyKey(matches[0]!);
-  if (!firstKey) {
-    return matches;
-  }
-
-  return matches.every((match) => buildEquivalentPartyKey(match) === firstKey)
-    ? [matches[0]!]
-    : matches;
+function extractPartyIdMention(question: string) {
+  return question.match(/\bparty_[a-z0-9]+\b/i)?.[0] ?? null;
 }
 
-function buildEquivalentPartyKey(party: FirmDocumentPartyMatch) {
-  const nameSignature = extractNameSignature(
-    normalizeQuestion(party.canonicalDisplayName ?? ""),
-  );
-  const addressSignature = normalizePartyAddressSignature(party.addressSignature);
+function dedupePartyMatches(matches: FirmDocumentPartyMatch[]) {
+  const seenPartyIds = new Set<string>();
+  const seenPersonKeys = new Set<string>();
+  const deduped: FirmDocumentPartyMatch[] = [];
 
-  if (!nameSignature || !addressSignature) {
-    return null;
+  for (const match of matches) {
+    if (seenPartyIds.has(match.partyId)) {
+      continue;
+    }
+
+    const personKey = buildPartyPersonKey(match);
+    if (personKey && seenPersonKeys.has(personKey)) {
+      continue;
+    }
+
+    seenPartyIds.add(match.partyId);
+    if (personKey) {
+      seenPersonKeys.add(personKey);
+    }
+    deduped.push(match);
   }
 
-  return [party.kind, nameSignature, addressSignature].join("|");
+  return deduped;
 }
 
-function shouldCollapseEquivalentPartyMatches(plan: QueryAssistantRetrievalPlan) {
-  if (!plan.intent) {
+function buildPartyPersonKey(match: FirmDocumentPartyMatch) {
+  const name = extractNameSignature(normalizeQuestion(match.canonicalDisplayName ?? ""));
+  const address = normalizeAddressSignatureForPartyKey(match.addressSignature ?? "");
+  return name && address ? `${name}::${address}` : null;
+}
+
+function normalizeAddressSignatureForPartyKey(value: string) {
+  const tokens = normalizeQuestion(value).split(/\s+/).filter(Boolean);
+  if (tokens.length < 4) {
+    return "";
+  }
+
+  return tokens.slice(0, 6).join(" ");
+}
+
+function fuzzyNameMatchesQuestion(name: string, questionTokens: string[]) {
+  const nameTokens = name
+    .split(/\s+/)
+    .filter((token) => token.length > 1 && !isClientlessQuestionStopToken(token));
+  if (nameTokens.length < 2 || questionTokens.length === 0) {
     return false;
   }
 
-  return [
-    "statement_existence",
-    "statement_list",
-    "latest_account_document",
-    "latest_account_snapshot",
-    "statement_account_value",
-    "account_routing_number",
-    "account_number",
-    "account_contact",
-  ].includes(plan.intent);
+  return nameTokens.every((nameToken) =>
+    questionTokens.some((questionToken) =>
+      questionToken === nameToken ||
+      (nameToken.length >= 5 &&
+        questionToken.length >= 5 &&
+        levenshteinDistanceAtMostTwo(nameToken, questionToken)),
+    ),
+  );
+}
+
+function levenshteinDistanceAtMostTwo(left: string, right: string) {
+  if (left === right) {
+    return true;
+  }
+
+  if (Math.abs(left.length - right.length) > 2) {
+    return false;
+  }
+
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    let rowMinimum = current[0]!;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      const value = Math.min(
+        previous[rightIndex]! + 1,
+        current[rightIndex - 1]! + 1,
+        previous[rightIndex - 1]! + cost,
+      );
+      current[rightIndex] = value;
+      rowMinimum = Math.min(rowMinimum, value);
+    }
+
+    if (rowMinimum > 2) {
+      return false;
+    }
+
+    previous.splice(0, previous.length, ...current);
+  }
+
+  return previous[right.length]! <= 2;
 }
 
 function partySupportsIntent(input: {
@@ -1389,6 +1680,17 @@ function partySupportsIntent(input: {
           ...base,
           idKind: input.plan.identityKind,
         }),
+      );
+    case "tax_document_existence":
+    case "tax_document_list":
+    case "latest_tax_document":
+      return (
+        findTaxDocumentsForParty({
+          ...base,
+          taxYear: input.plan.taxYear,
+          documentSubtype: input.plan.taxDocumentSubtype,
+          limit: 1,
+        }).length > 0
       );
     case "latest_identity_dob":
       return Boolean(findLatestIdentityDobForParty(base));
@@ -1473,7 +1775,7 @@ function getStatementQueryParties(
   const nameSignature = extractNameSignature(
     normalizeQuestion(party.canonicalDisplayName ?? ""),
   );
-  const addressSignature = normalizePartyAddressSignature(party.addressSignature);
+  const addressSignature = party.addressSignature?.trim().toLowerCase() ?? "";
 
   if (!nameSignature || !addressSignature) {
     return [party];
@@ -1491,7 +1793,7 @@ function getStatementQueryParties(
       return false;
     }
 
-    if (normalizePartyAddressSignature(candidate.addressSignature) !== addressSignature) {
+    if ((candidate.addressSignature?.trim().toLowerCase() ?? "") !== addressSignature) {
       return false;
     }
 
@@ -1502,10 +1804,6 @@ function getStatementQueryParties(
   });
 
   return relatedParties.length > 0 ? relatedParties : [party];
-}
-
-function normalizePartyAddressSignature(value: string | null | undefined) {
-  return normalizeQuestion(value ?? "");
 }
 
 function matchesStatementFamilyScope(
@@ -1765,6 +2063,8 @@ function buildStatementSources(
     });
 
     return {
+      partyId: snapshot.partyId,
+      accountId: snapshot.accountId,
       sourceFileId: snapshot.sourceFileId,
       sourceName: snapshot.sourceName,
       documentDate: snapshot.documentDate,
@@ -1779,6 +2079,78 @@ function buildStatementSources(
         identifier?.maskedAccountNumber ?? snapshot.maskedAccountNumber,
     };
   });
+}
+
+function getMatchingTaxDocuments(
+  input: AskFirmDocumentAssistantInput,
+  party: FirmDocumentPartyMatch,
+  plan: QueryAssistantRetrievalPlan,
+) {
+  return findTaxDocumentsForParty({
+    ownerEmail: input.ownerEmail,
+    dbPath: input.dbPath ?? null,
+    partyId: party.partyId,
+    taxYear: plan.taxYear,
+    documentSubtype: plan.taxDocumentSubtype,
+    limit: 25,
+  });
+}
+
+function describeTaxDocumentScope(
+  plan: QueryAssistantRetrievalPlan,
+  count: number,
+) {
+  const label =
+    getTaxDocumentSubtypeLabel(plan.taxDocumentSubtype) ??
+    (plan.taxDocumentSubtype ? plan.taxDocumentSubtype.replace(/_/g, " ") : null);
+  const base = label ? `${label} tax document` : "tax document";
+  const withYear = plan.taxYear ? `${plan.taxYear} ${base}` : base;
+  return count === 1 ? withYear : `${withYear}s`;
+}
+
+function describeTaxDocumentRecord(document: FirmDocumentTaxDocument) {
+  return compact([
+    document.taxYear,
+    document.idType ??
+      getTaxDocumentSubtypeLabel(document.documentSubtype) ??
+      "tax document",
+    document.institutionName,
+    document.sourceName,
+  ]).join(" - ");
+}
+
+function buildTaxDocumentMatchDetails(documents: FirmDocumentTaxDocument[]) {
+  return documents.slice(0, 10).map((document) => describeTaxDocumentRecord(document));
+}
+
+function buildTaxDocumentSources(
+  documents: FirmDocumentTaxDocument[],
+): QueryAssistantSource[] {
+  return documents.slice(0, 3).map((document) => ({
+    partyId: document.partyId,
+    accountId: null,
+    sourceFileId: document.sourceFileId,
+    sourceName: document.sourceName,
+    documentDate: document.documentDate,
+    institutionName: document.institutionName,
+    partyDisplayName: document.partyDisplayName,
+    idType:
+      document.idType ?? getTaxDocumentSubtypeLabel(document.documentSubtype),
+    taxYear: document.taxYear,
+    documentSubtype: document.documentSubtype,
+  }));
+}
+
+function formatTaxDocumentDateSuffix(document: FirmDocumentTaxDocument) {
+  if (document.taxYear) {
+    return ` for tax year ${document.taxYear}`;
+  }
+
+  if (document.documentDate) {
+    return ` dated ${document.documentDate}`;
+  }
+
+  return "";
 }
 
 function buildFollowUpSuggestion(
@@ -1818,6 +2190,15 @@ function extractIdentityKind(normalizedQuestion: string) {
   return null;
 }
 
+function extractTaxDocumentSubtype(question: string) {
+  return normalizeTaxDocumentSubtype(question);
+}
+
+function extractQuestionTaxYear(question: string) {
+  const match = question.match(/\b(20\d{2})\b/);
+  return match?.[1] ?? null;
+}
+
 function extractAccountFieldRequest(
   question: string,
 ): "account_number" | "routing_number" | null {
@@ -1844,7 +2225,17 @@ function resolveFamilyScope(
   question: string,
   accountType: string | null,
   identityKind: "driver_license" | "state_id" | null,
+  taxDocumentSubtype: string | null,
 ): QueryAssistantFamilyScope {
+  if (
+    taxDocumentSubtype ||
+    /\btax\b|\b1040x?\b|\b1099\b|\b1098\b|\bw[-\s]?2\b|\bk[-\s]?1\b/i.test(
+      question,
+    )
+  ) {
+    return "tax_document";
+  }
+
   if (identityKind === "driver_license") {
     return "driver_license";
   }
@@ -2276,22 +2667,6 @@ function withIndefiniteArticle(value: string) {
   return `${article} ${value}`;
 }
 
-function formatNaturalList(values: string[]) {
-  if (values.length === 0) {
-    return "";
-  }
-
-  if (values.length === 1) {
-    return values[0]!;
-  }
-
-  if (values.length === 2) {
-    return `${values[0]} or ${values[1]}`;
-  }
-
-  return `${values.slice(0, -1).join(", ")}, or ${values[values.length - 1]}`;
-}
-
 function formatConjoinedNaturalList(values: string[]) {
   if (values.length === 0) {
     return "";
@@ -2308,12 +2683,58 @@ function formatConjoinedNaturalList(values: string[]) {
   return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
 }
 
-function formatPartyMatchDetail(match: FirmDocumentPartyMatch) {
-  return compact([
-    match.canonicalDisplayName ?? "Unknown",
-    match.addressSignature ? `Address ${match.addressSignature}` : null,
-    `Party ${match.partyId}`,
-  ]).join(" | ");
+function buildPartyClarificationOptions(input: {
+  ownerEmail: string;
+  dbPath: string | null;
+  matches: FirmDocumentPartyMatch[];
+}): QueryAssistantClarificationOption[] {
+  return dedupePartyMatches(input.matches)
+    .slice(0, 5)
+    .map((match, index) => {
+      const accountTypes = collectDistinctStatementTypes(
+        findLatestAccountSnapshotsForParty({
+          ownerEmail: input.ownerEmail,
+          dbPath: input.dbPath,
+          partyId: match.partyId,
+          limit: 10,
+        }),
+      );
+      const hasIdentityDocument = Boolean(
+        findLatestIdentityDocumentForParty({
+          ownerEmail: input.ownerEmail,
+          dbPath: input.dbPath,
+          partyId: match.partyId,
+        }),
+      );
+      const coverage = compact([
+        accountTypes.length > 0
+          ? `${formatConjoinedNaturalList(accountTypes)} statement data`
+          : null,
+        hasIdentityDocument ? "ID data" : null,
+      ]);
+      const description = compact([
+        match.addressSignature
+          ? `Address ${formatAddressSignature(match.addressSignature)}`
+          : null,
+        coverage.length > 0 ? `Found ${formatConjoinedNaturalList(coverage)}` : null,
+      ]).join(" • ");
+
+      return {
+        optionId: match.partyId,
+        label: match.canonicalDisplayName ?? `Client option ${index + 1}`,
+        description,
+        partyId: match.partyId,
+        accountId: null,
+      };
+    });
+}
+
+function formatAddressSignature(value: string) {
+  return value
+    .replace(/\|+/g, ", ")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function formatSnapshotOption(snapshot: {

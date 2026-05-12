@@ -25,15 +25,11 @@ import {
   DATA_INTELLIGENCE_EMPTY_TITLE,
   isSubmittableDataIntelligenceQuestion,
 } from "@/lib/data-intelligence-ui";
-import {
-  DATA_INTELLIGENCE_GENERIC_ERROR,
-  DATA_INTELLIGENCE_UNREADABLE_RESPONSE_ERROR,
-  parseDataIntelligencePayloadText,
-  readDataIntelligenceApiError,
-} from "@/lib/data-intelligence-api";
 import styles from "./data-intelligence-chat.module.css";
 
 type AssistantSource = {
+  partyId?: string | null;
+  accountId?: string | null;
   sourceFileId?: string | null;
   sourceName: string | null;
   documentDate: string | null;
@@ -56,13 +52,25 @@ type AssistantSource = {
 };
 
 type AssistantResult = {
-  status: "answered" | "not_found" | "ambiguous" | "unsupported";
+  status:
+    | "answered"
+    | "needs_clarification"
+    | "partial"
+    | "not_found"
+    | "ambiguous"
+    | "unsupported"
+    | "error";
   intent: string | null;
   question: string;
   title: string;
   answer: string;
   details: string[];
   sources: AssistantSource[];
+  sections?: AssistantSection[];
+  sourcedFacts?: AssistantSourcedFact[];
+  clarificationOptions?: AssistantClarificationOption[];
+  suggestedPrompts?: string[];
+  nextConversationState?: DataIntelligenceConversationState;
   presentation: {
     mode:
       | "concise_answer"
@@ -80,6 +88,27 @@ type AssistantResult = {
     showSources: boolean;
     followUp: string | null;
   };
+};
+
+type AssistantSection = {
+  title: string;
+  body: string;
+  kind: "sourced" | "guidance" | "missing" | "next_steps";
+};
+
+type AssistantSourcedFact = {
+  label: string;
+  value: string;
+  sourceIndex: number;
+  sensitivity?: "normal" | "masked" | "restricted";
+};
+
+type AssistantClarificationOption = {
+  optionId: string;
+  label: string;
+  description: string;
+  partyId?: string | null;
+  accountId?: string | null;
 };
 
 type ChatMessage =
@@ -100,11 +129,11 @@ type ChatMessage =
     };
 
 export const DATA_INTELLIGENCE_EXAMPLE_PROMPTS = [
-  "Do we have any statements for Christopher Bakken?",
-  "What is Christopher Bakken's latest checking balance?",
-  "What address is on Christopher Bakken's latest ID?",
-  "Does Christopher Bakken have an unexpired driver's license?",
-  "What is the rollover phone number for Christopher Bakken's 401(k)?",
+  "prepare a rollover call brief for Christopher Bakken's 401(k)",
+  "draft a client email about rollover next steps",
+  "explain what I should verify before a rollover call",
+  "what sourced 401(k) details do we have for Christopher Bakken?",
+  "what address is on Christopher Bakken's latest ID?",
 ] as const;
 
 export function DataIntelligenceChat() {
@@ -129,7 +158,7 @@ export function DataIntelligenceChat() {
     });
   }, [hasMessages, isLoading, messages]);
 
-  async function submitQuestion(nextQuestion?: string) {
+  async function submitQuestion(nextQuestion?: string, displayText?: string) {
     const activeQuestion = (nextQuestion ?? question).trim();
     if (!activeQuestion || isLoading) {
       return;
@@ -138,7 +167,7 @@ export function DataIntelligenceChat() {
     const userMessage: ChatMessage = {
       id: createMessageId("user"),
       role: "user",
-      text: activeQuestion,
+      text: displayText ?? activeQuestion,
     };
 
     setMessages((current) => [...current, userMessage]);
@@ -160,16 +189,11 @@ export function DataIntelligenceChat() {
         }),
       });
 
-      const responseText = await response.text();
-      const payload = parseDataIntelligencePayloadText(responseText);
+      const payload = (await response.json()) as AssistantResult | { error?: unknown };
 
       if (!response.ok || !isAssistantResult(payload)) {
-        const errorMessage =
-          readDataIntelligenceApiError(payload) ??
-          (payload === null
-            ? DATA_INTELLIGENCE_UNREADABLE_RESPONSE_ERROR
-            : DATA_INTELLIGENCE_GENERIC_ERROR);
-        throw new Error(errorMessage);
+        const errorMessage = readErrorMessage(payload);
+        throw new Error(errorMessage ?? "The query assistant request failed.");
       }
 
       setMessages((current) => [
@@ -181,6 +205,7 @@ export function DataIntelligenceChat() {
         },
       ]);
       setConversationState((current) =>
+        payload.nextConversationState ??
         deriveDataIntelligenceConversationStateFromResult({
           previousState: current,
           result: payload,
@@ -195,7 +220,7 @@ export function DataIntelligenceChat() {
           error:
             requestError instanceof Error
               ? requestError.message
-              : DATA_INTELLIGENCE_GENERIC_ERROR,
+              : "The query assistant request failed.",
         },
       ]);
     } finally {
@@ -263,6 +288,11 @@ export function DataIntelligenceChat() {
                     <p className={styles.followUp}>{message.result.presentation.followUp}</p>
                   ) : null}
 
+                  <AssistantStructuredResponse
+                    result={message.result}
+                    submitQuestion={submitQuestion}
+                  />
+
                   {message.result.presentation.showDetails &&
                   message.result.details.length > 0 &&
                   message.result.status !== "answered" ? (
@@ -289,7 +319,7 @@ export function DataIntelligenceChat() {
                 </article>
               ) : (
                 <article className={styles.errorCard} key={message.id}>
-                  <p className={styles.statusBadge}>I hit a snag</p>
+                  <p className={styles.statusBadge}>Request error</p>
                   <p className={styles.answer}>{message.error}</p>
                 </article>
               ),
@@ -299,7 +329,7 @@ export function DataIntelligenceChat() {
               <div className={styles.loadingRow}>
                 <div className={styles.loadingCard}>
                   <span className={styles.loadingDot} />
-                  <span>Reading the indexed documents...</span>
+                  <span>Searching the firm document store...</span>
                 </div>
               </div>
             ) : null}
@@ -320,13 +350,13 @@ export function DataIntelligenceChat() {
                 void submitQuestion();
               }
             }}
-            placeholder="Ask a document question or follow up naturally..."
+            placeholder="Ask for client facts, rollover prep, drafting help, or general guidance."
             rows={1}
             value={question}
           />
           <div className={styles.composerActions}>
             <p className={styles.composerHint}>
-              I will answer from indexed firm documents and show sources when available.
+              Source details stay behind Details.
             </p>
             <button
               aria-label="Send question"
@@ -343,6 +373,92 @@ export function DataIntelligenceChat() {
         </div>
       </div>
     </section>
+  );
+}
+
+function AssistantStructuredResponse({
+  result,
+  submitQuestion,
+}: {
+  result: AssistantResult;
+  submitQuestion: (nextQuestion?: string, displayText?: string) => Promise<void>;
+}) {
+  const hasSections = Boolean(result.sections?.length);
+  const hasOptions = Boolean(result.clarificationOptions?.length);
+  const hasSuggestions = Boolean(result.suggestedPrompts?.length);
+
+  if (!hasSections && !hasOptions && !hasSuggestions) {
+    return null;
+  }
+
+  return (
+    <div className={styles.structuredResponse}>
+      {hasSections ? (
+        <div className={styles.responseSections}>
+          {result.sections?.map((section) => (
+            <section
+              className={styles.responseSection}
+              data-kind={section.kind}
+              key={`${section.kind}-${section.title}`}
+            >
+              <p className={styles.responseSectionTitle}>{section.title}</p>
+              <div className={styles.responseSectionBody}>
+                {renderStructuredBody(section.body)}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : null}
+
+      {hasOptions ? (
+        <section className={styles.clarificationPanel} aria-label="Clarification options">
+          <p className={styles.responseSectionTitle}>Choose a match</p>
+          <div className={styles.clarificationOptions}>
+            {result.clarificationOptions?.map((option) => (
+              <button
+                className={styles.clarificationOption}
+                key={option.optionId}
+                onClick={() => void submitQuestion(option.optionId, option.label)}
+                type="button"
+              >
+                <span>{option.label}</span>
+                {option.description ? <small>{option.description}</small> : null}
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {hasSuggestions ? (
+        <div className={styles.suggestionRow} aria-label="Suggested follow-up prompts">
+          {result.suggestedPrompts?.map((prompt) => (
+            <button
+              className={styles.suggestionChip}
+              key={prompt}
+              onClick={() => void submitQuestion(prompt)}
+              type="button"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function renderStructuredBody(body: string) {
+  const lines = body.split("\n").filter(Boolean);
+  if (lines.length <= 1) {
+    return <p>{body}</p>;
+  }
+
+  return (
+    <ul>
+      {lines.map((line) => (
+        <li key={line}>{line.replace(/^[-•]\s*/, "")}</li>
+      ))}
+    </ul>
   );
 }
 
@@ -408,7 +524,7 @@ function AssistantMessageActions({
     return () => window.clearTimeout(timeoutId);
   }, [copiedRowKey]);
 
-  if (result.status !== "answered") {
+  if (result.status !== "answered" && result.status !== "partial") {
     return null;
   }
 
@@ -641,9 +757,11 @@ function createMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function isAssistantResult(value: unknown): value is AssistantResult {
+function isAssistantResult(
+  value: AssistantResult | { error?: unknown },
+): value is AssistantResult {
   return (
-    value !== null &&
+    Boolean(value) &&
     typeof value === "object" &&
     "status" in value &&
     "title" in value &&
@@ -657,6 +775,14 @@ function isAssistantResult(value: unknown): value is AssistantResult {
   );
 }
 
+function readErrorMessage(value: AssistantResult | { error?: unknown }) {
+  if (value && typeof value === "object" && "error" in value) {
+    return typeof value.error === "string" ? value.error : null;
+  }
+
+  return null;
+}
+
 function shouldRenderMetaHeader(result: AssistantResult) {
   return (
     result.presentation.mode === "ambiguity_prompt" ||
@@ -668,15 +794,15 @@ function shouldRenderMetaHeader(result: AssistantResult) {
 function labelForPresentationMode(mode: AssistantResult["presentation"]["mode"]) {
   switch (mode) {
     case "ambiguity_prompt":
-      return "I need a bit more";
+      return "Need more detail";
     case "not_found":
-      return "I couldn't find it";
+      return "Not found";
     case "unsupported":
-      return "Try another question";
+      return "Unsupported";
     case "summary_answer":
-      return "Here's what I found";
+      return "Summary";
     default:
-      return "Found";
+      return "Answer";
   }
 }
 

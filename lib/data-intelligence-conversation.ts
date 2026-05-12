@@ -7,6 +7,7 @@ export type DataIntelligenceConversationFamilyScope =
   | "statement"
   | "bank_statement"
   | "credit_card_statement"
+  | "tax_document"
   | "identity_document"
   | "driver_license"
   | "state_id";
@@ -22,6 +23,8 @@ export type DataIntelligenceConversationTurnKind =
   | "unsupported";
 
 export type DataIntelligenceConversationSourceRef = {
+  partyId: string | null;
+  accountId: string | null;
   sourceFileId: string | null;
   sourceName: string | null;
   documentDate: string | null;
@@ -30,8 +33,13 @@ export type DataIntelligenceConversationSourceRef = {
   accountType: string | null;
   accountLast4: string | null;
   maskedAccountNumber: string | null;
+  valueLabel: string | null;
+  valueAmount: string | null;
+  contactValue: string | null;
   partyDisplayName: string | null;
   idType: string | null;
+  taxYear: string | null;
+  documentSubtype: string | null;
   expirationDate: string | null;
 };
 
@@ -40,14 +48,32 @@ export type DataIntelligenceConversationRequestedField =
   | "value"
   | "account_number"
   | "contact"
+  | "tax_document"
   | "identity_document"
   | "dob"
   | "address"
   | "expiration"
   | null;
 
+export type DataIntelligenceClarificationOption = {
+  optionId: string;
+  label: string;
+  description: string;
+  partyId: string | null;
+  accountId: string | null;
+};
+
+export type DataIntelligencePendingClarification = {
+  kind: "party" | "account";
+  originalQuestion: string;
+  options: DataIntelligenceClarificationOption[];
+};
+
 export type DataIntelligenceConversationState = {
   activeClientName: string | null;
+  activePartyId: string | null;
+  activeAccountId: string | null;
+  activeTopic: string | null;
   activeFamilyScope: DataIntelligenceConversationFamilyScope | null;
   activeAccountType: string | null;
   activeStatementSource: DataIntelligenceConversationSourceRef | null;
@@ -57,6 +83,7 @@ export type DataIntelligenceConversationState = {
   lastRequestedField: DataIntelligenceConversationRequestedField;
   lastPrimarySource: DataIntelligenceConversationSourceRef | null;
   lastSources: DataIntelligenceConversationSourceRef[];
+  pendingClarification: DataIntelligencePendingClarification | null;
 };
 
 export const DATA_INTELLIGENCE_HISTORY_MAX_MESSAGES = 8;
@@ -88,6 +115,7 @@ const DATA_INTELLIGENCE_STATE_REQUESTED_FIELDS =
     "value",
     "account_number",
     "contact",
+    "tax_document",
     "identity_document",
     "dob",
     "address",
@@ -98,6 +126,7 @@ const DATA_INTELLIGENCE_STATE_FAMILY_SCOPES =
     "statement",
     "bank_statement",
     "credit_card_statement",
+    "tax_document",
     "identity_document",
     "driver_license",
     "state_id",
@@ -171,6 +200,9 @@ export function sanitizeDataIntelligenceConversationState(
 
   return {
     activeClientName,
+    activePartyId: readBoundedString(candidate.activePartyId),
+    activeAccountId: readBoundedString(candidate.activeAccountId),
+    activeTopic: readBoundedString(candidate.activeTopic),
     activeFamilyScope: readEnum(
       candidate.activeFamilyScope,
       DATA_INTELLIGENCE_STATE_FAMILY_SCOPES,
@@ -192,6 +224,7 @@ export function sanitizeDataIntelligenceConversationState(
       null,
     lastPrimarySource,
     lastSources,
+    pendingClarification: readPendingClarification(candidate.pendingClarification),
   };
 }
 
@@ -226,6 +259,14 @@ export function deriveDataIntelligenceConversationStateFromResult(input: {
     extractClientNameFromQuestion(input.result.question) ??
     previous?.activeClientName ??
     null;
+  const activePartyId =
+    firstPresentString(sources.map((source) => source.partyId)) ??
+    previous?.activePartyId ??
+    null;
+  const activeAccountId =
+    firstPresentString(sources.map((source) => source.accountId)) ??
+    previous?.activeAccountId ??
+    null;
   const activeAccountType =
     activeStatementSource?.accountType ??
     deriveActiveAccountType(sources) ??
@@ -238,6 +279,12 @@ export function deriveDataIntelligenceConversationStateFromResult(input: {
 
   return {
     activeClientName,
+    activePartyId,
+    activeAccountId,
+    activeTopic:
+      deriveActiveTopic(input.result.intent, activeAccountType) ??
+      previous?.activeTopic ??
+      null,
     activeFamilyScope,
     activeAccountType,
     activeStatementSource,
@@ -250,6 +297,20 @@ export function deriveDataIntelligenceConversationStateFromResult(input: {
       null,
     lastPrimarySource: primarySource,
     lastSources: sources.length > 0 ? sources : previous?.lastSources ?? [],
+    pendingClarification:
+      input.result.status === "answered"
+        ? null
+        : previous?.pendingClarification ?? null,
+  };
+}
+
+export function applyDataIntelligencePendingClarification(input: {
+  state: DataIntelligenceConversationState;
+  pendingClarification: DataIntelligencePendingClarification | null;
+}): DataIntelligenceConversationState {
+  return {
+    ...input.state,
+    pendingClarification: input.pendingClarification,
   };
 }
 
@@ -318,6 +379,10 @@ function deriveRequestedField(
       return "account_number";
     case "latest_account_contact":
       return "contact";
+    case "tax_document_existence":
+    case "tax_document_list":
+    case "latest_tax_document":
+      return "tax_document";
     case "identity_document_existence":
     case "latest_identity_document":
       return "identity_document";
@@ -358,6 +423,13 @@ function deriveFamilyScope(
 
   if (intent === "unexpired_driver_license_check") {
     return "driver_license";
+  }
+
+  if (
+    intent?.includes("tax_document") ||
+    sources.some((source) => Boolean(source.taxYear || source.documentSubtype))
+  ) {
+    return "tax_document";
   }
 
   if (
@@ -403,6 +475,38 @@ function deriveIdentityScope(
   return "identity_document";
 }
 
+function deriveActiveTopic(intent: string | null, accountType: string | null) {
+  switch (intent) {
+    case "latest_account_contact":
+      return accountType ? `${accountType} contact` : "account contact";
+    case "latest_account_snapshot":
+      return accountType ? `${accountType} snapshot` : "account snapshot";
+    case "latest_account_document":
+      return accountType ? `${accountType} statement` : "statement";
+    case "statement_list":
+    case "statement_existence":
+      return "statements";
+    case "account_identifier_lookup":
+      return accountType ? `${accountType} account details` : "account details";
+    case "tax_document_existence":
+    case "tax_document_list":
+    case "latest_tax_document":
+      return "tax document";
+    case "identity_document_existence":
+    case "latest_identity_document":
+      return "identity document";
+    case "latest_identity_dob":
+      return "date of birth";
+    case "latest_identity_address":
+      return "identity address";
+    case "latest_identity_expiration":
+    case "unexpired_driver_license_check":
+      return "identity expiration";
+    default:
+      return null;
+  }
+}
+
 function deriveTurnKind(input: {
   status: string;
   intent: string | null;
@@ -416,6 +520,10 @@ function deriveTurnKind(input: {
     return "ambiguous";
   }
 
+  if (input.status === "needs_clarification") {
+    return "ambiguous";
+  }
+
   if (input.status === "unsupported") {
     return "unsupported";
   }
@@ -425,6 +533,10 @@ function deriveTurnKind(input: {
   }
 
   if (input.intent === "statement_list") {
+    return "list";
+  }
+
+  if (input.intent === "tax_document_list") {
     return "list";
   }
 
@@ -461,6 +573,8 @@ function readSourceRef(value: unknown) {
 
   const candidate = value as Record<string, unknown>;
   const source: DataIntelligenceConversationSourceRef = {
+    partyId: readBoundedString(candidate.partyId),
+    accountId: readBoundedString(candidate.accountId),
     sourceFileId: readBoundedString(candidate.sourceFileId),
     sourceName: readBoundedString(candidate.sourceName),
     documentDate: readBoundedString(candidate.documentDate),
@@ -471,12 +585,73 @@ function readSourceRef(value: unknown) {
       readBoundedString(candidate.accountType),
     accountLast4: readLast4(candidate.accountLast4),
     maskedAccountNumber: readMaskedAccountNumber(candidate.maskedAccountNumber),
+    valueLabel: readBoundedString(candidate.valueLabel),
+    valueAmount: readBoundedString(candidate.valueAmount),
+    contactValue: readBoundedString(candidate.contactValue),
     partyDisplayName: readBoundedString(candidate.partyDisplayName),
     idType: readBoundedString(candidate.idType),
+    taxYear: readBoundedString(candidate.taxYear),
+    documentSubtype: readBoundedString(candidate.documentSubtype),
     expirationDate: readBoundedString(candidate.expirationDate),
   };
 
   return Object.values(source).some((entry) => Boolean(entry)) ? source : null;
+}
+
+function readPendingClarification(
+  value: unknown,
+): DataIntelligencePendingClarification | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const kind = readEnum(
+    candidate.kind,
+    new Set<DataIntelligencePendingClarification["kind"]>(["party", "account"]),
+  );
+  const originalQuestion = readBoundedString(candidate.originalQuestion);
+  const options = readClarificationOptions(candidate.options);
+  if (!kind || !originalQuestion || options.length === 0) {
+    return null;
+  }
+
+  return {
+    kind,
+    originalQuestion,
+    options,
+  };
+}
+
+function readClarificationOptions(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry): DataIntelligenceClarificationOption | null => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        return null;
+      }
+
+      const candidate = entry as Record<string, unknown>;
+      const optionId = readBoundedString(candidate.optionId);
+      const label = readBoundedString(candidate.label);
+      const description = readBoundedString(candidate.description) ?? "";
+      if (!optionId || !label) {
+        return null;
+      }
+
+      return {
+        optionId,
+        label,
+        description,
+        partyId: readBoundedString(candidate.partyId),
+        accountId: readBoundedString(candidate.accountId),
+      };
+    })
+    .filter((entry): entry is DataIntelligenceClarificationOption => Boolean(entry))
+    .slice(0, DATA_INTELLIGENCE_STATE_MAX_SOURCES);
 }
 
 function readBoundedString(value: unknown) {
@@ -578,6 +753,7 @@ function isClientNameStopToken(token: string) {
     "id",
     "latest",
     "license",
+    "s",
     "statement",
     "statements",
     "the",
@@ -616,16 +792,30 @@ function sameConversationSource(
     return false;
   }
 
+  if (left.partyId && right.partyId && left.partyId === right.partyId) {
+    return true;
+  }
+
+  if (left.accountId && right.accountId && left.accountId === right.accountId) {
+    return true;
+  }
+
   return conversationSourceKey(left) === conversationSourceKey(right);
 }
 
 function conversationSourceKey(source: DataIntelligenceConversationSourceRef) {
   return [
+    source.partyId,
+    source.accountId,
     source.sourceFileId,
     source.sourceName,
     source.accountType,
     source.accountLast4,
+    source.valueAmount,
+    source.contactValue,
     source.idType,
+    source.taxYear,
+    source.documentSubtype,
   ]
     .filter(Boolean)
     .join("::");

@@ -55,11 +55,15 @@ const QUERY_ASSISTANT_INTENTS = new Set<QueryAssistantIntent>([
   "latest_identity_address",
   "latest_identity_expiration",
   "unexpired_driver_license_check",
+  "tax_document_existence",
+  "tax_document_list",
+  "latest_tax_document",
 ]);
 
 const DOCUMENT_FAMILIES = new Set<QueryAssistantDocumentFamily>([
   "account_statement",
   "identity_document",
+  "tax_document",
   null,
 ]);
 
@@ -70,6 +74,7 @@ const FAMILY_SCOPES = new Set<QueryAssistantFamilyScope>([
   "identity_document",
   "driver_license",
   "state_id",
+  "tax_document",
   null,
 ]);
 
@@ -488,6 +493,10 @@ function parseInterpretationPayload(
       fallbackPlan.contactMethod,
     identityKind:
       readEnum(rawPlan.identityKind, IDENTITY_KINDS) ?? fallbackPlan.identityKind,
+    taxYear: readBoundedString(rawPlan.taxYear, 16) ?? fallbackPlan.taxYear,
+    taxDocumentSubtype:
+      readBoundedString(rawPlan.taxDocumentSubtype, 80) ??
+      fallbackPlan.taxDocumentSubtype,
     valuePreference:
       readEnum(rawPlan.valuePreference, VALUE_PREFERENCES) ??
       fallbackPlan.valuePreference,

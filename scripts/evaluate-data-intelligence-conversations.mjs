@@ -769,6 +769,15 @@ function seedConversationEvalFixtures(ownerEmail) {
       issueDate: "2024-01-01",
       documentDate: "2024-01-01",
       expirationDate: "2030-01-01",
+      address: {
+        kind: "identity",
+        rawText: "100 LAKE ST, MADISON WI 53703",
+        lines: ["100 LAKE ST", "MADISON WI 53703"],
+        city: "MADISON",
+        state: "WI",
+        postalCode: "53703",
+        country: "US",
+      },
     }),
     buildIdentityCanonicalFixture({
       fileId: "alex-kim-co",
@@ -783,6 +792,15 @@ function seedConversationEvalFixtures(ownerEmail) {
       issueDate: "2025-02-02",
       documentDate: "2025-02-02",
       expirationDate: "2033-04-04",
+      address: {
+        kind: "identity",
+        rawText: "2400 PEARL ST, BOULDER CO 80302",
+        lines: ["2400 PEARL ST", "BOULDER CO 80302"],
+        city: "BOULDER",
+        state: "CO",
+        postalCode: "80302",
+        country: "US",
+      },
     }),
   ];
 
