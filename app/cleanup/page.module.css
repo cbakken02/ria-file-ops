@@ -513,9 +513,9 @@
 }
 
 .completeBadge {
-  background: #eef6ef;
-  color: #2f6943;
-  border-color: #cfe5d4;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-soft);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .rowActionButton {
@@ -562,27 +562,27 @@
 }
 
 .rowActionAnalyze {
-  --row-action-bg: #f4f7fb;
-  --row-action-border: #d5deeb;
-  --row-action-color: #21364f;
-  --row-action-hover-bg: #eaf0f8;
-  --row-action-hover-border: #b9c9dc;
+  --row-action-bg: rgba(255, 255, 255, 0.03);
+  --row-action-border: rgba(255, 255, 255, 0.12);
+  --row-action-color: var(--text-soft);
+  --row-action-hover-bg: rgba(255, 255, 255, 0.07);
+  --row-action-hover-border: rgba(255, 255, 255, 0.2);
 }
 
 .rowActionReview {
-  --row-action-bg: #fff4df;
-  --row-action-border: #ecd39f;
-  --row-action-color: #644713;
-  --row-action-hover-bg: #f8e8c6;
-  --row-action-hover-border: #d7b86f;
+  --row-action-bg: rgba(255, 255, 255, 0.03);
+  --row-action-border: rgba(255, 255, 255, 0.12);
+  --row-action-color: var(--text-soft);
+  --row-action-hover-bg: rgba(255, 255, 255, 0.07);
+  --row-action-hover-border: rgba(255, 255, 255, 0.2);
 }
 
 .rowActionApply {
-  --row-action-bg: #eef6ef;
-  --row-action-border: #cfe5d4;
-  --row-action-color: #2f6943;
-  --row-action-hover-bg: #e2f0e5;
-  --row-action-hover-border: #b6d7bf;
+  --row-action-bg: var(--primary);
+  --row-action-border: var(--primary);
+  --row-action-color: var(--primary-contrast);
+  --row-action-hover-bg: #ffffff;
+  --row-action-hover-border: #ffffff;
 }
 
 .browserActionBar {
@@ -1019,15 +1019,15 @@
 }
 
 .readyBadge {
-  background: #eef6ef;
-  color: #2f6943;
-  border-color: #cfe5d4;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--foreground);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .reviewBadge {
-  background: #fdf4e7;
-  color: #8a6420;
-  border-color: #ead8b0;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-soft);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .planRowInput {
