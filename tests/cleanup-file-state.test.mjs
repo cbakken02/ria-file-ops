@@ -9,6 +9,7 @@ import {
   isCleanupStateFreshForFile,
   resolveCleanupBrowserState,
 } from "../lib/cleanup-file-state.ts";
+import { buildCleanupApprovalItemsFromStates } from "../lib/cleanup-approval-items.ts";
 
 function makeState(overrides = {}) {
   return {
@@ -69,6 +70,41 @@ test("cleanup browser state uses fresh stored suggestion", () => {
     cleanup.proposedFilename,
     "Bakken_Christopher_Statement_Checking_x1234.pdf",
   );
+});
+
+test("cleanup approval items treat completed states as idempotent successes", () => {
+  const items = buildCleanupApprovalItemsFromStates({
+    requestedFileIds: ["file-1"],
+    states: [
+      makeState({
+        appliedFilingEventId: "filing-event-1",
+        completedAt: "2026-04-20T12:02:00.000Z",
+        status: "complete",
+      }),
+    ],
+  });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].alreadyComplete, true);
+  assert.equal(items[0].candidate, undefined);
+  assert.equal(items[0].fileId, "file-1");
+});
+
+test("cleanup approval items keep non-ready suggestions retryable instead of filing", () => {
+  const items = buildCleanupApprovalItemsFromStates({
+    requestedFileIds: ["file-1", "missing-file"],
+    states: [
+      makeState({
+        status: "needs_review",
+      }),
+    ],
+  });
+
+  assert.equal(items.length, 2);
+  assert.equal(items[0].candidate, undefined);
+  assert.match(items[0].errorMessage, /Review this Clean Up suggestion/);
+  assert.equal(items[1].sourceName, "missing-file");
+  assert.match(items[1].errorMessage, /No Clean Up suggestion/);
 });
 
 test("cleanup browser state returns needs analysis for stale Drive metadata", () => {

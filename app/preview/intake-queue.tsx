@@ -2,14 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  approvePreviewItemAction,
-  approveSelectedPreviewItemsAction,
-} from "@/app/preview/actions";
 import { saveReviewDecisionAction } from "@/app/review/actions";
 import { FileKindIcon } from "@/components/file-kind-icon";
 import type { FilingEvent, ReviewDecision } from "@/lib/db";
 import { getCleanupTopLevelFolderForDocumentType } from "@/lib/cleanup-presets";
+import { useFileApprovalQueue } from "@/lib/use-file-approval-queue";
 import {
   buildDocumentFilenamePlan,
   getClientDisplayName,
@@ -42,6 +39,11 @@ type ActiveModal =
   | { kind: "filed"; eventId: string }
   | null;
 
+type ApprovalNotice = {
+  tone: "success" | "error";
+  message: string;
+};
+
 export function IntakeQueue({
   activeTab,
   reviewItems,
@@ -55,9 +57,23 @@ export function IntakeQueue({
 }: IntakeQueueProps) {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [optimisticFiledItemIds, setOptimisticFiledItemIds] = useState<string[]>([]);
+  const [approvalNotice, setApprovalNotice] = useState<ApprovalNotice | null>(null);
   const savedDecisionMap = useMemo(
     () => new Map(savedDecisions.map((decision) => [decision.fileId, decision])),
     [savedDecisions],
+  );
+  const optimisticFiledItemIdSet = useMemo(
+    () => new Set(optimisticFiledItemIds),
+    [optimisticFiledItemIds],
+  );
+  const visibleReviewItems = useMemo(
+    () => reviewItems.filter((item) => !optimisticFiledItemIdSet.has(item.id)),
+    [optimisticFiledItemIdSet, reviewItems],
+  );
+  const visibleReadyItems = useMemo(
+    () => readyItems.filter((item) => !optimisticFiledItemIdSet.has(item.id)),
+    [optimisticFiledItemIdSet, readyItems],
   );
   const previewItems = useMemo(
     () => [...reviewItems, ...readyItems],
@@ -84,19 +100,19 @@ export function IntakeQueue({
       : null;
   const visiblePreviewItems = useMemo(() => {
     if (activeTab === "review") {
-      return reviewItems;
+      return visibleReviewItems;
     }
 
     if (activeTab === "ready") {
-      return readyItems;
+      return visibleReadyItems;
     }
 
     if (activeTab === "filed") {
       return [];
     }
 
-    return [...reviewItems, ...readyItems];
-  }, [activeTab, readyItems, reviewItems]);
+    return [...visibleReviewItems, ...visibleReadyItems];
+  }, [activeTab, visibleReadyItems, visibleReviewItems]);
   const visiblePreviewItemIds = useMemo(
     () => new Set(visiblePreviewItems.map((item) => item.id)),
     [visiblePreviewItems],
@@ -134,19 +150,98 @@ export function IntakeQueue({
     });
   }
 
+  const approvalQueue = useFileApprovalQueue({
+    approveItem: async (itemId) => {
+      const response = await fetch("/api/intake/approve", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fileIds: [itemId],
+          tab: activeTab,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            failedCount?: number;
+            filedItemIds?: string[];
+            message?: string;
+            notice?: string;
+            statusCode?: number;
+            succeededCount?: number;
+          }
+        | null;
+
+      if (!response.ok || payload?.error) {
+        return {
+          ...payload,
+          error:
+            payload?.error ??
+            payload?.notice ??
+            payload?.message ??
+            "The selected files could not be approved.",
+          statusCode: payload?.statusCode ?? response.status,
+        };
+      }
+
+      return payload ?? { statusCode: response.status, succeededCount: 0 };
+    },
+    onItemFailure: ({ errorMessage }) => {
+      setApprovalNotice({
+        tone: "error",
+        message: errorMessage,
+      });
+    },
+    onItemSuccess: ({ filedItemIds, payload }) => {
+      setOptimisticFiledItemIds((current) =>
+        Array.from(new Set([...current, ...filedItemIds])),
+      );
+      setSelectedItemIds((current) =>
+        current.filter((itemId) => !filedItemIds.includes(itemId)),
+      );
+      setActiveModal((current) =>
+        current?.kind === "preview" && filedItemIds.includes(current.itemId)
+          ? null
+          : current,
+      );
+      setApprovalNotice({
+        tone: payload.failedCount ? "error" : "success",
+        message: payload.notice ?? payload.message ?? "Approval finished.",
+      });
+    },
+  });
+
+  function approveItems(itemIds: string[]) {
+    const uniqueReadyItemIds = Array.from(new Set(itemIds)).filter(
+      (itemId) =>
+        previewItemMap.get(itemId)?.status === "Ready to stage" &&
+        !approvalQueue.isPending(itemId),
+    );
+
+    if (!uniqueReadyItemIds.length) {
+      return;
+    }
+
+    setApprovalNotice(null);
+    approvalQueue.enqueue(uniqueReadyItemIds);
+  }
+
   let rows: ReactNode;
 
   if (activeTab === "review") {
-    rows = reviewItems.length ? (
-      reviewItems.map((item) =>
+    rows = visibleReviewItems.length ? (
+      visibleReviewItems.map((item) =>
         renderPreviewRow(
           item,
           savedDecisionMap.get(item.id),
           setActiveModal,
           sourceFolderName,
-          activeTab,
           selectedItemIds.includes(item.id),
+          approvalQueue.isPending(item.id),
           toggleSelectedItem,
+          approveItems,
         ),
       )
     ) : (
@@ -156,16 +251,17 @@ export function IntakeQueue({
       </article>
     );
   } else if (activeTab === "ready") {
-    rows = readyItems.length ? (
-      readyItems.map((item) =>
+    rows = visibleReadyItems.length ? (
+      visibleReadyItems.map((item) =>
         renderPreviewRow(
           item,
           savedDecisionMap.get(item.id),
           setActiveModal,
           sourceFolderName,
-          activeTab,
           selectedItemIds.includes(item.id),
+          approvalQueue.isPending(item.id),
           toggleSelectedItem,
+          approveItems,
         ),
       )
     ) : (
@@ -185,26 +281,28 @@ export function IntakeQueue({
     );
   } else {
     const allRows = [
-      ...reviewItems.map((item) =>
+      ...visibleReviewItems.map((item) =>
         renderPreviewRow(
           item,
           savedDecisionMap.get(item.id),
           setActiveModal,
           sourceFolderName,
-          activeTab,
           selectedItemIds.includes(item.id),
+          approvalQueue.isPending(item.id),
           toggleSelectedItem,
+          approveItems,
         ),
       ),
-      ...readyItems.map((item) =>
+      ...visibleReadyItems.map((item) =>
         renderPreviewRow(
           item,
           savedDecisionMap.get(item.id),
           setActiveModal,
           sourceFolderName,
-          activeTab,
           selectedItemIds.includes(item.id),
+          approvalQueue.isPending(item.id),
           toggleSelectedItem,
+          approveItems,
         ),
       ),
     ];
@@ -233,21 +331,32 @@ export function IntakeQueue({
                 {allVisibleItemsSelected ? "Clear selection" : "Select All"}
               </button>
             ) : null}
-            <form
-              action={approveSelectedPreviewItemsAction}
-              className={styles.inlineActionForm}
-            >
-              <input name="tab" type="hidden" value={activeTab} />
-              {selectedReadyItemIds.map((itemId) => (
-                <input key={itemId} name="fileId" type="hidden" value={itemId} />
-              ))}
-              {selectedReadyCount > 0 ? (
-                <button className={styles.primaryAction} type="submit">
-                  {`Approve Selected (${selectedReadyCount})`}
-                </button>
-              ) : null}
-            </form>
+            {selectedReadyCount > 0 ? (
+              <button
+                className={styles.primaryAction}
+                disabled={selectedReadyItemIds.every((itemId) =>
+                  approvalQueue.isPending(itemId),
+                )}
+                onClick={() => approveItems(selectedReadyItemIds)}
+                type="button"
+              >
+                {selectedReadyItemIds.some((itemId) => approvalQueue.isPending(itemId))
+                  ? "Filing selected..."
+                  : `Approve Selected (${selectedReadyCount})`}
+              </button>
+            ) : null}
           </div>
+          {approvalNotice ? (
+            <p
+              className={
+                approvalNotice.tone === "success"
+                  ? styles.approvalNoticeSuccess
+                  : styles.approvalNoticeError
+              }
+            >
+              {approvalNotice.message}
+            </p>
+          ) : null}
         </div>
       ) : null}
       <section className={styles.queueList}>{rows}</section>
@@ -281,9 +390,10 @@ function renderPreviewRow(
   savedDecision: ReviewDecision | undefined,
   setActiveModal: (value: ActiveModal) => void,
   sourceFolderName: string | null,
-  activeTab: IntakeQueueProps["activeTab"],
   isSelected: boolean,
+  isApproving: boolean,
   onToggleSelected: (itemId: string, selected: boolean) => void,
+  onApprove: (itemIds: string[]) => void,
 ) {
   const displayedClientFolder =
     savedDecision?.reviewedClientFolder ??
@@ -316,6 +426,7 @@ function renderPreviewRow(
           <input
             aria-label={`Select ${item.sourceName}`}
             checked={isSelected}
+            disabled={isApproving}
             onChange={(event) => onToggleSelected(item.id, event.target.checked)}
             type="checkbox"
           />
@@ -370,17 +481,15 @@ function renderPreviewRow(
             Review
           </button>
           {showApprove ? (
-            <form action={approvePreviewItemAction} className={styles.inlineActionForm}>
-              <input name="fileId" type="hidden" value={item.id} />
-              <input name="tab" type="hidden" value={activeTab} />
-              <button
-                className={`${styles.primaryAction} ${styles.rowActionButton} ${styles.rowActionApprove}`}
-                disabled={!canApprove}
-                type="submit"
-              >
-                Approve
-              </button>
-            </form>
+            <button
+              aria-busy={isApproving}
+              className={`${styles.primaryAction} ${styles.rowActionButton} ${styles.rowActionApprove}`}
+              disabled={!canApprove || isApproving}
+              onClick={() => onApprove([item.id])}
+              type="button"
+            >
+              {isApproving ? "Filing..." : "Approve"}
+            </button>
           ) : null}
         </div>
       </div>

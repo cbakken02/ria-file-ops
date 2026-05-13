@@ -1,64 +1,28 @@
-import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
-import {
-  getClientMemoryRulesByOwnerEmail,
-  getFirmSettingsByOwnerEmail,
-} from "@/lib/db";
-import {
-  applyCleanupOverrides,
-  buildCleanupPlan,
-  type CleanupOverride,
-} from "@/lib/cleanup-preview";
-import { executeFilingBatch } from "@/lib/filing";
+import type { CleanupOverride } from "@/lib/cleanup-preview";
+import { runCleanupPlanForIds } from "@/lib/cleanup-approval";
 import type { CleanupMode, CleanupScope } from "@/lib/cleanup-types";
-import {
-  getVerifiedActiveStorageConnectionForSession,
-  storageConnectionHasWriteAccess,
-} from "@/lib/storage-connections";
 
 type RunRequestBody = {
   mode?: CleanupMode;
   overrides?: CleanupOverride[];
   scope?: CleanupScope;
-  selectedIds?: string[];
+  selectedIds?: unknown;
 };
 
 export async function POST(request: Request) {
-  const session = await auth();
-  const activeConnection = session
-    ? await getVerifiedActiveStorageConnectionForSession(session)
-    : null;
-
-  if (!session?.user?.email || !activeConnection) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!storageConnectionHasWriteAccess(activeConnection)) {
-    return Response.json(
-      {
-        error: "Reconnect the active storage connection with write access before running Clean Up.",
-      },
-      { status: 400 },
-    );
-  }
-
-  const ownerEmail = session.user.email;
-  const settings = getFirmSettingsByOwnerEmail(ownerEmail) ?? null;
-
-  if (!settings?.destinationFolderId) {
-    return Response.json(
-      {
-        error: "Choose a destination root in Settings before running Clean Up.",
-      },
-      { status: 400 },
-    );
-  }
-
   const body = (await request.json().catch(() => null)) as RunRequestBody | null;
   const scope = body?.scope;
   const mode = body?.mode;
-  const overrides = Array.isArray(body?.overrides) ? body?.overrides : [];
-  const selectedIds = Array.isArray(body?.selectedIds) ? body?.selectedIds : [];
+  const overrides = Array.isArray(body?.overrides) ? body.overrides : [];
+  const selectedIds = Array.isArray(body?.selectedIds)
+    ? Array.from(
+        new Set(
+          body.selectedIds
+            .map((value) => (typeof value === "string" ? value.trim() : ""))
+            .filter(Boolean),
+        ),
+      )
+    : [];
 
   if (!scope || !mode || selectedIds.length === 0) {
     return Response.json(
@@ -80,51 +44,21 @@ export async function POST(request: Request) {
   }
 
   try {
-    const plan = await buildCleanupPlan({
-      accessToken: activeConnection.accessToken,
-      clientMemoryRules: getClientMemoryRulesByOwnerEmail(ownerEmail),
+    const result = await runCleanupPlanForIds({
       mode,
+      overrides,
       scope,
       selectedIds,
-      settings,
     });
 
-    const filingCandidates = applyCleanupOverrides({
-      filingCandidates: plan.filingCandidates,
-      overrides,
-    });
-
-    if (!plan.preview.executionSupported || filingCandidates.length === 0) {
-      return Response.json(
-        {
-          error:
-            plan.preview.blockedCount > 0
-              ? "Clean Up cannot run yet because some files still need review in the preview."
-              : "Nothing in this selection is ready to clean yet.",
-        },
-        { status: 400 },
-      );
-    }
-
-    const result = await executeFilingBatch({
-      accessToken: activeConnection.accessToken,
-      ownerEmail,
-      actorEmail: ownerEmail,
-      actorType: "user",
-      settings,
-      candidates: filingCandidates,
-    });
-
-    revalidatePath("/clean-up");
-    revalidatePath("/history");
-    revalidatePath("/dashboard");
-    revalidatePath("/intake");
-
-    return Response.json({
-      failedCount: result.failedCount,
-      message: `Clean Up finished. ${result.succeededCount} succeeded and ${result.failedCount} failed.`,
-      succeededCount: result.succeededCount,
-    });
+    return Response.json(
+      {
+        ...result,
+        ...(result.statusCode >= 400 ? { error: result.notice } : {}),
+        message: result.notice,
+      },
+      { status: result.statusCode },
+    );
   } catch (error) {
     return Response.json(
       {

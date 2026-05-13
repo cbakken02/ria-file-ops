@@ -991,7 +991,7 @@ export function createFilingEvent(input: {
       input.finalTopLevelFolder,
       input.finalFilename,
       input.destinationPath,
-      input.sourceParentIds,
+      serializeJsonbParameter(input.sourceParentIds),
       input.destinationRootId,
       input.destinationRootName,
       input.clientFolderId,
@@ -1012,7 +1012,7 @@ export function createFilingEvent(input: {
       input.detectedEntityName ?? null,
       input.classifierConfidence ?? null,
       input.classifierContentSource ?? null,
-      input.classifierReasons ?? null,
+      serializeJsonbParameter(input.classifierReasons ?? null),
       input.classifierExcerpt ?? null,
       input.outcome,
       input.errorMessage,
@@ -1520,6 +1520,10 @@ function normalizeStringArray(value: unknown) {
   }
 
   return [];
+}
+
+export function serializeJsonbParameter(value: unknown) {
+  return value == null ? null : JSON.stringify(value);
 }
 
 function parseJsonString(value: string | null) {

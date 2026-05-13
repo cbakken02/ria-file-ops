@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
-import { queryPostgres } from "@/lib/postgres/server";
+import { queryPostgres, withPostgresClient } from "@/lib/postgres/server";
 import type { PreviewItem } from "@/lib/processing-preview";
 
 export type PreviewSnapshot = {
@@ -33,7 +33,7 @@ type PreviewSnapshotRow = {
   updatedAt: string;
 };
 
-export async function writePreviewSnapshot(input: {
+type PreviewSnapshotWriteInput = {
   ownerEmail?: string | null;
   destinationRoot: string | null;
   reviewPosture: string;
@@ -41,65 +41,10 @@ export async function writePreviewSnapshot(input: {
   items: PreviewItem[];
   readyCount: number;
   reviewCount: number;
-}) {
-  const payload: PreviewSnapshot = {
-    generatedAt: new Date().toISOString(),
-    sourceFolder: input.sourceFolder,
-    destinationRoot: input.destinationRoot,
-    reviewPosture: input.reviewPosture,
-    readyCount: input.readyCount,
-    reviewCount: input.reviewCount,
-    items: input.items.map((item) => ({
-      id: item.id,
-      sourceName: item.sourceName,
-      mimeType: item.mimeType,
-      createdTime: item.createdTime,
-      modifiedTime: item.modifiedTime,
-      driveSize: item.driveSize,
-      downloadByteLength: item.downloadByteLength,
-      downloadSha1: item.downloadSha1,
-      previewSnapshotId: item.previewSnapshotId,
-      parserConflictSummary: item.parserConflictSummary,
-      proposedTopLevelFolder: item.proposedTopLevelFolder,
-      proposedFilename: item.proposedFilename,
-      confidenceLabel: item.confidenceLabel,
-      confidenceScore: item.confidenceScore,
-      status: item.status,
-      reasons: item.reasons,
-      detectedDocumentType: item.detectedDocumentType,
-      detectedDocumentSubtype: item.detectedDocumentSubtype,
-      detectedClient: item.detectedClient,
-      detectedClient2: item.detectedClient2,
-      ownershipType: item.ownershipType,
-      resolvedHouseholdFolder: item.resolvedHouseholdFolder,
-      suggestedHouseholdFolder: item.suggestedHouseholdFolder,
-      householdMatchReason: item.householdMatchReason,
-      householdResolutionStatus: item.householdResolutionStatus,
-      contentSource: item.contentSource,
-      resolvedClientFolder: item.resolvedClientFolder,
-      suggestedClientFolder: item.suggestedClientFolder,
-      clientMatchReason: item.clientMatchReason,
-      clientResolutionStatus: item.clientResolutionStatus,
-      analysisProfile: item.analysisProfile,
-      analysisSource: item.analysisSource,
-      analysisRanAt: item.analysisRanAt,
-      cacheWrittenAt: item.cacheWrittenAt,
-      textExcerpt: item.textExcerpt,
-      diagnosticText: null,
-      pdfFields: item.pdfFields,
-      debug: item.debug,
-      documentTypeId: item.documentTypeId,
-      extractedAccountLast4: item.extractedAccountLast4,
-      extractedAccountType: item.extractedAccountType,
-      extractedCustodian: item.extractedCustodian,
-      extractedDocumentDate: item.extractedDocumentDate,
-      extractedEntityName: item.extractedEntityName,
-      extractedIdType: item.extractedIdType,
-      extractedTaxYear: item.extractedTaxYear,
-      phase1ReviewFlags: item.phase1ReviewFlags,
-      phase1ReviewPriority: item.phase1ReviewPriority,
-    })),
-  };
+};
+
+export async function writePreviewSnapshot(input: PreviewSnapshotWriteInput) {
+  const payload = buildPreviewSnapshotPayload(input);
 
   if (!isSupabasePersistence()) {
     const targetPath = path.join(process.cwd(), "data", "latest-preview.json");
@@ -156,6 +101,114 @@ export async function writePreviewSnapshot(input: {
       now,
     ],
   );
+}
+
+export async function removePreviewSnapshotItems(input: {
+  destinationRootFallback?: string | null;
+  itemIds: string[];
+  ownerEmail: string;
+  sourceFolderFallback?: string | null;
+}) {
+  const ownerEmail = input.ownerEmail.trim().toLowerCase();
+  const itemIds = Array.from(new Set(input.itemIds.filter(Boolean)));
+  if (!ownerEmail || itemIds.length === 0) {
+    return null;
+  }
+
+  if (!isSupabasePersistence()) {
+    const latestSnapshot = await readPreviewSnapshot(ownerEmail);
+    const nextSnapshot = buildPreviewSnapshotWithoutItems(latestSnapshot, itemIds, {
+      destinationRootFallback: input.destinationRootFallback,
+      sourceFolderFallback: input.sourceFolderFallback,
+    });
+
+    if (!nextSnapshot) {
+      return null;
+    }
+
+    await writePreviewSnapshot({
+      destinationRoot: nextSnapshot.destinationRoot,
+      items: restorePreviewItemsFromSnapshot(nextSnapshot),
+      ownerEmail,
+      readyCount: nextSnapshot.readyCount,
+      reviewCount: nextSnapshot.reviewCount,
+      reviewPosture: nextSnapshot.reviewPosture,
+      sourceFolder: nextSnapshot.sourceFolder,
+    });
+    return nextSnapshot;
+  }
+
+  return withPostgresClient(async (client) => {
+    await client.query("BEGIN");
+
+    try {
+      const result = await client.query<PreviewSnapshotRow>(
+        `
+          SELECT
+            id,
+            owner_email AS "ownerEmail",
+            generated_at AS "generatedAt",
+            source_folder AS "sourceFolder",
+            destination_root AS "destinationRoot",
+            review_posture AS "reviewPosture",
+            ready_count AS "readyCount",
+            review_count AS "reviewCount",
+            snapshot_json AS "snapshotJson",
+            created_at AS "createdAt",
+            updated_at AS "updatedAt"
+          FROM public.preview_snapshots
+          WHERE owner_email = $1
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [ownerEmail],
+      );
+      const latestSnapshot = normalizeSnapshotValue(result.rows[0]?.snapshotJson);
+      const nextSnapshot = buildPreviewSnapshotWithoutItems(latestSnapshot, itemIds, {
+        destinationRootFallback: input.destinationRootFallback,
+        sourceFolderFallback: input.sourceFolderFallback,
+      });
+
+      if (!nextSnapshot) {
+        await client.query("COMMIT");
+        return null;
+      }
+
+      const now = new Date().toISOString();
+      await client.query(
+        `
+          UPDATE public.preview_snapshots
+          SET
+            generated_at = $2,
+            source_folder = $3,
+            destination_root = $4,
+            review_posture = $5,
+            ready_count = $6,
+            review_count = $7,
+            snapshot_json = $8::jsonb,
+            updated_at = $9
+          WHERE owner_email = $1
+        `,
+        [
+          ownerEmail,
+          nextSnapshot.generatedAt,
+          nextSnapshot.sourceFolder,
+          nextSnapshot.destinationRoot,
+          nextSnapshot.reviewPosture,
+          nextSnapshot.readyCount,
+          nextSnapshot.reviewCount,
+          JSON.stringify(nextSnapshot),
+          now,
+        ],
+      );
+
+      await client.query("COMMIT");
+      return nextSnapshot;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
+  });
 }
 
 export async function readPreviewSnapshot(ownerEmail?: string | null) {
@@ -231,6 +284,41 @@ export function restorePreviewItemsFromSnapshot(
     .filter((item): item is PreviewItem => Boolean(item));
 }
 
+export function buildPreviewSnapshotWithoutItems(
+  snapshot: PreviewSnapshot | null,
+  itemIds: string[],
+  fallbacks: {
+    destinationRootFallback?: string | null;
+    sourceFolderFallback?: string | null;
+  } = {},
+) {
+  if (!snapshot) {
+    return null;
+  }
+
+  const itemIdSet = new Set(itemIds.filter(Boolean));
+  if (itemIdSet.size === 0) {
+    return null;
+  }
+
+  const remainingItems = restorePreviewItemsFromSnapshot(snapshot).filter(
+    (item) => !itemIdSet.has(item.id),
+  );
+
+  if (remainingItems.length === snapshot.items.length) {
+    return null;
+  }
+
+  return buildPreviewSnapshotPayload({
+    destinationRoot: snapshot.destinationRoot ?? fallbacks.destinationRootFallback ?? null,
+    items: remainingItems,
+    readyCount: remainingItems.filter((item) => item.status === "Ready to stage").length,
+    reviewCount: remainingItems.filter((item) => item.status === "Needs review").length,
+    reviewPosture: snapshot.reviewPosture,
+    sourceFolder: snapshot.sourceFolder ?? fallbacks.sourceFolderFallback ?? null,
+  });
+}
+
 function normalizeSnapshotValue(value: unknown): PreviewSnapshot | null {
   if (value == null) {
     return null;
@@ -245,4 +333,67 @@ function normalizeSnapshotValue(value: unknown): PreviewSnapshot | null {
   }
 
   return value as PreviewSnapshot;
+}
+
+function buildPreviewSnapshotPayload(
+  input: Omit<PreviewSnapshotWriteInput, "ownerEmail">,
+): PreviewSnapshot {
+  return {
+    generatedAt: new Date().toISOString(),
+    sourceFolder: input.sourceFolder,
+    destinationRoot: input.destinationRoot,
+    reviewPosture: input.reviewPosture,
+    readyCount: input.readyCount,
+    reviewCount: input.reviewCount,
+    items: input.items.map((item) => ({
+      id: item.id,
+      sourceName: item.sourceName,
+      mimeType: item.mimeType,
+      createdTime: item.createdTime,
+      modifiedTime: item.modifiedTime,
+      driveSize: item.driveSize,
+      downloadByteLength: item.downloadByteLength,
+      downloadSha1: item.downloadSha1,
+      previewSnapshotId: item.previewSnapshotId,
+      parserConflictSummary: item.parserConflictSummary,
+      proposedTopLevelFolder: item.proposedTopLevelFolder,
+      proposedFilename: item.proposedFilename,
+      confidenceLabel: item.confidenceLabel,
+      confidenceScore: item.confidenceScore,
+      status: item.status,
+      reasons: item.reasons,
+      detectedDocumentType: item.detectedDocumentType,
+      detectedDocumentSubtype: item.detectedDocumentSubtype,
+      detectedClient: item.detectedClient,
+      detectedClient2: item.detectedClient2,
+      ownershipType: item.ownershipType,
+      resolvedHouseholdFolder: item.resolvedHouseholdFolder,
+      suggestedHouseholdFolder: item.suggestedHouseholdFolder,
+      householdMatchReason: item.householdMatchReason,
+      householdResolutionStatus: item.householdResolutionStatus,
+      contentSource: item.contentSource,
+      resolvedClientFolder: item.resolvedClientFolder,
+      suggestedClientFolder: item.suggestedClientFolder,
+      clientMatchReason: item.clientMatchReason,
+      clientResolutionStatus: item.clientResolutionStatus,
+      analysisProfile: item.analysisProfile,
+      analysisSource: item.analysisSource,
+      analysisRanAt: item.analysisRanAt,
+      cacheWrittenAt: item.cacheWrittenAt,
+      textExcerpt: item.textExcerpt,
+      diagnosticText: null,
+      pdfFields: item.pdfFields,
+      debug: item.debug,
+      documentTypeId: item.documentTypeId,
+      extractedAccountLast4: item.extractedAccountLast4,
+      extractedAccountType: item.extractedAccountType,
+      extractedCustodian: item.extractedCustodian,
+      extractedDocumentDate: item.extractedDocumentDate,
+      extractedEntityName: item.extractedEntityName,
+      extractedIdType: item.extractedIdType,
+      extractedTaxYear: item.extractedTaxYear,
+      phase1ReviewFlags: item.phase1ReviewFlags,
+      phase1ReviewPriority: item.phase1ReviewPriority,
+    })),
+  };
 }

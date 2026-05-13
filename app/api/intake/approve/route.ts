@@ -1,30 +1,33 @@
-import { applyCleanupSuggestionsForIds } from "@/lib/cleanup-approval";
+import { approvePreviewItemsForIds, normalizePreviewTab } from "@/lib/intake-approval";
 
-type ApplyRequestBody = {
-  selectedIds?: unknown;
+type ApproveRequestBody = {
+  fileIds?: unknown;
+  tab?: unknown;
 };
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as ApplyRequestBody | null;
-  const selectedIds = Array.isArray(body?.selectedIds)
+  const body = (await request.json().catch(() => null)) as ApproveRequestBody | null;
+  const tab =
+    typeof body?.tab === "string" ? normalizePreviewTab(body.tab) : "all";
+  const fileIds = Array.isArray(body?.fileIds)
     ? Array.from(
         new Set(
-          body.selectedIds
+          body.fileIds
             .map((value) => (typeof value === "string" ? value.trim() : ""))
             .filter(Boolean),
         ),
       )
     : [];
 
-  if (selectedIds.length === 0) {
+  if (fileIds.length === 0) {
     return Response.json(
-      { error: "Choose suggested files before applying Clean Up." },
+      { error: "Choose one or more intake items before approving." },
       { status: 400 },
     );
   }
 
   try {
-    const result = await applyCleanupSuggestionsForIds({ fileIds: selectedIds });
+    const result = await approvePreviewItemsForIds({ fileIds, tab });
     return Response.json(
       {
         ...result,
@@ -39,7 +42,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Clean Up suggestions could not be applied.",
+            : "The selected intake files could not be approved.",
       },
       { status: 500 },
     );

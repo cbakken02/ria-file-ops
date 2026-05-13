@@ -20,6 +20,7 @@ import type {
   CleanupPreviewFileRow,
   CleanupScope,
 } from "@/lib/cleanup-types";
+import { useFileApprovalQueue } from "@/lib/use-file-approval-queue";
 import styles from "./page.module.css";
 
 type CleanupPlannerProps = {
@@ -373,6 +374,7 @@ export function CleanupPlanner({
       const data = (await response.json()) as {
         error?: string;
         message?: string;
+        notice?: string;
       };
 
       if (!response.ok) {
@@ -385,7 +387,7 @@ export function CleanupPlanner({
         throw error;
       }
 
-      setRunNotice(data.message || "Clean Up finished.");
+      setRunNotice(data.notice || data.message || "Clean Up finished.");
       setPreview(null);
       setSelectedTargets([]);
       setPlannerOpen(false);
@@ -565,70 +567,13 @@ export function CleanupPlanner({
     const readyTargets = targets.filter(
       (item) => item.cleanup?.status === "suggestion_ready",
     );
-    if (!storageAvailable || readyTargets.length === 0 || actionLoading) {
+    if (!storageAvailable || readyTargets.length === 0) {
       return;
     }
 
-    setActionLoading(true);
-    setActiveRowAction(
-      readyTargets.length === 1
-        ? { itemId: (readyTargets[0] as CleanupBrowserItem).id, kind: "apply" }
-        : null,
-    );
     setRunError(null);
     setRunNotice(null);
-
-    try {
-      const response = await fetch("/api/cleanup/apply", {
-        body: JSON.stringify({
-          selectedIds: readyTargets.map((item) => item.id),
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      });
-      const data = (await response.json()) as {
-        error?: string;
-        message?: string;
-      };
-
-      if (!response.ok) {
-        const error = new Error(
-          data.error || "Clean Up suggestions could not be applied.",
-        ) as Error & { storageUnavailable?: boolean };
-        if (response.status === 401 || response.status === 403) {
-          error.storageUnavailable = true;
-        }
-        throw error;
-      }
-
-      setRunNotice(data.message || "Clean Up suggestions applied.");
-      setPreview(null);
-      setPlannerOpen(false);
-      setSelectedTargets([]);
-      await openFolder(currentFolderId, safeFolderTrail, { forceRefresh: true });
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        "storageUnavailable" in error &&
-        error.storageUnavailable
-      ) {
-        setStorageAvailable(false);
-        setBrowserItems([]);
-        setSelectedTargets([]);
-        setPreview(null);
-        setPlannerOpen(false);
-      }
-      setRunError(
-        error instanceof Error
-          ? error.message
-          : "Clean Up suggestions could not be applied.",
-      );
-    } finally {
-      setActionLoading(false);
-      setActiveRowAction(null);
-    }
+    applyQueue.enqueue(readyTargets.map((item) => item.id));
   }
 
   async function applySelectedSuggestions() {
@@ -768,6 +713,80 @@ export function CleanupPlanner({
       }
     }
   }, [loadFolderFromApi, rootBrowserFolderId]);
+
+  const applyQueue = useFileApprovalQueue({
+    approveItem: async (itemId) => {
+      const response = await fetch("/api/cleanup/apply", {
+        body: JSON.stringify({
+          selectedIds: [itemId],
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const data = (await response.json().catch(() => null)) as
+        | {
+            error?: string;
+            failedCount?: number;
+            filedItemIds?: string[];
+            message?: string;
+            notice?: string;
+            statusCode?: number;
+            succeededCount?: number;
+          }
+        | null;
+
+      if (!response.ok || data?.error) {
+        return {
+          ...data,
+          error:
+            data?.error ??
+            data?.notice ??
+            data?.message ??
+            "Clean Up suggestions could not be applied.",
+          statusCode: data?.statusCode ?? response.status,
+        };
+      }
+
+      return data ?? { statusCode: response.status, succeededCount: 0 };
+    },
+    onItemFailure: ({ errorMessage, payload }) => {
+      if (payload?.statusCode === 401 || payload?.statusCode === 403) {
+        setStorageAvailable(false);
+        setBrowserItems([]);
+        setSelectedTargets([]);
+        setPreview(null);
+        setPlannerOpen(false);
+      }
+      setRunError(errorMessage);
+    },
+    onItemSuccess: ({ filedItemIds, payload }) => {
+      setRunNotice(payload.notice ?? payload.message ?? "Clean Up suggestions applied.");
+      setPreview(null);
+      setPlannerOpen(false);
+      setSelectedTargets((current) =>
+        current.filter((item) => !filedItemIds.includes(item.id)),
+      );
+      setBrowserItems((current) =>
+        current.map((item) =>
+          filedItemIds.includes(item.id)
+            ? {
+                ...item,
+                cleanup: {
+                  ...(item.cleanup ?? { currentLocation: currentFolderLabel }),
+                  completedAt: new Date().toISOString(),
+                  status: "complete",
+                },
+              }
+            : item,
+        ),
+      );
+    },
+    onQueueSettled: async () => {
+      await openFolder(currentFolderId, safeFolderTrail, { forceRefresh: true });
+    },
+  });
 
   const prefetchFolder = useCallback(async function prefetchFolder(
     folderId: string,
@@ -1063,11 +1082,15 @@ export function CleanupPlanner({
                   {selectedReadySuggestions.length > 0 ? (
                     <button
                       className={styles.browserActionPrimary}
-                      disabled={actionLoading}
+                      disabled={selectedReadySuggestions.every((item) =>
+                        applyQueue.isPending(item.id),
+                      )}
                       onClick={() => void applySelectedSuggestions()}
                       type="button"
                     >
-                      {actionLoading
+                      {selectedReadySuggestions.some((item) =>
+                        applyQueue.isPending(item.id),
+                      )
                         ? "Applying..."
                         : `Apply suggestions (${selectedReadySuggestions.length})`}
                     </button>
@@ -1254,12 +1277,16 @@ export function CleanupPlanner({
                         <div className={styles.rowActionGroup}>
                           {rowActions.map((rowAction) => {
                             const rowActionActive =
-                              activeRowAction?.itemId === item.id &&
-                              activeRowAction.kind === rowAction.kind;
+                              rowAction.kind === "apply"
+                                ? applyQueue.isPending(item.id)
+                                : activeRowAction?.itemId === item.id &&
+                                  activeRowAction.kind === rowAction.kind;
                             const rowActionDisabled =
                               rowAction.kind !== "complete" &&
-                              (actionLoading ||
-                                (rowAction.kind === "review" && previewLoading));
+                              (rowAction.kind === "apply"
+                                ? applyQueue.isPending(item.id)
+                                : actionLoading ||
+                                  (rowAction.kind === "review" && previewLoading));
 
                             if (rowAction.kind === "complete") {
                               return (
@@ -1848,8 +1875,8 @@ function getCleanupRowActions(
       },
       {
         kind: "apply" as const,
-        label: "Approve",
-        loadingLabel: "Approving...",
+        label: "Apply",
+        loadingLabel: "Applying...",
       },
     ];
   }
