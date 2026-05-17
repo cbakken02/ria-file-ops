@@ -18,11 +18,16 @@ import type {
   ReviewDecisionStatus,
   StorageConnection,
   StorageConnectionStatus,
+  WaitlistSignup,
 } from "@/lib/db";
 import type {
   CleanupFileState,
   CleanupFileStateUpsertInput,
 } from "@/lib/cleanup-types";
+import type {
+  WaitlistSignupInput,
+  WaitlistSignupUpsertResult,
+} from "@/lib/waitlist-signups";
 
 type FirmSettingsRow = {
   id: string;
@@ -176,6 +181,23 @@ type CleanupFileStateRow = {
   completedAt: string | null;
   appliedFilingEventId: string | null;
   createdAt: string;
+  updatedAt: string;
+};
+
+type WaitlistSignupRow = {
+  alreadyExisted?: boolean;
+  createdAt: string;
+  email: string;
+  fileSystemOther: string | null;
+  fileSystems: unknown;
+  firm: string;
+  id: string;
+  name: string;
+  notes: string | null;
+  painPoints: unknown;
+  phone: string | null;
+  source: WaitlistSignup["source"];
+  status: WaitlistSignup["status"];
   updatedAt: string;
 };
 
@@ -344,6 +366,27 @@ const CLEANUP_FILE_STATE_SELECT = `
     created_at AS "createdAt",
     updated_at AS "updatedAt"
   FROM public.cleanup_file_states
+`;
+
+const WAITLIST_SIGNUP_SELECT_COLUMNS = `
+  id,
+  created_at AS "createdAt",
+  updated_at AS "updatedAt",
+  name,
+  email,
+  firm,
+  phone,
+  file_systems AS "fileSystems",
+  file_system_other AS "fileSystemOther",
+  pain_points AS "painPoints",
+  notes,
+  status,
+  source
+`;
+
+const WAITLIST_SIGNUP_SELECT = `
+  SELECT ${WAITLIST_SIGNUP_SELECT_COLUMNS}
+  FROM public.waitlist_signups
 `;
 
 export function getFirmSettingsByOwnerEmail(ownerEmail: string) {
@@ -1375,6 +1418,101 @@ export function createBugReport(input: {
   );
 }
 
+export function upsertWaitlistSignup(
+  input: WaitlistSignupInput,
+): WaitlistSignupUpsertResult {
+  const result = queryPostgresSync<WaitlistSignupRow>(
+    `
+      WITH existing AS (
+        SELECT id
+        FROM public.waitlist_signups
+        WHERE email = $2
+      ),
+      upserted AS (
+        INSERT INTO public.waitlist_signups (
+          name,
+          email,
+          firm,
+          phone,
+          file_systems,
+          file_system_other,
+          pain_points,
+          notes,
+          source
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (email) DO UPDATE
+        SET
+          name = EXCLUDED.name,
+          firm = EXCLUDED.firm,
+          phone = EXCLUDED.phone,
+          file_systems = EXCLUDED.file_systems,
+          file_system_other = EXCLUDED.file_system_other,
+          pain_points = EXCLUDED.pain_points,
+          notes = EXCLUDED.notes,
+          source = EXCLUDED.source,
+          updated_at = now()
+        RETURNING ${WAITLIST_SIGNUP_SELECT_COLUMNS}
+      )
+      SELECT
+        upserted.*,
+        EXISTS (SELECT 1 FROM existing) AS "alreadyExisted"
+      FROM upserted
+    `,
+    [
+      input.name,
+      input.email,
+      input.firm,
+      input.phone,
+      input.fileSystems,
+      input.fileSystemOther,
+      input.painPoints,
+      input.notes,
+      input.source,
+    ],
+  );
+  const row = result.rows[0];
+  const signup = mapWaitlistSignupRow(row);
+
+  if (!signup) {
+    throw new Error("Waitlist signup was not returned after saving.");
+  }
+
+  return {
+    alreadyExisted: Boolean(row?.alreadyExisted),
+    signup,
+  };
+}
+
+export function getWaitlistSignups(): WaitlistSignup[] {
+  const result = queryPostgresSync<WaitlistSignupRow>(
+    `
+      ${WAITLIST_SIGNUP_SELECT}
+      ORDER BY created_at DESC, id DESC
+    `,
+  );
+
+  return result.rows
+    .map(mapWaitlistSignupRow)
+    .filter((signup): signup is WaitlistSignup => Boolean(signup));
+}
+
+export function setWaitlistSignupStatus(input: {
+  id: string;
+  status: WaitlistSignup["status"];
+}): WaitlistSignup | null {
+  const result = queryPostgresSync<WaitlistSignupRow>(
+    `
+      UPDATE public.waitlist_signups
+      SET status = $2, updated_at = now()
+      WHERE id = $1
+      RETURNING ${WAITLIST_SIGNUP_SELECT_COLUMNS}
+    `,
+    [input.id, input.status],
+  );
+
+  return mapWaitlistSignupRow(result.rows[0]) ?? null;
+}
+
 function getStorageConnectionByOwnerAndIdentity(
   ownerEmail: string,
   provider: string,
@@ -1498,6 +1636,36 @@ function mapCleanupFileStateRow(
     reasons: normalizeStringArray(row.reasonsJson),
     recognizedFileType: row.recognizedFileType,
     sourceName: row.sourceName,
+    status: row.status,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function mapWaitlistSignupRow(
+  row: WaitlistSignupRow | undefined,
+): WaitlistSignup | undefined {
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    createdAt: row.createdAt,
+    email: row.email,
+    fileSystemOther: row.fileSystemOther,
+    fileSystems: normalizeStringArray(row.fileSystems).filter(
+      (value): value is WaitlistSignup["fileSystems"][number] =>
+        typeof value === "string",
+    ),
+    firm: row.firm,
+    id: row.id,
+    name: row.name,
+    notes: row.notes,
+    painPoints: normalizeStringArray(row.painPoints).filter(
+      (value): value is WaitlistSignup["painPoints"][number] =>
+        typeof value === "string",
+    ),
+    phone: row.phone,
+    source: row.source,
     status: row.status,
     updatedAt: row.updatedAt,
   };

@@ -6,6 +6,11 @@ import type {
 import { ensureCleanupFileStateSchema } from "@/lib/persistence/cleanup-file-state-schema";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
 import * as supabaseAppStateStore from "@/lib/persistence/supabase-app-state-store";
+import type {
+  WaitlistSignupInput,
+  WaitlistSignupStatus,
+  WaitlistSignupUpsertResult,
+} from "@/lib/waitlist-signups";
 
 export type FirmSettings = {
   id: string;
@@ -100,6 +105,22 @@ export type BugReport = {
   currentPath: string | null;
   message: string;
   createdAt: string;
+};
+
+export type WaitlistSignup = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  email: string;
+  firm: string;
+  phone: string | null;
+  fileSystems: WaitlistSignupInput["fileSystems"];
+  fileSystemOther: string | null;
+  painPoints: WaitlistSignupInput["painPoints"];
+  notes: string | null;
+  status: WaitlistSignupStatus;
+  source: WaitlistSignupInput["source"];
 };
 
 export type FilingEvent = {
@@ -475,4 +496,21 @@ export function createBugReport(input: {
   message: string;
 }): void {
   return getActiveAppStateStore().createBugReport(input);
+}
+
+export function upsertWaitlistSignup(
+  input: WaitlistSignupInput,
+): WaitlistSignupUpsertResult {
+  return getActiveAppStateStore().upsertWaitlistSignup(input);
+}
+
+export function getWaitlistSignups(): WaitlistSignup[] {
+  return getActiveAppStateStore().getWaitlistSignups();
+}
+
+export function setWaitlistSignupStatus(input: {
+  id: string;
+  status: WaitlistSignupStatus;
+}): WaitlistSignup | null {
+  return getActiveAppStateStore().setWaitlistSignupStatus(input);
 }
