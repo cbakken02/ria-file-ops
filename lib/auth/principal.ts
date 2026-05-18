@@ -2,6 +2,10 @@ import "server-only";
 
 import crypto from "node:crypto";
 import type { Session } from "next-auth";
+import {
+  enforceSessionActivity,
+  SessionActivityError,
+} from "@/lib/auth/session-activity";
 
 export type AppRole = "owner" | "admin" | "member";
 
@@ -27,9 +31,23 @@ export type ApiPrincipalResult =
       error: string;
     };
 
-type PrincipalSession =
-  | Pick<Session, "user">
+export type AppPrincipalResult =
   | {
+      ok: true;
+      principal: AppPrincipal;
+    }
+  | {
+      ok: false;
+      status: 401 | 403;
+      error: string;
+      reason?: string;
+    };
+
+type PrincipalSession =
+  | Pick<Session, "appSessionCreatedAt" | "appSessionIdHash" | "user">
+  | {
+      appSessionCreatedAt?: string | null;
+      appSessionIdHash?: string | null;
       user?: {
         email?: string | null;
         id?: string | null;
@@ -89,32 +107,40 @@ export function getAppPrincipalFromSession(
 export async function getAppPrincipalOrNull() {
   const { auth } = await import("@/auth");
   const session = await auth();
+  const result = await getAppPrincipalResultFromSession(session);
 
+  return result.ok ? result.principal : null;
+}
+
+export async function getAppPrincipalResultFromSession(
+  session: PrincipalSession,
+): Promise<AppPrincipalResult> {
   try {
-    return getAppPrincipalFromSession(session);
-  } catch {
-    return null;
+    const principal = getAppPrincipalFromSession(session);
+    await enforceSessionActivity(session, principal);
+    return { ok: true, principal };
+  } catch (error) {
+    return appPrincipalErrorResult(error);
   }
 }
 
 export async function requireAppPrincipal(): Promise<AppPrincipal> {
-  const principal = await getAppPrincipalOrNull();
+  const { auth } = await import("@/auth");
+  const session = await auth();
+  const result = await getAppPrincipalResultFromSession(session);
 
-  if (principal) {
-    return principal;
+  if (result.ok) {
+    return result.principal;
   }
 
-  return await redirectToLogin();
+  return await redirectToLogin(result.reason);
 }
 
 export async function requireApiPrincipal(): Promise<ApiPrincipalResult> {
-  const principal = await getAppPrincipalOrNull();
+  const { auth } = await import("@/auth");
+  const session = await auth();
 
-  if (!principal) {
-    return apiPrincipalError("Unauthorized", 401);
-  }
-
-  return { ok: true, principal };
+  return getApiPrincipalFromSession(session);
 }
 
 export async function requireWorkspaceAccess(workspaceId?: string) {
@@ -151,14 +177,16 @@ export function getLegacyOwnerEmail(principal: AppPrincipal) {
   return principal.legacyOwnerEmail;
 }
 
-export function getApiPrincipalFromSession(
+export async function getApiPrincipalFromSession(
   session: PrincipalSession,
-): ApiPrincipalResult {
-  try {
-    return { ok: true, principal: getAppPrincipalFromSession(session) };
-  } catch {
-    return apiPrincipalError("Unauthorized", 401);
+): Promise<ApiPrincipalResult> {
+  const result = await getAppPrincipalResultFromSession(session);
+
+  if (result.ok) {
+    return { ok: true, principal: result.principal };
   }
+
+  return apiPrincipalError(result.error, result.status);
 }
 
 function apiPrincipalError(
@@ -173,8 +201,33 @@ function apiPrincipalError(
   };
 }
 
-async function redirectToLogin(): Promise<never> {
+async function redirectToLogin(reason?: string): Promise<never> {
   const { redirect } = await import("next/navigation");
-  redirect("/login");
+  redirect(reason ? `/login?reason=${encodeURIComponent(reason)}` : "/login");
   throw new AppPrincipalError("Redirecting to login.", 401);
+}
+
+function appPrincipalErrorResult(error: unknown): AppPrincipalResult {
+  if (error instanceof SessionActivityError) {
+    return {
+      ok: false,
+      status: error.status,
+      error: "Session expired",
+      reason: error.reason,
+    };
+  }
+
+  if (error instanceof AppPrincipalError) {
+    return {
+      ok: false,
+      status: error.status,
+      error: error.status === 401 ? "Unauthorized" : "Forbidden",
+    };
+  }
+
+  return {
+    ok: false,
+    status: 401,
+    error: "Unauthorized",
+  };
 }

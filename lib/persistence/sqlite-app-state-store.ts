@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  AppSessionActivity,
   BugReport,
   ClientMemoryRule,
   FilingEvent,
@@ -198,6 +199,19 @@ database.exec(`
 `);
 
 database.exec(`
+  CREATE TABLE IF NOT EXISTS app_session_activity (
+    session_id_hash TEXT PRIMARY KEY,
+    owner_email TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    last_activity_at TEXT NOT NULL,
+    invalidated_at TEXT,
+    updated_at TEXT NOT NULL
+  )
+`);
+
+database.exec(`
   CREATE TABLE IF NOT EXISTS cleanup_file_states (
     id TEXT PRIMARY KEY,
     owner_email TEXT NOT NULL,
@@ -237,6 +251,10 @@ database.exec(`
     ON cleanup_file_states (status);
   CREATE INDEX IF NOT EXISTS cleanup_file_states_applied_filing_event_id_idx
     ON cleanup_file_states (applied_filing_event_id);
+  CREATE INDEX IF NOT EXISTS app_session_activity_owner_email_idx
+    ON app_session_activity (owner_email);
+  CREATE INDEX IF NOT EXISTS app_session_activity_last_activity_at_idx
+    ON app_session_activity (last_activity_at);
 `);
 
 database.exec(`
@@ -1088,6 +1106,69 @@ const insertBugReport = database.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
 
+const selectAppSessionActivityByIdHash = database.prepare(`
+  SELECT
+    session_id_hash AS sessionIdHash,
+    owner_email AS ownerEmail,
+    user_id AS userId,
+    workspace_id AS workspaceId,
+    created_at AS createdAt,
+    last_activity_at AS lastActivityAt,
+    invalidated_at AS invalidatedAt,
+    updated_at AS updatedAt
+  FROM app_session_activity
+  WHERE session_id_hash = ?
+  LIMIT 1
+`);
+
+const insertAppSessionActivity = database.prepare(`
+  INSERT INTO app_session_activity (
+    session_id_hash,
+    owner_email,
+    user_id,
+    workspace_id,
+    created_at,
+    last_activity_at,
+    invalidated_at,
+    updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+`);
+
+const updateAppSessionActivity = database.prepare(`
+  UPDATE app_session_activity
+  SET
+    owner_email = ?,
+    user_id = ?,
+    workspace_id = ?,
+    last_activity_at = ?,
+    updated_at = ?
+  WHERE session_id_hash = ? AND invalidated_at IS NULL
+`);
+
+const invalidateExistingAppSessionActivity = database.prepare(`
+  UPDATE app_session_activity
+  SET
+    owner_email = ?,
+    user_id = ?,
+    workspace_id = ?,
+    invalidated_at = ?,
+    updated_at = ?
+  WHERE session_id_hash = ?
+`);
+
+const insertInvalidatedAppSessionActivity = database.prepare(`
+  INSERT INTO app_session_activity (
+    session_id_hash,
+    owner_email,
+    user_id,
+    workspace_id,
+    created_at,
+    last_activity_at,
+    invalidated_at,
+    updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
 export function getFirmSettingsByOwnerEmail(ownerEmail: string) {
   return selectByOwnerEmail.get(ownerEmail) as FirmSettings | undefined;
 }
@@ -1559,6 +1640,10 @@ function mapStorageConnectionRow(row: {
   } satisfies StorageConnection;
 }
 
+function mapAppSessionActivityRow(row: AppSessionActivity | undefined) {
+  return row ?? null;
+}
+
 function safeParseScopes(value: string) {
   try {
     const parsed = JSON.parse(value) as string[];
@@ -1784,4 +1869,85 @@ export function createBugReport(input: {
     input.message,
     createdAt,
   );
+}
+
+export function getAppSessionActivityByIdHash(sessionIdHash: string) {
+  return mapAppSessionActivityRow(
+    selectAppSessionActivityByIdHash.get(sessionIdHash) as
+      | AppSessionActivity
+      | undefined,
+  );
+}
+
+export function upsertAppSessionActivity(input: {
+  sessionIdHash: string;
+  ownerEmail: string;
+  userId: string;
+  workspaceId: string;
+  createdAt: string;
+  lastActivityAt: string;
+  updatedAt: string;
+}) {
+  const existing = getAppSessionActivityByIdHash(input.sessionIdHash);
+
+  if (existing) {
+    if (existing.invalidatedAt) {
+      return existing;
+    }
+
+    updateAppSessionActivity.run(
+      input.ownerEmail,
+      input.userId,
+      input.workspaceId,
+      input.lastActivityAt,
+      input.updatedAt,
+      input.sessionIdHash,
+    );
+  } else {
+    insertAppSessionActivity.run(
+      input.sessionIdHash,
+      input.ownerEmail,
+      input.userId,
+      input.workspaceId,
+      input.createdAt,
+      input.lastActivityAt,
+      input.updatedAt,
+    );
+  }
+
+  return getAppSessionActivityByIdHash(input.sessionIdHash);
+}
+
+export function invalidateAppSessionActivity(input: {
+  sessionIdHash: string;
+  ownerEmail: string;
+  userId: string;
+  workspaceId: string;
+  invalidatedAt: string;
+}) {
+  const existing = getAppSessionActivityByIdHash(input.sessionIdHash);
+
+  if (existing) {
+    invalidateExistingAppSessionActivity.run(
+      input.ownerEmail,
+      input.userId,
+      input.workspaceId,
+      input.invalidatedAt,
+      input.invalidatedAt,
+      input.sessionIdHash,
+    );
+  } else {
+    insertInvalidatedAppSessionActivity.run(
+      input.sessionIdHash,
+      input.ownerEmail,
+      input.userId,
+      input.workspaceId,
+      input.invalidatedAt,
+      input.invalidatedAt,
+      input.invalidatedAt,
+      input.invalidatedAt,
+    );
+  }
+
+  return getAppSessionActivityByIdHash(input.sessionIdHash);
 }

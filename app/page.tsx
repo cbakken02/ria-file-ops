@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/auth";
+import { getAppPrincipalResultFromSession } from "@/lib/auth/principal";
 import styles from "./page.module.css";
 
 const workflowSteps = [
@@ -28,6 +29,8 @@ const documentTypes = [
 
 export default async function Home() {
   const session = await auth();
+  const principalResult = await getAppPrincipalResultFromSession(session);
+  const isSignedIn = Boolean(session?.user && principalResult.ok);
 
   return (
     <main className={styles.page}>
@@ -44,9 +47,9 @@ export default async function Home() {
           <div className={styles.actions}>
             <Link
               className={styles.primaryAction}
-              href={session?.user ? "/dashboard" : "/login"}
+              href={isSignedIn ? "/dashboard" : "/login"}
             >
-              {session?.user ? "Open dashboard" : "Sign in to begin"}
+              {isSignedIn ? "Open dashboard" : "Sign in to begin"}
             </Link>
             <Link className={styles.secondaryAction} href="/setup">
               Open settings

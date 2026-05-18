@@ -8,7 +8,7 @@ import { createBugReport } from "@/lib/db";
 
 export async function POST(request: Request) {
   const session = await auth();
-  const principalResult = getApiPrincipalFromSession(session);
+  const principalResult = await getApiPrincipalFromSession(session);
 
   if (!principalResult.ok) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });

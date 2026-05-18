@@ -1,13 +1,15 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import { getAppPrincipalResultFromSession } from "@/lib/auth/principal";
 import { googleOAuthConfigured } from "@/lib/env";
 import styles from "./page.module.css";
 
 export default async function LoginPage() {
   const session = await auth();
+  const principalResult = await getAppPrincipalResultFromSession(session);
 
-  if (session?.user) {
+  if (session?.user && principalResult.ok) {
     redirect("/dashboard");
   }
 

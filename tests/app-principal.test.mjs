@@ -55,8 +55,8 @@ test("missing principal email fails closed", () => {
   );
 });
 
-test("API principal helper returns unauthorized for no session", () => {
-  const result = getApiPrincipalFromSession(null);
+test("API principal helper returns unauthorized for no session", async () => {
+  const result = await getApiPrincipalFromSession(null);
 
   assert.equal(result.ok, false);
   assert.equal(result.status, 401);

@@ -8,6 +8,7 @@ import {
   runPostgresStatementsSync,
 } from "@/lib/postgres/server";
 import type {
+  AppSessionActivity,
   BugReport,
   ClientMemoryRule,
   FilingEvent,
@@ -58,6 +59,8 @@ type StorageConnectionRow = {
   createdAt: string;
   updatedAt: string;
 };
+
+type AppSessionActivityRow = AppSessionActivity;
 
 type FilingEventRow = {
   id: string;
@@ -216,6 +219,19 @@ const STORAGE_CONNECTION_SELECT = `
     created_at AS "createdAt",
     updated_at AS "updatedAt"
   FROM public.storage_connections
+`;
+
+const APP_SESSION_ACTIVITY_SELECT = `
+  SELECT
+    session_id_hash AS "sessionIdHash",
+    owner_email AS "ownerEmail",
+    user_id AS "userId",
+    workspace_id AS "workspaceId",
+    created_at AS "createdAt",
+    last_activity_at AS "lastActivityAt",
+    invalidated_at AS "invalidatedAt",
+    updated_at AS "updatedAt"
+  FROM public.app_session_activity
 `;
 
 const FILING_EVENT_SELECT = `
@@ -1366,6 +1382,126 @@ export function createBugReport(input: {
   );
 }
 
+export function getAppSessionActivityByIdHash(sessionIdHash: string) {
+  const result = queryPostgresSync<AppSessionActivityRow>(
+    `
+      ${APP_SESSION_ACTIVITY_SELECT}
+      WHERE session_id_hash = $1
+      LIMIT 1
+    `,
+    [sessionIdHash],
+  );
+
+  return mapAppSessionActivityRow(result.rows[0]);
+}
+
+export function upsertAppSessionActivity(input: {
+  sessionIdHash: string;
+  ownerEmail: string;
+  userId: string;
+  workspaceId: string;
+  createdAt: string;
+  lastActivityAt: string;
+  updatedAt: string;
+}) {
+  const existing = getAppSessionActivityByIdHash(input.sessionIdHash);
+
+  if (existing?.invalidatedAt) {
+    return existing;
+  }
+
+  const result = queryPostgresSync<AppSessionActivityRow>(
+    `
+      INSERT INTO public.app_session_activity (
+        session_id_hash,
+        owner_email,
+        user_id,
+        workspace_id,
+        created_at,
+        last_activity_at,
+        invalidated_at,
+        updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, NULL, $7)
+      ON CONFLICT (session_id_hash) DO UPDATE
+      SET
+        owner_email = EXCLUDED.owner_email,
+        user_id = EXCLUDED.user_id,
+        workspace_id = EXCLUDED.workspace_id,
+        last_activity_at = EXCLUDED.last_activity_at,
+        updated_at = EXCLUDED.updated_at
+      WHERE public.app_session_activity.invalidated_at IS NULL
+      RETURNING
+        session_id_hash AS "sessionIdHash",
+        owner_email AS "ownerEmail",
+        user_id AS "userId",
+        workspace_id AS "workspaceId",
+        created_at AS "createdAt",
+        last_activity_at AS "lastActivityAt",
+        invalidated_at AS "invalidatedAt",
+        updated_at AS "updatedAt"
+    `,
+    [
+      input.sessionIdHash,
+      input.ownerEmail,
+      input.userId,
+      input.workspaceId,
+      input.createdAt,
+      input.lastActivityAt,
+      input.updatedAt,
+    ],
+  );
+
+  return mapAppSessionActivityRow(result.rows[0]);
+}
+
+export function invalidateAppSessionActivity(input: {
+  sessionIdHash: string;
+  ownerEmail: string;
+  userId: string;
+  workspaceId: string;
+  invalidatedAt: string;
+}) {
+  const result = queryPostgresSync<AppSessionActivityRow>(
+    `
+      INSERT INTO public.app_session_activity (
+        session_id_hash,
+        owner_email,
+        user_id,
+        workspace_id,
+        created_at,
+        last_activity_at,
+        invalidated_at,
+        updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $5, $5, $5)
+      ON CONFLICT (session_id_hash) DO UPDATE
+      SET
+        owner_email = EXCLUDED.owner_email,
+        user_id = EXCLUDED.user_id,
+        workspace_id = EXCLUDED.workspace_id,
+        invalidated_at = EXCLUDED.invalidated_at,
+        updated_at = EXCLUDED.updated_at
+      RETURNING
+        session_id_hash AS "sessionIdHash",
+        owner_email AS "ownerEmail",
+        user_id AS "userId",
+        workspace_id AS "workspaceId",
+        created_at AS "createdAt",
+        last_activity_at AS "lastActivityAt",
+        invalidated_at AS "invalidatedAt",
+        updated_at AS "updatedAt"
+    `,
+    [
+      input.sessionIdHash,
+      input.ownerEmail,
+      input.userId,
+      input.workspaceId,
+      input.invalidatedAt,
+    ],
+  );
+
+  return mapAppSessionActivityRow(result.rows[0]);
+}
+
 function getStorageConnectionByOwnerAndIdentity(
   ownerEmail: string,
   provider: string,
@@ -1444,6 +1580,10 @@ function mapStorageConnectionRow(row: StorageConnectionRow | undefined) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   } satisfies StorageConnection;
+}
+
+function mapAppSessionActivityRow(row: AppSessionActivityRow | undefined) {
+  return row ?? null;
 }
 
 function mapFilingEventRow(row: FilingEventRow | undefined) {

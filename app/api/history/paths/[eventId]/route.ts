@@ -12,7 +12,7 @@ export async function GET(
   context: { params: Promise<{ eventId: string }> },
 ) {
   const session = await auth();
-  const principalResult = getApiPrincipalFromSession(session);
+  const principalResult = await getApiPrincipalFromSession(session);
 
   if (!principalResult.ok || !session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
