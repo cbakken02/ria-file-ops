@@ -15,8 +15,12 @@ export async function POST() {
   }
 
   try {
-    const result = await refreshIntakeQueueForSession(session);
+    const result = await refreshIntakeQueueForSession(session, {
+      forceFresh: true,
+    });
+    revalidatePath("/dashboard");
     revalidatePath("/intake");
+    revalidatePath("/review");
 
     return Response.json(result);
   } catch (error) {

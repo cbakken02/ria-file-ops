@@ -185,6 +185,22 @@ export function isGoogleDriveAccessFailure(error: unknown) {
   );
 }
 
+export function getGoogleDriveAccessErrorStatus(error: unknown) {
+  return isGoogleDriveAccessFailure(error) ? 401 : 500;
+}
+
+export function formatGoogleDriveFolderAccessError(
+  error: unknown,
+  folderLabel: string,
+) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : "Google Drive returned an unexpected response.";
+
+  return `Google Drive could not load the ${folderLabel}: ${message}`;
+}
+
 export async function listDriveBrowserItems(
   accessToken: string,
   folderId = "root",

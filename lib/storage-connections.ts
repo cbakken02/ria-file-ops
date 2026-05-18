@@ -21,6 +21,27 @@ type StorageConnectionReadResult = {
   unavailable: boolean;
 };
 
+type ActiveStorageAuthorizationOptions = {
+  getActiveStorageConnection?: (
+    session: Session,
+  ) => Promise<StorageConnection | null>;
+  reconnectMessage?: string;
+  signInMessage?: string;
+};
+
+export type ActiveStorageAuthorizationResult =
+  | {
+      ok: true;
+      connection: StorageConnection;
+      ownerEmail: string;
+    }
+  | {
+      ok: false;
+      error: string;
+      ownerEmail: string | null;
+      status: 401;
+    };
+
 export function storageConnectionHasWriteAccess(connection: StorageConnection | null) {
   if (!connection) {
     return false;
@@ -84,6 +105,43 @@ export async function getActiveStorageConnectionForSession(
   }
 
   return refreshStorageConnectionIfNeeded(primary);
+}
+
+export async function resolveActiveStorageAuthorizationForSession(
+  session: Session | null | undefined,
+  options: ActiveStorageAuthorizationOptions = {},
+): Promise<ActiveStorageAuthorizationResult> {
+  const ownerEmail = session?.user?.email ?? null;
+
+  if (!session?.user || !ownerEmail) {
+    return {
+      ok: false,
+      error: options.signInMessage ?? "Sign in before using storage.",
+      ownerEmail: null,
+      status: 401,
+    };
+  }
+
+  const resolveConnection =
+    options.getActiveStorageConnection ?? getActiveStorageConnectionForSession;
+  const activeConnection = await resolveConnection(session);
+
+  if (!activeConnection || activeConnection.status !== "connected") {
+    return {
+      ok: false,
+      error:
+        options.reconnectMessage ??
+        "Reconnect the active storage connection before continuing.",
+      ownerEmail,
+      status: 401,
+    };
+  }
+
+  return {
+    ok: true,
+    connection: activeConnection,
+    ownerEmail,
+  };
 }
 
 export async function getVerifiedActiveStorageConnectionForSession(

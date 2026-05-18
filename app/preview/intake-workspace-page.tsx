@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ProductShell } from "@/components/product-shell";
 import { StorageStatusPanel } from "@/components/storage-status-panel";
 import { StorageSwitcher } from "@/components/storage-switcher";
+import { refreshIntakeAction } from "@/app/preview/actions";
 import {
   getFilingEventsByOwnerEmail,
   getFirmSettingsByOwnerEmail,
@@ -11,12 +12,12 @@ import { summarizePreviewNormalizationChanges } from "@/lib/processing-preview";
 import {
   readPreviewSnapshot,
   restorePreviewItemsFromSnapshot,
+  type PreviewSnapshot,
 } from "@/lib/preview-snapshot";
 import { requireSession } from "@/lib/session";
 import { getReviewRuleOption, normalizeFolderTemplate } from "@/lib/setup-config";
 import { parseNamingRules } from "@/lib/naming-rules";
-import { getCachedStorageConnectionsForSession } from "@/lib/storage-connections";
-import { IntakeAutoRefresh } from "./intake-auto-refresh";
+import { getStorageConnectionsForSession } from "@/lib/storage-connections";
 import { IntakeQueue } from "./intake-queue";
 import styles from "./page.module.css";
 
@@ -25,14 +26,19 @@ export async function IntakeWorkspacePage({
   searchParams,
 }: {
   currentPath: "/intake";
-  searchParams?: Promise<{ notice?: string; tab?: string }>;
+  searchParams?: Promise<{
+    notice?: string;
+    scanStatus?: string;
+    tab?: string;
+  }>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const notice = resolvedSearchParams?.notice;
+  const scanStatus = normalizeScanStatus(resolvedSearchParams?.scanStatus);
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
   const session = await requireSession();
   const ownerEmail = session.user?.email;
-  const storageConnections = getCachedStorageConnectionsForSession(session);
+  const storageConnections = await getStorageConnectionsForSession(session);
   const displayConnection =
     storageConnections.find((connection) => connection.isPrimary) ?? null;
   const activeStorageProvider = displayConnection?.provider ?? null;
@@ -47,14 +53,15 @@ export async function IntakeWorkspacePage({
   const snapshot = await readPreviewSnapshot(ownerEmail);
   const snapshotItems = restorePreviewItemsFromSnapshot(snapshot);
 
-  const canRefreshIntake =
+  const canRescanIntake =
     Boolean(settings?.sourceFolderId) &&
     Boolean(displayConnection) &&
     displayConnection?.status === "connected";
   const storageStatusTitle = getIntakeStorageStatusTitle(displayConnection);
   const storageStatusSummary = getIntakeStorageStatusSummary(displayConnection);
   const liveQueueError =
-    settings?.sourceFolderId && !canRefreshIntake ? storageStatusSummary : null;
+    settings?.sourceFolderId && !canRescanIntake ? storageStatusSummary : null;
+  const lastScanError = scanStatus === "error" ? notice ?? null : null;
   const existingClientFolders: string[] = [];
   const preview = {
     items: snapshotItems,
@@ -128,7 +135,68 @@ export async function IntakeWorkspacePage({
         </section>
       ) : null}
 
-      <IntakeAutoRefresh activeTab={activeTab} enabled={canRefreshIntake} />
+      <section className={styles.scanStatusPanel}>
+        <div className={styles.scanStatusHeader}>
+          <div>
+            <p className={styles.cardEyebrow}>Source scan</p>
+            <h2>Drive source folder</h2>
+          </div>
+          {canRescanIntake ? (
+            <form action={refreshIntakeAction}>
+              <input name="tab" type="hidden" value={activeTab} />
+              <button className={styles.primaryAction} type="submit">
+                Rescan source folder
+              </button>
+            </form>
+          ) : displayConnection?.provider === "google_drive" ? (
+            <Link className={styles.primaryAction} href="/api/storage/google/start">
+              Reconnect Google Drive
+            </Link>
+          ) : (
+            <Link
+              className={styles.primaryAction}
+              href="/setup?section=workspace&returnTo=%2Fintake"
+            >
+              Connect Google Drive
+            </Link>
+          )}
+        </div>
+        <dl className={styles.scanStatusGrid}>
+          <div>
+            <dt>Provider</dt>
+            <dd>{getProviderLabel(displayConnection?.provider ?? null)}</dd>
+          </div>
+          <div>
+            <dt>Google account</dt>
+            <dd>
+              {displayConnection?.accountEmail ??
+                displayConnection?.accountName ??
+                "Not connected"}
+            </dd>
+          </div>
+          <div>
+            <dt>Source folder</dt>
+            <dd>
+              {settings?.sourceFolderName ?? "Not selected"}
+              {settings?.sourceFolderId ? (
+                <span>{settings.sourceFolderId}</span>
+              ) : null}
+            </dd>
+          </div>
+          <div>
+            <dt>Last scan</dt>
+            <dd>{formatScanTime(snapshot?.generatedAt ?? null)}</dd>
+          </div>
+          <div>
+            <dt>Cache state</dt>
+            <dd>{getCacheStateLabel(snapshot, preview.items.length)}</dd>
+          </div>
+          <div>
+            <dt>Last error</dt>
+            <dd>{lastScanError ?? "None"}</dd>
+          </div>
+        </dl>
+      </section>
 
       {liveQueueError ? (
         <section className={styles.noteCard}>
@@ -166,8 +234,7 @@ export async function IntakeWorkspacePage({
         <section className={styles.noteCard}>
           <strong>Storage connected. Choose an intake folder.</strong>
           <p>
-            Choose an intake/source folder in Settings. Page navigation will keep
-            using cached state until you refresh the browser page.
+            Choose an intake/source folder in Settings before rescanning Drive.
           </p>
           <Link
             className={styles.primaryAction}
@@ -180,14 +247,10 @@ export async function IntakeWorkspacePage({
 
       {settings?.sourceFolderId && preview.items.length === 0 ? (
         <section className={styles.noteCard}>
-          <strong>
-            {snapshot
-              ? "Cached intake preview needs a browser refresh"
-              : "Refresh the browser page when you are ready"}
-          </strong>
+          <strong>Rescan the source folder when you are ready</strong>
           <p>
-            Sidebar navigation no longer scans Drive. Refresh this browser page to
-            read the source folder and update this queue.
+            Intake will call Google Drive from the server, rebuild the queue from
+            the live source folder listing, and show any folder-specific error here.
           </p>
         </section>
       ) : null}
@@ -263,6 +326,53 @@ function normalizeTab(value?: string) {
   return "all";
 }
 
+function normalizeScanStatus(value?: string) {
+  return value === "success" || value === "error" ? value : null;
+}
+
+function getProviderLabel(provider: string | null) {
+  if (provider === "google_drive") {
+    return "Google Drive";
+  }
+
+  if (!provider) {
+    return "Not connected";
+  }
+
+  return provider;
+}
+
+function formatScanTime(value: string | null) {
+  if (!value) {
+    return "Never";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function getCacheStateLabel(
+  snapshot: PreviewSnapshot | null,
+  itemCount: number,
+) {
+  if (!snapshot) {
+    return "No cached preview";
+  }
+
+  if (itemCount === 0) {
+    return "Cached preview is empty";
+  }
+
+  return `Cached preview with ${itemCount} item${itemCount === 1 ? "" : "s"}`;
+}
+
 function getIntakeStorageStatusTitle(
   connection: { status: "connected" | "needs_reauth" } | null,
 ) {
@@ -284,5 +394,5 @@ function getIntakeStorageStatusSummary(
     return "Intake can show the last cached refresh, but storage must be reconnected before scanning Drive again.";
   }
 
-  return "Storage is connected. Choose an intake/source folder in Settings before refreshing the browser page.";
+  return "Storage is connected. Choose an intake/source folder in Settings before rescanning Drive.";
 }

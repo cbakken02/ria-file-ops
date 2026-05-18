@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 export default async function LegacyPreviewPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ notice?: string; tab?: string }>;
+  searchParams?: Promise<{ notice?: string; scanStatus?: string; tab?: string }>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const params = new URLSearchParams();
@@ -14,6 +14,10 @@ export default async function LegacyPreviewPage({
 
   if (resolvedSearchParams?.tab) {
     params.set("tab", resolvedSearchParams.tab);
+  }
+
+  if (resolvedSearchParams?.scanStatus) {
+    params.set("scanStatus", resolvedSearchParams.scanStatus);
   }
 
   redirect(params.size ? `/intake?${params.toString()}` : "/intake");

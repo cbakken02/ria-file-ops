@@ -125,7 +125,7 @@ export async function approvePreviewItemsForIds(input: {
       actionNoun: "Approval",
       authNotice: "Sign in before approving files.",
       noCandidatesNotice:
-        "Refresh the browser page before approving files. The cached queue no longer includes the selected items.",
+        "Rescan the source folder before approving files. The cached queue no longer includes the selected items.",
       settingsNotice: "Complete setup before approving files.",
       storageNotice: "Reconnect storage before approving files.",
       writeAccessNotice:

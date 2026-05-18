@@ -24,8 +24,51 @@ import {
   getVerifiedActiveStorageConnectionForSession,
   storageConnectionHasWriteAccess,
 } from "@/lib/storage-connections";
+import {
+  IntakeRefreshError,
+  refreshIntakeQueueForSession,
+} from "@/lib/intake-refresh";
 
 type ReadyItemsFilingMode = "auto" | "manual";
+
+export async function refreshIntakeAction(formData: FormData) {
+  const tab = normalizePreviewTab(formData.get("tab"));
+  const session = await requireSession();
+  let redirectPath: string;
+
+  try {
+    const result = await refreshIntakeQueueForSession(session, {
+      forceFresh: true,
+    });
+
+    redirectPath = buildIntakeRescanRedirect(
+      tab,
+      "success",
+      `Source folder rescan finished. Scanned ${result.sourceFileCount} source file${result.sourceFileCount === 1 ? "" : "s"} and rebuilt ${result.itemCount} intake item${result.itemCount === 1 ? "" : "s"} (${result.readyCount} ready, ${result.reviewCount} needs review).`,
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Intake could not rescan the source folder.";
+    const status =
+      error instanceof IntakeRefreshError ? error.status : 500;
+
+    redirectPath = buildIntakeRescanRedirect(
+      tab,
+      "error",
+      status === 401
+        ? message || "Reconnect Google Drive before rescanning Intake."
+        : message,
+    );
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/intake");
+  revalidatePath("/preview");
+  revalidatePath("/review");
+  redirect(redirectPath);
+}
 
 export async function prepareReadyItemsFilingRedirect(
   mode: ReadyItemsFilingMode = "manual",
@@ -152,6 +195,22 @@ export async function prepareReadyItemsFilingRedirect(
   return `/intake?notice=${encodeURIComponent(
     `Ready-item filing finished. ${result.succeededCount} succeeded and ${result.failedCount} failed.`,
   )}`;
+}
+
+function buildIntakeRescanRedirect(
+  tab: ReturnType<typeof normalizePreviewTab>,
+  scanStatus: "error" | "success",
+  notice: string,
+) {
+  const params = new URLSearchParams();
+  if (tab !== "all") {
+    params.set("tab", tab);
+  }
+
+  params.set("scanStatus", scanStatus);
+  params.set("notice", notice);
+
+  return `/intake?${params.toString()}`;
 }
 
 export async function fileReadyItemsAction() {

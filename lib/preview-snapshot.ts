@@ -6,6 +6,7 @@ import { queryPostgres, withPostgresClient } from "@/lib/postgres/server";
 import type { PreviewItem } from "@/lib/processing-preview";
 
 export type PreviewSnapshot = {
+  ownerEmail?: string | null;
   generatedAt: string;
   sourceFolder: string | null;
   destinationRoot: string | null;
@@ -43,11 +44,41 @@ type PreviewSnapshotWriteInput = {
   reviewCount: number;
 };
 
+const PREVIEW_SNAPSHOT_DIR_ENV = "RIA_PREVIEW_SNAPSHOT_DIR";
+
+function getPreviewSnapshotDir() {
+  const configured = process.env[PREVIEW_SNAPSHOT_DIR_ENV]?.trim();
+  return configured
+    ? path.resolve(configured)
+    : path.join(process.cwd(), "data", "preview-snapshots");
+}
+
+function normalizeOwnerEmail(ownerEmail?: string | null) {
+  return ownerEmail?.trim().toLowerCase() || null;
+}
+
+function getOwnerSnapshotPath(ownerEmail: string) {
+  const cacheKey = crypto
+    .createHash("sha1")
+    .update(ownerEmail)
+    .digest("hex");
+
+  return path.join(getPreviewSnapshotDir(), `${cacheKey}.json`);
+}
+
+function getLegacySnapshotPath() {
+  return path.join(process.cwd(), "data", "latest-preview.json");
+}
+
 export async function writePreviewSnapshot(input: PreviewSnapshotWriteInput) {
   const payload = buildPreviewSnapshotPayload(input);
 
   if (!isSupabasePersistence()) {
-    const targetPath = path.join(process.cwd(), "data", "latest-preview.json");
+    const ownerEmail = normalizeOwnerEmail(input.ownerEmail);
+    const targetPath = ownerEmail
+      ? getOwnerSnapshotPath(ownerEmail)
+      : getLegacySnapshotPath();
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.writeFile(targetPath, JSON.stringify(payload, null, 2));
     return;
   }
@@ -213,7 +244,10 @@ export async function removePreviewSnapshotItems(input: {
 
 export async function readPreviewSnapshot(ownerEmail?: string | null) {
   if (!isSupabasePersistence()) {
-    const targetPath = path.join(process.cwd(), "data", "latest-preview.json");
+    const normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
+    const targetPath = normalizedOwnerEmail
+      ? getOwnerSnapshotPath(normalizedOwnerEmail)
+      : getLegacySnapshotPath();
 
     try {
       const raw = await fs.readFile(targetPath, "utf8");
@@ -257,6 +291,26 @@ export async function readPreviewSnapshot(ownerEmail?: string | null) {
     });
     return null;
   }
+}
+
+export async function clearPreviewSnapshotForOwner(ownerEmail: string) {
+  const normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
+  if (!normalizedOwnerEmail) {
+    return;
+  }
+
+  if (!isSupabasePersistence()) {
+    await fs.unlink(getOwnerSnapshotPath(normalizedOwnerEmail)).catch(() => {});
+    return;
+  }
+
+  await queryPostgres(
+    `
+      DELETE FROM public.preview_snapshots
+      WHERE owner_email = $1
+    `,
+    [normalizedOwnerEmail],
+  );
 }
 
 export function restorePreviewItemsFromSnapshot(
@@ -312,6 +366,7 @@ export function buildPreviewSnapshotWithoutItems(
   return buildPreviewSnapshotPayload({
     destinationRoot: snapshot.destinationRoot ?? fallbacks.destinationRootFallback ?? null,
     items: remainingItems,
+    ownerEmail: snapshot.ownerEmail ?? null,
     readyCount: remainingItems.filter((item) => item.status === "Ready to stage").length,
     reviewCount: remainingItems.filter((item) => item.status === "Needs review").length,
     reviewPosture: snapshot.reviewPosture,
@@ -336,9 +391,10 @@ function normalizeSnapshotValue(value: unknown): PreviewSnapshot | null {
 }
 
 function buildPreviewSnapshotPayload(
-  input: Omit<PreviewSnapshotWriteInput, "ownerEmail">,
+  input: PreviewSnapshotWriteInput,
 ): PreviewSnapshot {
   return {
+    ownerEmail: normalizeOwnerEmail(input.ownerEmail),
     generatedAt: new Date().toISOString(),
     sourceFolder: input.sourceFolder,
     destinationRoot: input.destinationRoot,

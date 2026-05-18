@@ -5,7 +5,7 @@ import { getFirmSettingsByOwnerEmail } from "@/lib/db";
 import { parseNamingRules } from "@/lib/naming-rules";
 import { requireSession } from "@/lib/session";
 import {
-  getCachedStorageConnectionsForSession,
+  getStorageConnectionsForSession,
 } from "@/lib/storage-connections";
 import type { CleanupBrowserItem } from "@/lib/cleanup-types";
 import { CleanupPlanner } from "./cleanup-planner";
@@ -18,7 +18,7 @@ export async function CleanUpWorkspacePage({
 }) {
   const session = await requireSession();
   const ownerEmail = session.user?.email ?? "";
-  const storageConnections = getCachedStorageConnectionsForSession(session);
+  const storageConnections = await getStorageConnectionsForSession(session);
   const displayConnection =
     storageConnections.find((connection) => connection.isPrimary) ?? null;
   const settings = ownerEmail ? getFirmSettingsByOwnerEmail(ownerEmail) ?? null : null;
