@@ -6,6 +6,7 @@ import type {
 import { ensureCleanupFileStateSchema } from "@/lib/persistence/cleanup-file-state-schema";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
 import * as supabaseAppStateStore from "@/lib/persistence/supabase-app-state-store";
+import { getSafeErrorMetadata } from "@/lib/safe-logging";
 
 export type FirmSettings = {
   id: string;
@@ -249,15 +250,11 @@ function readAppStateValue<T>(
     }
 
     console.warn("[app-state] read failed", {
-      message: getErrorMessage(error),
+      ...getSafeErrorMetadata(error),
       name,
     });
     return fallback;
   }
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unknown app-state read error";
 }
 
 export function getFirmSettingsByOwnerEmail(
@@ -561,7 +558,7 @@ export function appendAuthAuditEvent(input: AuthAuditEvent): AuthAuditEvent | nu
     }
 
     console.warn("[auth-audit] append failed", {
-      message: getErrorMessage(error),
+      ...getSafeErrorMetadata(error),
     });
     return null;
   }

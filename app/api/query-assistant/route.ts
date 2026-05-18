@@ -12,6 +12,7 @@ import {
   sanitizeDataIntelligenceConversationState,
   sanitizeDataIntelligenceConversationHistory,
 } from "@/lib/data-intelligence-conversation";
+import { getSafeErrorMetadata } from "@/lib/safe-logging";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -64,14 +65,14 @@ export async function POST(request: Request) {
     if (includeDebug && result.debug?.dataIntelligenceHybrid) {
       console.info(
         "[data-intelligence] hybrid-debug",
-        JSON.stringify(result.debug.dataIntelligenceHybrid),
+        summarizeHybridDebug(result.debug.dataIntelligenceHybrid),
       );
     }
 
     return dataIntelligenceJsonResponse(result);
   } catch (error) {
     console.error("[data-intelligence] request-failed", {
-      message: error instanceof Error ? error.message : "Unknown error",
+      ...getSafeErrorMetadata(error),
     });
 
     return dataIntelligenceJsonResponse(
@@ -83,4 +84,20 @@ export async function POST(request: Request) {
 
 function isDataIntelligenceDebugEnabled() {
   return process.env.NODE_ENV !== "production";
+}
+
+function summarizeHybridDebug(debug: unknown) {
+  if (!debug || typeof debug !== "object") {
+    return { shape: typeof debug };
+  }
+
+  const record = debug as Record<string, unknown>;
+  return {
+    keys: Object.keys(record).sort(),
+    hasCandidates: Array.isArray(record.candidates),
+    candidateCount: Array.isArray(record.candidates) ? record.candidates.length : null,
+    hasRetrievalPlan: Boolean(record.retrievalPlan),
+    hasSources: Array.isArray(record.sources),
+    sourceCount: Array.isArray(record.sources) ? record.sources.length : null,
+  };
 }

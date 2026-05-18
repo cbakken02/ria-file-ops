@@ -54,7 +54,7 @@ export async function runPreviewQa(options = {}) {
   }
 
   const summary = {
-    targetUrl: url,
+    targetUrl: sanitizeUrlForLog(url),
     branch: options.branch ?? "codex/fix-supabase-migration-history",
     hasVercelBypassSecret: capabilities.hasVercelBypassSecret,
     hasAppAuthAutomation: capabilities.hasAppAuthAutomation,
@@ -555,7 +555,7 @@ function parseArgs(argv) {
 
 function printHumanSummary(summary) {
   console.log("Data Intelligence V2 Preview QA");
-  console.log(`- URL: ${summary.targetUrl}`);
+  console.log(`- URL: ${sanitizeUrlForLog(summary.targetUrl)}`);
   console.log(`- Vercel bypass requested: ${summary.requestedVercelBypass}`);
   console.log(`- Preview QA endpoint requested: ${summary.requestedPreviewQaEndpoint}`);
   console.log(`- Deployment protection active: ${summary.deploymentProtectionActive}`);
@@ -567,6 +567,19 @@ function printHumanSummary(summary) {
   console.log(`- Preview QA endpoint passed: ${summary.previewQaEndpoint.passed}`);
   console.log(`- Failures: ${summary.failures.length}`);
   console.log(`- Blockers: ${summary.blockers.length}`);
+}
+
+function sanitizeUrlForLog(value) {
+  try {
+    const url = new URL(String(value));
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return redactSensitiveText(value);
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

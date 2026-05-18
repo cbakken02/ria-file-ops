@@ -4,6 +4,10 @@ import { getLegacyOwnerEmail, requireAppPrincipal } from "@/lib/auth/principal";
 import { recordAuthAuditEvent } from "@/lib/audit/auth-audit-events";
 import { buildAppUrl } from "@/lib/app-url";
 import {
+  authRateLimitResponse,
+  checkStorageOAuthCallbackRateLimit,
+} from "@/lib/auth-rate-limit";
+import {
   getPrimaryStorageConnectionByOwnerEmail,
   saveStorageConnectionForOwner,
 } from "@/lib/db";
@@ -80,6 +84,14 @@ export async function GET(request: Request) {
       status: "denied",
     });
     redirect("/setup?section=workspace&notice=The+storage+connection+flow+could+not+be+verified.");
+  }
+
+  const rateLimit = checkStorageOAuthCallbackRateLimit(
+    request,
+    ownerEmail,
+  );
+  if (rateLimit) {
+    return authRateLimitResponse(rateLimit);
   }
 
   const redirectUri = buildAppUrl("/api/storage/google/callback", request);

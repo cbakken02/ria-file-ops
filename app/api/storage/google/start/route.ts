@@ -5,6 +5,10 @@ import { requireAppPrincipal } from "@/lib/auth/principal";
 import { assertSensitiveActionAuthorized } from "@/lib/auth/sensitive-actions";
 import { recordAuthAuditEvent } from "@/lib/audit/auth-audit-events";
 import { buildAppUrl } from "@/lib/app-url";
+import {
+  authRateLimitResponse,
+  checkStorageOAuthStartRateLimit,
+} from "@/lib/auth-rate-limit";
 import { GOOGLE_DRIVE_WRITE_SCOPE } from "@/lib/google-drive";
 import {
   buildGoogleOAuthFlowCookie,
@@ -28,6 +32,14 @@ export async function GET(request: Request) {
       provider: "google_drive",
       resourceType: "storage_connection",
     });
+  }
+
+  const rateLimit = checkStorageOAuthStartRateLimit(
+    request,
+    principal.legacyOwnerEmail,
+  );
+  if (rateLimit) {
+    return authRateLimitResponse(rateLimit);
   }
 
   const state = crypto.randomUUID();
