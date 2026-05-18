@@ -28,11 +28,15 @@ type AnalyzeRequestBody = {
 export async function POST(request: Request) {
   const session = await auth();
   const principalResult = await getApiPrincipalFromSession(session);
-  const activeConnection = session
-    ? await getVerifiedActiveStorageConnectionForSession(session)
-    : null;
 
-  if (!principalResult.ok || !session || !activeConnection) {
+  if (!principalResult.ok || !session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const activeConnection =
+    await getVerifiedActiveStorageConnectionForSession(session);
+
+  if (!activeConnection) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 

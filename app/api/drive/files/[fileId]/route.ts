@@ -13,11 +13,15 @@ export async function GET(
 ) {
   const session = await auth();
   const principalResult = await getApiPrincipalFromSession(session);
-  const activeConnection = session
-    ? await getVerifiedActiveStorageConnectionForSession(session)
-    : null;
 
-  if (!principalResult.ok || !session || !activeConnection) {
+  if (!principalResult.ok || !session) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  const activeConnection =
+    await getVerifiedActiveStorageConnectionForSession(session);
+
+  if (!activeConnection) {
     return new Response("Unauthorized", { status: 401 });
   }
 

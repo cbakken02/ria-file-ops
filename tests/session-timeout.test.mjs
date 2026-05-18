@@ -94,3 +94,39 @@ test("logout invalidates app session state without deleting storage credentials"
   assert.doesNotMatch(routeSource, /deleteStorageConnection/i);
   assert.doesNotMatch(activitySource, /deleteStorageConnection/i);
 });
+
+test("storage-backed API routes fail expired sessions before provider authorization", () => {
+  for (const relativePath of [
+    "app/api/cleanup/analyze/route.ts",
+    "app/api/drive/files/[fileId]/route.ts",
+    "app/api/storage/folders/route.ts",
+  ]) {
+    const source = readRepoFile(relativePath);
+    const principalGuardIndex = source.indexOf(
+      "if (!principalResult.ok || !session)",
+    );
+    const providerAuthorizationIndex = source.indexOf(
+      "await getVerifiedActiveStorageConnectionForSession(session)",
+    );
+
+    assert.notEqual(
+      principalGuardIndex,
+      -1,
+      `${relativePath} should guard expired sessions before storage access`,
+    );
+    assert.notEqual(
+      providerAuthorizationIndex,
+      -1,
+      `${relativePath} should use verified active storage authorization`,
+    );
+    assert.equal(
+      principalGuardIndex < providerAuthorizationIndex,
+      true,
+      `${relativePath} should not touch storage/provider authorization before returning 401 for an expired session`,
+    );
+    assert.doesNotMatch(
+      source,
+      /session\s*\?\s*await getVerifiedActiveStorageConnectionForSession/,
+    );
+  }
+});
