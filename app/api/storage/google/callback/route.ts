@@ -7,6 +7,10 @@ import {
   getPrimaryStorageConnectionByOwnerEmail,
   saveStorageConnectionForOwner,
 } from "@/lib/db";
+import {
+  GOOGLE_STORAGE_OAUTH_FLOW_COOKIE,
+  parseGoogleOAuthFlowCookie,
+} from "@/lib/storage/google-oauth-flow";
 import { resolveStorageOAuthConnectionDecision } from "@/lib/storage-connections";
 
 type GoogleTokenResponse = {
@@ -33,17 +37,19 @@ export async function GET(request: Request) {
   const error = url.searchParams.get("error");
   const cookieStore = await cookies();
   const savedFlow = parseGoogleOAuthFlowCookie(
-    cookieStore.get("storage_google_oauth_flow")?.value,
+    cookieStore.get(GOOGLE_STORAGE_OAUTH_FLOW_COOKIE)?.value,
+    { principal },
   );
-  cookieStore.delete("storage_google_oauth_flow");
+  cookieStore.delete(GOOGLE_STORAGE_OAUTH_FLOW_COOKIE);
   // Clear legacy split-flow cookies if an older browser session still has them.
   cookieStore.delete("storage_google_oauth_state");
   cookieStore.delete("storage_google_oauth_mode");
 
   if (error) {
+    const providerError = normalizeOAuthError(error);
     recordAuthAuditEvent({
       eventType: "storage.oauth.callback_denied",
-      metadata: { providerError: error },
+      metadata: { providerError },
       principal,
       provider: "google_drive",
       reason: "provider_error",
@@ -52,7 +58,7 @@ export async function GET(request: Request) {
     });
     redirect(
       `/setup?section=workspace&notice=${encodeURIComponent(
-        `Google returned an authorization error: ${error}.`,
+        `Google did not authorize storage access (${providerError}).`,
       )}`,
     );
   }
@@ -65,6 +71,7 @@ export async function GET(request: Request) {
         hasCookieFlow: Boolean(savedFlow),
         hasState: Boolean(state),
         mode: savedFlow?.mode ?? null,
+        stateMatches: Boolean(savedFlow && state === savedFlow.state),
       },
       principal,
       provider: "google_drive",
@@ -221,15 +228,8 @@ export async function GET(request: Request) {
   );
 }
 
-function parseGoogleOAuthFlowCookie(value: string | undefined) {
-  if (!value) {
-    return null;
-  }
+function normalizeOAuthError(value: string) {
+  const normalized = value.trim().replace(/[^A-Za-z0-9_.-]+/g, "_").slice(0, 64);
 
-  const [state, mode] = value.split(":", 2);
-  if (!state || (mode !== "connect" && mode !== "replace")) {
-    return null;
-  }
-
-  return { mode, state };
+  return normalized || "authorization_error";
 }

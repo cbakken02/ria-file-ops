@@ -6,6 +6,11 @@ import { assertSensitiveActionAuthorized } from "@/lib/auth/sensitive-actions";
 import { recordAuthAuditEvent } from "@/lib/audit/auth-audit-events";
 import { buildAppUrl } from "@/lib/app-url";
 import { GOOGLE_DRIVE_WRITE_SCOPE } from "@/lib/google-drive";
+import {
+  buildGoogleOAuthFlowCookie,
+  GOOGLE_STORAGE_OAUTH_FLOW_COOKIE,
+  GOOGLE_STORAGE_OAUTH_FLOW_TTL_MS,
+} from "@/lib/storage/google-oauth-flow";
 
 export async function GET(request: Request) {
   const principal = await requireAppPrincipal();
@@ -39,16 +44,21 @@ export async function GET(request: Request) {
   });
 
   const cookieStore = await cookies();
-  cookieStore.set("storage_google_oauth_flow", buildGoogleOAuthFlowCookie({
-    mode: replaceRequested ? "replace" : "connect",
-    state,
-  }), {
-    httpOnly: true,
-    maxAge: 60 * 10,
-    path: "/",
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-  });
+  cookieStore.set(
+    GOOGLE_STORAGE_OAUTH_FLOW_COOKIE,
+    buildGoogleOAuthFlowCookie({
+      mode: replaceRequested ? "replace" : "connect",
+      principal,
+      state,
+    }),
+    {
+      httpOnly: true,
+      maxAge: GOOGLE_STORAGE_OAUTH_FLOW_TTL_MS / 1000,
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    },
+  );
 
   recordAuthAuditEvent({
     eventType: replaceRequested ? "storage.replace_start" : "storage.oauth.start",
@@ -60,11 +70,4 @@ export async function GET(request: Request) {
   });
 
   redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
-}
-
-function buildGoogleOAuthFlowCookie(input: {
-  mode: "connect" | "replace";
-  state: string;
-}) {
-  return `${input.state}:${input.mode}`;
 }
