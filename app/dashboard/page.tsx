@@ -15,6 +15,7 @@ import { requireSession } from "@/lib/session";
 import {
   getCachedStorageConnectionsForSession,
 } from "@/lib/storage-connections";
+import { getSafeErrorMetadata } from "@/lib/safe-logging";
 import styles from "./page.module.css";
 
 export default async function DashboardPage() {
@@ -346,7 +347,7 @@ async function readDashboardValue<T>(
   } catch (error) {
     console.warn("[dashboard] optional data read failed", {
       label,
-      message: error instanceof Error ? error.message : "Unknown dashboard read error",
+      ...getSafeErrorMetadata(error),
     });
     return fallback;
   }

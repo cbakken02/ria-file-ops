@@ -42,6 +42,7 @@ import {
   parseNamingRules,
   type NamingRuleDocumentType,
 } from "@/lib/naming-rules";
+import { getSafeErrorMetadata } from "@/lib/safe-logging";
 
 export type PreviewItem = {
   id: string;
@@ -636,7 +637,11 @@ async function loadPreviewArtifacts(input: {
             canonical,
           });
         } catch (error) {
-          console.error("Canonical statement SQLite write failed.", error);
+          console.error("[processing-preview] canonical write failed", {
+            ...getSafeErrorMetadata(error),
+            documentTypeId: "account_statement",
+            persistenceBackend: isSupabasePersistence() ? "supabase" : "sqlite",
+          });
         }
       } else if (canonicalDocumentTypeId === "identity_document") {
         try {
@@ -648,7 +653,11 @@ async function loadPreviewArtifacts(input: {
             canonical,
           });
         } catch (error) {
-          console.error("Canonical identity-document SQLite write failed.", error);
+          console.error("[processing-preview] canonical write failed", {
+            ...getSafeErrorMetadata(error),
+            documentTypeId: "identity_document",
+            persistenceBackend: isSupabasePersistence() ? "supabase" : "sqlite",
+          });
         }
       } else if (canonicalDocumentTypeId === "tax_document") {
         try {
@@ -660,7 +669,11 @@ async function loadPreviewArtifacts(input: {
             canonical,
           });
         } catch (error) {
-          console.error("Canonical tax-document SQLite write failed.", error);
+          console.error("[processing-preview] canonical write failed", {
+            ...getSafeErrorMetadata(error),
+            documentTypeId: "tax_document",
+            persistenceBackend: isSupabasePersistence() ? "supabase" : "sqlite",
+          });
         }
       }
     }
