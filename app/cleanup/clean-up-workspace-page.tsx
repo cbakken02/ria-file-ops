@@ -1,11 +1,11 @@
 import { ProductShell } from "@/components/product-shell";
 import { StorageStatusPanel } from "@/components/storage-status-panel";
-import { StorageSwitcher } from "@/components/storage-switcher";
+import { WorkspaceStorageStatus } from "@/components/workspace-storage-status";
 import { getFirmSettingsByOwnerEmail } from "@/lib/db";
 import { parseNamingRules } from "@/lib/naming-rules";
 import { requireSession } from "@/lib/session";
 import {
-  getStorageConnectionsForSession,
+  getActiveStorageConnectionForSession,
 } from "@/lib/storage-connections";
 import type { CleanupBrowserItem } from "@/lib/cleanup-types";
 import { CleanupPlanner } from "./cleanup-planner";
@@ -18,9 +18,7 @@ export async function CleanUpWorkspacePage({
 }) {
   const session = await requireSession();
   const ownerEmail = session.user?.email ?? "";
-  const storageConnections = await getStorageConnectionsForSession(session);
-  const displayConnection =
-    storageConnections.find((connection) => connection.isPrimary) ?? null;
+  const displayConnection = await getActiveStorageConnectionForSession(session);
   const settings = ownerEmail ? getFirmSettingsByOwnerEmail(ownerEmail) ?? null : null;
   const namingRules = parseNamingRules(
     settings?.namingRulesJson,
@@ -47,30 +45,7 @@ export async function CleanUpWorkspacePage({
           <p className={styles.eyebrow}>Clean Up</p>
             <h1>Rename and reorganize existing files and folders</h1>
           </div>
-          <StorageSwitcher
-            activeConnection={
-              displayConnection
-                ? {
-                    id: displayConnection.id,
-                    provider: displayConnection.provider,
-                    accountName: displayConnection.accountName,
-                    accountEmail: displayConnection.accountEmail,
-                    isPrimary: displayConnection.isPrimary,
-                    status: displayConnection.status,
-                  }
-                : null
-            }
-            connections={storageConnections.map((connection) => ({
-              id: connection.id,
-              provider: connection.provider,
-              accountName: connection.accountName,
-              accountEmail: connection.accountEmail,
-              isPrimary: connection.isPrimary,
-              status: connection.status,
-            }))}
-            currentPath={currentPath}
-            workspaceName={settings?.firmName ?? null}
-          />
+          <WorkspaceStorageStatus connection={displayConnection} />
         </header>
 
         {!hasCachedStorageAccess ? (

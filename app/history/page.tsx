@@ -2,7 +2,7 @@ import Link from "next/link";
 import { FileKindIcon } from "@/components/file-kind-icon";
 import { ProductShell } from "@/components/product-shell";
 import { StorageStatusPanel } from "@/components/storage-status-panel";
-import { StorageSwitcher } from "@/components/storage-switcher";
+import { WorkspaceStorageStatus } from "@/components/workspace-storage-status";
 import { HistoryEventsList } from "@/app/history/history-events";
 import { getFilingEventsByOwnerEmail } from "@/lib/db";
 import {
@@ -22,7 +22,7 @@ import {
 } from "@/lib/history-view";
 import { requireSession } from "@/lib/session";
 import {
-  getCachedStorageConnectionsForSession,
+  getCachedActiveStorageConnectionForSession,
 } from "@/lib/storage-connections";
 import styles from "./page.module.css";
 
@@ -47,9 +47,7 @@ export default async function HistoryPage({
   const sort = normalizeHistorySortOption(resolvedSearchParams?.sort);
   const session = await requireSession();
   const ownerEmail = session.user?.email ?? "";
-  const storageConnections = getCachedStorageConnectionsForSession(session);
-  const displayConnection =
-    storageConnections.find((connection) => connection.isPrimary) ?? null;
+  const displayConnection = getCachedActiveStorageConnectionForSession(session);
   const activeStorageProvider = displayConnection?.provider ?? null;
   const hasCachedStorageAccess = displayConnection?.status === "connected";
   const historyStatusTitle = displayConnection
@@ -110,29 +108,7 @@ export default async function HistoryPage({
                 Export CSV
               </Link>
             ) : null}
-            <StorageSwitcher
-              activeConnection={
-                displayConnection
-                  ? {
-                      id: displayConnection.id,
-                      provider: displayConnection.provider,
-                      accountName: displayConnection.accountName,
-                      accountEmail: displayConnection.accountEmail,
-                      isPrimary: displayConnection.isPrimary,
-                      status: displayConnection.status,
-                    }
-                  : null
-              }
-              connections={storageConnections.map((connection) => ({
-                id: connection.id,
-                provider: connection.provider,
-                accountName: connection.accountName,
-                accountEmail: connection.accountEmail,
-                isPrimary: connection.isPrimary,
-                status: connection.status,
-              }))}
-              currentPath="/history"
-            />
+            <WorkspaceStorageStatus connection={displayConnection} />
           </div>
         </header>
 

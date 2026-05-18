@@ -13,7 +13,12 @@ export async function GET() {
     source: "api-storage-connections",
   });
   const activeConnection =
-    connections.find((connection) => connection.isPrimary) ?? connections[0] ?? null;
+    connections.find((connection) => connection.isPrimary) ?? null;
+  const status = activeConnection
+    ? activeConnection.status === "connected"
+      ? "connected"
+      : "needs_reconnect"
+    : "not_connected";
 
   return Response.json({
     activeConnection: activeConnection
@@ -23,14 +28,19 @@ export async function GET() {
           id: activeConnection.id,
           isPrimary: activeConnection.isPrimary,
           provider: activeConnection.provider,
+          status: activeConnection.status,
         }
       : null,
+    canReconnect: activeConnection?.status === "needs_reauth",
+    canReplace: Boolean(activeConnection),
     connections: connections.map((connection) => ({
       accountEmail: connection.accountEmail,
       accountName: connection.accountName,
       id: connection.id,
       isPrimary: connection.isPrimary,
       provider: connection.provider,
+      status: connection.status,
     })),
+    status,
   });
 }

@@ -1323,20 +1323,11 @@ export function deleteStorageConnectionForOwner(input: {
         DELETE FROM public.storage_connections
         WHERE owner_email = $1 AND id = $2
         RETURNING is_primary
-      ),
-      next_connection AS (
-        SELECT id
-        FROM public.storage_connections
-        WHERE owner_email = $1
-        ORDER BY updated_at DESC, id DESC
-        LIMIT CASE
-          WHEN EXISTS (SELECT 1 FROM deleted WHERE is_primary = true) THEN 1
-          ELSE 0
-        END
       )
       UPDATE public.storage_connections
-      SET is_primary = true, updated_at = $3
-      WHERE owner_email = $1 AND id IN (SELECT id FROM next_connection)
+      SET is_primary = false, updated_at = $3
+      WHERE owner_email = $1
+        AND EXISTS (SELECT 1 FROM deleted WHERE is_primary = true)
     `,
     [input.ownerEmail, input.connectionId, new Date().toISOString()],
   );

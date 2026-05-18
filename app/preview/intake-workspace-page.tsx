@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ProductShell } from "@/components/product-shell";
 import { StorageStatusPanel } from "@/components/storage-status-panel";
-import { StorageSwitcher } from "@/components/storage-switcher";
+import { WorkspaceStorageStatus } from "@/components/workspace-storage-status";
 import { refreshIntakeAction } from "@/app/preview/actions";
 import {
   getFilingEventsByOwnerEmail,
@@ -17,7 +17,7 @@ import {
 import { requireSession } from "@/lib/session";
 import { getReviewRuleOption, normalizeFolderTemplate } from "@/lib/setup-config";
 import { parseNamingRules } from "@/lib/naming-rules";
-import { getStorageConnectionsForSession } from "@/lib/storage-connections";
+import { getActiveStorageConnectionForSession } from "@/lib/storage-connections";
 import { IntakeQueue } from "./intake-queue";
 import styles from "./page.module.css";
 
@@ -38,9 +38,7 @@ export async function IntakeWorkspacePage({
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
   const session = await requireSession();
   const ownerEmail = session.user?.email;
-  const storageConnections = await getStorageConnectionsForSession(session);
-  const displayConnection =
-    storageConnections.find((connection) => connection.isPrimary) ?? null;
+  const displayConnection = await getActiveStorageConnectionForSession(session);
   const activeStorageProvider = displayConnection?.provider ?? null;
   const settings = ownerEmail ? getFirmSettingsByOwnerEmail(ownerEmail) ?? null : null;
   const namingRules = parseNamingRules(
@@ -101,30 +99,7 @@ export async function IntakeWorkspacePage({
           </p>
         </div>
         <div className={styles.headerActions}>
-          <StorageSwitcher
-            activeConnection={
-              displayConnection
-                ? {
-                    id: displayConnection.id,
-                    provider: displayConnection.provider,
-                    accountName: displayConnection.accountName,
-                    accountEmail: displayConnection.accountEmail,
-                    isPrimary: displayConnection.isPrimary,
-                    status: displayConnection.status,
-                  }
-                : null
-            }
-            connections={storageConnections.map((connection) => ({
-              id: connection.id,
-              provider: connection.provider,
-              accountName: connection.accountName,
-              accountEmail: connection.accountEmail,
-              isPrimary: connection.isPrimary,
-              status: connection.status,
-            }))}
-            currentPath={currentPath}
-            workspaceName={settings?.firmName ?? null}
-          />
+          <WorkspaceStorageStatus connection={displayConnection} />
         </div>
       </header>
 

@@ -9,7 +9,6 @@ import { parseNamingRules } from "@/lib/naming-rules";
 import { requireSession } from "@/lib/session";
 import {
   getCachedActiveStorageConnectionForSession,
-  getCachedStorageConnectionsForSession,
   storageConnectionHasWriteAccess,
 } from "@/lib/storage-connections";
 import { SetupForm } from "./setup-form";
@@ -61,7 +60,6 @@ export default async function SetupPage({
   const session = await requireSession();
   const ownerEmail = session.user?.email;
   const activeConnection = getCachedActiveStorageConnectionForSession(session);
-  const storageConnections = getCachedStorageConnectionsForSession(session);
   const driveConnected = activeConnection?.status === "connected";
   const settings = ownerEmail ? getFirmSettingsByOwnerEmail(ownerEmail) ?? null : null;
 
@@ -120,13 +118,6 @@ export default async function SetupPage({
                 }
               : null
           }
-          storageConnections={storageConnections.map((connection) => ({
-            accountEmail: connection.accountEmail,
-            accountName: connection.accountName,
-            id: connection.id,
-            isPrimary: connection.isPrimary,
-            provider: connection.provider,
-          }))}
         />
       </main>
     </ProductShell>

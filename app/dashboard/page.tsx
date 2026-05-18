@@ -1,28 +1,24 @@
 import { FileKindIcon } from "@/components/file-kind-icon";
 import { ProductShell } from "@/components/product-shell";
 import { StorageStatusPanel } from "@/components/storage-status-panel";
-import { StorageSwitcher } from "@/components/storage-switcher";
+import { WorkspaceStorageStatus } from "@/components/workspace-storage-status";
 import {
   getFilingEventsByOwnerEmail,
-  getFirmSettingsByOwnerEmail,
   getReviewDecisionsByOwnerEmail,
   type FilingEvent,
-  type FirmSettings,
   type ReviewDecision,
 } from "@/lib/db";
 import { readPreviewSnapshot, type PreviewSnapshot } from "@/lib/preview-snapshot";
 import { requireSession } from "@/lib/session";
 import {
-  getCachedStorageConnectionsForSession,
+  getCachedActiveStorageConnectionForSession,
 } from "@/lib/storage-connections";
 import styles from "./page.module.css";
 
 export default async function DashboardPage() {
   const session = await requireSession();
   const ownerEmail = session.user?.email ?? "";
-  const storageConnections = getCachedStorageConnectionsForSession(session);
-  const displayConnection =
-    storageConnections.find((connection) => connection.isPrimary) ?? null;
+  const displayConnection = getCachedActiveStorageConnectionForSession(session);
   const hasCachedStorageAccess = displayConnection?.status === "connected";
   const activeStorageProvider = displayConnection?.provider ?? null;
   const storageStatusTitle = displayConnection
@@ -31,14 +27,6 @@ export default async function DashboardPage() {
   const storageStatusSummary = displayConnection
     ? "Dashboard can show cached app state, but live storage actions need a reconnect."
     : "Connect storage to use Dashboard.";
-
-  const settings = ownerEmail
-    ? await readDashboardValue<FirmSettings | null>(
-        "firm settings",
-        null,
-        () => getFirmSettingsByOwnerEmail(ownerEmail) ?? null,
-      )
-    : null;
 
   const [previewSnapshot, reviewDecisions, filingEvents] =
     ownerEmail && hasCachedStorageAccess
@@ -142,30 +130,7 @@ export default async function DashboardPage() {
             <h1>Operational pulse.</h1>
           </div>
           <div className={styles.headerActions}>
-            <StorageSwitcher
-              activeConnection={
-                displayConnection
-                  ? {
-                      id: displayConnection.id,
-                      provider: displayConnection.provider,
-                      accountName: displayConnection.accountName,
-                      accountEmail: displayConnection.accountEmail,
-                      isPrimary: displayConnection.isPrimary,
-                      status: displayConnection.status,
-                    }
-                  : null
-              }
-              connections={storageConnections.map((connection) => ({
-                id: connection.id,
-                provider: connection.provider,
-                accountName: connection.accountName,
-                accountEmail: connection.accountEmail,
-                isPrimary: connection.isPrimary,
-                status: connection.status,
-              }))}
-              currentPath="/dashboard"
-              workspaceName={settings?.firmName ?? null}
-            />
+            <WorkspaceStorageStatus connection={displayConnection} />
           </div>
         </header>
 

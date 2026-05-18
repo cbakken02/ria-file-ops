@@ -50,13 +50,6 @@ type Props = {
     statusLabel: string;
     writableLabel: string;
   } | null;
-  storageConnections: Array<{
-    accountEmail: string | null;
-    accountName: string | null;
-    id: string;
-    isPrimary: boolean;
-    provider: string;
-  }>;
 };
 
 type SettingsSectionId =
@@ -100,7 +93,6 @@ export function SetupForm({
   initialSettings,
   notice,
   activeStorageConnection,
-  storageConnections,
 }: Props) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -405,10 +397,10 @@ export function SetupForm({
                             id: activeStorageConnection.id,
                             isPrimary: activeStorageConnection.isPrimary,
                             provider: activeStorageConnection.provider,
+                            status: activeStorageConnection.status,
                           }
                         : null
                     }
-                    existingConnections={storageConnections}
                     variant="ghost"
                   />
                 }
@@ -919,7 +911,7 @@ function StorageConnectionsSection({
       <div className={styles.settingsList}>
         <div className={styles.storageEmptyState}>
           <strong>No storage connected</strong>
-          <p>Add a storage connection to browse folders, run Intake, and clean up files.</p>
+          <p>Connect storage to browse folders, run Intake, and clean up files.</p>
         </div>
       </div>
     );
