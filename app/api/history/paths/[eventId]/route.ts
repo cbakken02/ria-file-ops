@@ -1,4 +1,8 @@
 import { auth } from "@/auth";
+import {
+  getApiPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
 import { getFilingEventByOwnerAndId, type FilingEvent } from "@/lib/db";
 import { buildDriveItemPath, normalizeDriveDisplayPath } from "@/lib/google-drive";
 import { getVerifiedActiveStorageConnectionForSession } from "@/lib/storage-connections";
@@ -8,13 +12,17 @@ export async function GET(
   context: { params: Promise<{ eventId: string }> },
 ) {
   const session = await auth();
+  const principalResult = getApiPrincipalFromSession(session);
 
-  if (!session?.user?.email) {
+  if (!principalResult.ok || !session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { eventId } = await context.params;
-  const event = getFilingEventByOwnerAndId(session.user.email, eventId);
+  const event = getFilingEventByOwnerAndId(
+    getLegacyOwnerEmail(principalResult.principal),
+    eventId,
+  );
 
   if (!event) {
     return Response.json({ error: "Not found" }, { status: 404 });

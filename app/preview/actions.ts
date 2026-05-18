@@ -6,6 +6,10 @@ import {
   getClientMemoryRulesByOwnerEmail,
   getFirmSettingsByOwnerEmail,
 } from "@/lib/db";
+import {
+  getAppPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
 import { executeFilingBatch } from "@/lib/filing";
 import {
   downloadDriveFile,
@@ -74,10 +78,11 @@ export async function prepareReadyItemsFilingRedirect(
   mode: ReadyItemsFilingMode = "manual",
 ) {
   const session = await requireSession();
-  const ownerEmail = session.user?.email;
+  const principal = getAppPrincipalFromSession(session);
+  const ownerEmail = getLegacyOwnerEmail(principal);
   const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
 
-  if (!ownerEmail || !activeConnection) {
+  if (!activeConnection) {
     throw new Error("An active storage connection is required to file documents.");
   }
 

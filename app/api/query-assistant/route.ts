@@ -1,5 +1,9 @@
 import { auth } from "@/auth";
 import {
+  getApiPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
+import {
   DATA_INTELLIGENCE_GENERIC_ERROR,
   dataIntelligenceJsonResponse,
 } from "@/lib/data-intelligence-api";
@@ -11,8 +15,9 @@ import {
 
 export async function POST(request: Request) {
   const session = await auth();
+  const principalResult = getApiPrincipalFromSession(session);
 
-  if (!session?.user?.email) {
+  if (!principalResult.ok) {
     return dataIntelligenceJsonResponse({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -50,7 +55,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await answerDataIntelligenceQuestion({
-      ownerEmail: session.user.email,
+      ownerEmail: getLegacyOwnerEmail(principalResult.principal),
       question,
       history,
       conversationState,

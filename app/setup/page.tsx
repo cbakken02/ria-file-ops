@@ -1,6 +1,10 @@
 import { getFirmSettingsByOwnerEmail } from "@/lib/db";
 import { ProductShell } from "@/components/product-shell";
 import {
+  getAppPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
+import {
   DEFAULT_NAMING_CONVENTION,
   getReviewRuleOption,
   normalizeFolderTemplate,
@@ -58,10 +62,11 @@ export default async function SetupPage({
       : null;
   const closeHref = resolveSetupCloseHref(resolvedSearchParams?.returnTo);
   const session = await requireSession();
-  const ownerEmail = session.user?.email;
+  const principal = getAppPrincipalFromSession(session);
+  const ownerEmail = getLegacyOwnerEmail(principal);
   const activeConnection = getCachedActiveStorageConnectionForSession(session);
   const driveConnected = activeConnection?.status === "connected";
-  const settings = ownerEmail ? getFirmSettingsByOwnerEmail(ownerEmail) ?? null : null;
+  const settings = getFirmSettingsByOwnerEmail(ownerEmail) ?? null;
 
   const sourceFolderValue =
     settings?.sourceFolderId && settings?.sourceFolderName

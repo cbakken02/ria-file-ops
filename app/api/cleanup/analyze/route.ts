@@ -1,6 +1,10 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import {
+  getApiPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
+import {
   getCleanupFileStatesByOwnerAndFileIds,
   getClientMemoryRulesByOwnerEmail,
   getFirmSettingsByOwnerEmail,
@@ -23,15 +27,16 @@ type AnalyzeRequestBody = {
 
 export async function POST(request: Request) {
   const session = await auth();
+  const principalResult = getApiPrincipalFromSession(session);
   const activeConnection = session
     ? await getVerifiedActiveStorageConnectionForSession(session)
     : null;
 
-  if (!session?.user?.email || !activeConnection) {
+  if (!principalResult.ok || !session || !activeConnection) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const ownerEmail = session.user.email;
+  const ownerEmail = getLegacyOwnerEmail(principalResult.principal);
   const body = (await request.json().catch(() => null)) as AnalyzeRequestBody | null;
   const selectedIds = Array.isArray(body?.selectedIds)
     ? Array.from(new Set(body.selectedIds.filter(Boolean)))

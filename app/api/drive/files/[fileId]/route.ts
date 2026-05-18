@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { getApiPrincipalFromSession } from "@/lib/auth/principal";
 import { downloadDriveFile, getDriveFileMetadata } from "@/lib/google-drive";
 import { getVerifiedActiveStorageConnectionForSession } from "@/lib/storage-connections";
 
@@ -11,11 +12,12 @@ export async function GET(
   context: { params: Promise<{ fileId: string }> },
 ) {
   const session = await auth();
+  const principalResult = getApiPrincipalFromSession(session);
   const activeConnection = session
     ? await getVerifiedActiveStorageConnectionForSession(session)
     : null;
 
-  if (!session?.user || !activeConnection) {
+  if (!principalResult.ok || !session || !activeConnection) {
     return new Response("Unauthorized", { status: 401 });
   }
 

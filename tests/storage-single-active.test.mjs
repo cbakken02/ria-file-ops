@@ -110,6 +110,20 @@ test("cached active storage helper returns only an explicit primary connection",
   );
 });
 
+test("cached active storage lookup normalizes the principal owner key", () => {
+  const session = { user: { email: " OWNER@Example.com " } };
+
+  assert.equal(
+    getCachedActiveStorageConnectionForSession(session, {
+      readConnections(ownerEmail) {
+        assert.equal(ownerEmail, "owner@example.com");
+        return [makeConnection({ id: "primary", isPrimary: true })];
+      },
+    })?.id,
+    "primary",
+  );
+});
+
 test("Google OAuth reconnects the same account but blocks different accounts without replace", () => {
   const activeConnection = makeConnection({
     accountEmail: "owner@example.com",
@@ -224,4 +238,30 @@ test("removing active storage does not promote another historical connection", (
   assert.equal(supabaseDeleteBlock.includes("next_connection"), false);
   assert.match(sqliteDeleteBlock, /clearPrimaryStorageConnections/);
   assert.match(supabaseDeleteBlock, /SET is_primary = false/);
+});
+
+test("storage stores clear existing primary rows before creating or switching active storage", () => {
+  const sqliteSource = readRepoFile("lib/persistence/sqlite-app-state-store.ts");
+  const supabaseSource = readRepoFile("lib/persistence/supabase-app-state-store.ts");
+  const sqliteSaveBlock = sqliteSource.slice(
+    sqliteSource.indexOf("export function saveStorageConnectionForOwner"),
+    sqliteSource.indexOf("export function setPrimaryStorageConnectionForOwner"),
+  );
+  const sqliteSetPrimaryBlock = sqliteSource.slice(
+    sqliteSource.indexOf("export function setPrimaryStorageConnectionForOwner"),
+    sqliteSource.indexOf("export function deleteStorageConnectionForOwner"),
+  );
+  const supabaseSaveBlock = supabaseSource.slice(
+    supabaseSource.indexOf("export function saveStorageConnectionForOwner"),
+    supabaseSource.indexOf("export function setPrimaryStorageConnectionForOwner"),
+  );
+  const supabaseSetPrimaryBlock = supabaseSource.slice(
+    supabaseSource.indexOf("export function setPrimaryStorageConnectionForOwner"),
+    supabaseSource.indexOf("export function deleteStorageConnectionForOwner"),
+  );
+
+  assert.match(sqliteSaveBlock, /clearPrimaryStorageConnections/);
+  assert.match(sqliteSetPrimaryBlock, /clearPrimaryStorageConnections/);
+  assert.match(supabaseSaveBlock, /SET is_primary = false/);
+  assert.match(supabaseSetPrimaryBlock, /SET is_primary = false/);
 });

@@ -1,17 +1,19 @@
-import { auth } from "@/auth";
+import { requireApiPrincipal } from "@/lib/auth/principal";
 import { getSafeStorageConnectionsByOwnerEmail } from "@/lib/storage-connections";
 
 export async function GET() {
-  const session = await auth();
+  const principalResult = await requireApiPrincipal();
 
-  if (!session?.user?.email) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!principalResult.ok) {
+    return principalResult.response;
   }
 
-  const ownerEmail = session.user.email;
-  const connections = getSafeStorageConnectionsByOwnerEmail(ownerEmail, {
-    source: "api-storage-connections",
-  });
+  const connections = getSafeStorageConnectionsByOwnerEmail(
+    principalResult.principal.legacyOwnerEmail,
+    {
+      source: "api-storage-connections",
+    },
+  );
   const activeConnection =
     connections.find((connection) => connection.isPrimary) ?? null;
   const status = activeConnection

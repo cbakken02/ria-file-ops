@@ -1,3 +1,4 @@
+import { normalizeOwnerEmail } from "@/lib/auth/principal";
 import type { DataIntelligenceV2Config } from "@/lib/data-intelligence-v2/config";
 import type { DataIntelligenceV2AuthContext } from "@/lib/data-intelligence-v2/types";
 
@@ -23,8 +24,10 @@ export function buildDataIntelligenceV2AuthContext(args: {
   session: V2SessionLike;
   config: DataIntelligenceV2Config;
 }): DataIntelligenceV2AuthContext | null {
-  const userEmail = args.session?.user?.email?.trim();
-  if (!userEmail) {
+  let userEmail: string;
+  try {
+    userEmail = normalizeOwnerEmail(args.session?.user?.email ?? "");
+  } catch {
     return null;
   }
 

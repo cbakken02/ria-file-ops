@@ -6,13 +6,14 @@ import {
   getStorageConnectionByOwnerAndId,
   setPrimaryStorageConnectionForOwner,
 } from "@/lib/db";
-import { requireSession } from "@/lib/session";
+import { assertCanUseStorageConnection } from "@/lib/auth/resource-guards";
+import { getLegacyOwnerEmail, requireAppPrincipal } from "@/lib/auth/principal";
 
 // Internal migration/admin escape hatch only. Normal workspace UI is single-storage
 // and must not let users switch among historical connection records.
 export async function setActiveStorageConnectionAction(formData: FormData) {
-  const session = await requireSession();
-  const ownerEmail = session.user?.email ?? "";
+  const principal = await requireAppPrincipal();
+  const ownerEmail = getLegacyOwnerEmail(principal);
   const connectionId = String(formData.get("connectionId") ?? "").trim();
 
   if (!isInternalStorageSwitchingEnabled()) {
@@ -31,6 +32,7 @@ export async function setActiveStorageConnectionAction(formData: FormData) {
   if (!existing) {
     redirect("/setup?section=workspace&notice=That+storage+connection+could+not+be+found.");
   }
+  assertCanUseStorageConnection(principal, existing);
 
   setPrimaryStorageConnectionForOwner({ ownerEmail, connectionId });
 

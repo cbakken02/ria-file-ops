@@ -1,14 +1,16 @@
 import { auth } from "@/auth";
+import { getApiPrincipalFromSession } from "@/lib/auth/principal";
 import { listDriveFolders } from "@/lib/google-drive";
 import { getVerifiedActiveStorageConnectionForSession } from "@/lib/storage-connections";
 
 export async function GET() {
   const session = await auth();
+  const principalResult = getApiPrincipalFromSession(session);
   const activeConnection = session
     ? await getVerifiedActiveStorageConnectionForSession(session)
     : null;
 
-  if (!session?.user?.email || !activeConnection) {
+  if (!principalResult.ok || !session || !activeConnection) {
     return Response.json(
       { error: "Reconnect storage before loading Drive folders." },
       { status: 401 },

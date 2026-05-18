@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
+import { getApiPrincipalFromSession } from "@/lib/auth/principal";
 import {
   IntakeRefreshError,
   refreshIntakeQueueForSession,
@@ -7,7 +8,8 @@ import {
 
 export async function POST() {
   const session = await auth();
-  if (!session?.user) {
+  const principalResult = getApiPrincipalFromSession(session);
+  if (!principalResult.ok || !session) {
     return Response.json(
       { error: "Sign in before refreshing Intake." },
       { status: 401 },

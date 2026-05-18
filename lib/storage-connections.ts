@@ -1,5 +1,11 @@
 import type { Session } from "next-auth";
 import {
+  getAppPrincipalFromSession,
+  getLegacyOwnerEmail,
+  normalizeOwnerEmail,
+  type AppPrincipal,
+} from "@/lib/auth/principal";
+import {
   getStorageConnectionsByOwnerEmail,
   saveStorageConnectionForOwner,
   type StorageConnection,
@@ -73,19 +79,37 @@ export function getCachedActiveStorageConnectionForSession(
   session: Session,
   options: StorageConnectionReadOptions = {},
 ): StorageConnection | null {
-  return getPrimaryConnection(getCachedStorageConnectionsForSession(session, options));
+  const principal = getPrincipalFromSessionOrNull(session);
+
+  if (!principal) {
+    return null;
+  }
+
+  return getCachedActiveStorageConnectionForPrincipal(principal, options);
+}
+
+export function getCachedActiveStorageConnectionForPrincipal(
+  principal: AppPrincipal,
+  options: StorageConnectionReadOptions = {},
+): StorageConnection | null {
+  return getPrimaryConnection(
+    getSafeStorageConnectionsByOwnerEmail(getLegacyOwnerEmail(principal), {
+      ...options,
+      source: options.source ?? "cached-storage-connections",
+    }),
+  );
 }
 
 export function getCachedStorageConnectionsForSession(
   session: Session,
   options: StorageConnectionReadOptions = {},
 ): StorageConnection[] {
-  const ownerEmail = session.user?.email ?? "";
-  if (!ownerEmail) {
+  const principal = getPrincipalFromSessionOrNull(session);
+  if (!principal) {
     return [];
   }
 
-  return getSafeStorageConnectionsByOwnerEmail(ownerEmail, {
+  return getSafeStorageConnectionsByOwnerEmail(getLegacyOwnerEmail(principal), {
     ...options,
     source: options.source ?? "cached-storage-connections",
   });
@@ -94,21 +118,32 @@ export function getCachedStorageConnectionsForSession(
 export async function getActiveStorageConnectionForSession(
   session: Session,
 ): Promise<StorageConnection | null> {
-  const ownerEmail = session.user?.email ?? "";
-  if (!ownerEmail) {
+  const principal = getPrincipalFromSessionOrNull(session);
+  if (!principal) {
     return null;
   }
 
-  const connections = getSessionStorageConnections(session);
+  return getActiveStorageConnectionForPrincipal(principal, session);
+}
+
+export async function getActiveStorageConnectionForPrincipal(
+  principal: AppPrincipal,
+  session?: Session,
+): Promise<StorageConnection | null> {
+  const connections = session
+    ? getSessionStorageConnections(session, principal)
+    : getSafeStorageConnectionsByOwnerEmail(getLegacyOwnerEmail(principal), {
+        source: "principal-storage-connections",
+      });
   const primary = getPrimaryConnection(connections);
 
   if (!primary) {
     return null;
   }
 
-  const sessionAccessToken = session.accessToken;
+  const sessionAccessToken = session?.accessToken;
 
-  if (shouldUseSessionStorageAccess(primary, session) && sessionAccessToken) {
+  if (session && shouldUseSessionStorageAccess(primary, session) && sessionAccessToken) {
     return {
       ...primary,
       accessToken: sessionAccessToken,
@@ -124,9 +159,9 @@ export async function resolveActiveStorageAuthorizationForSession(
   session: Session | null | undefined,
   options: ActiveStorageAuthorizationOptions = {},
 ): Promise<ActiveStorageAuthorizationResult> {
-  const ownerEmail = session?.user?.email ?? null;
+  const principal = getPrincipalFromSessionOrNull(session);
 
-  if (!session?.user || !ownerEmail) {
+  if (!session?.user || !principal) {
     return {
       ok: false,
       error: options.signInMessage ?? "Sign in before using storage.",
@@ -138,6 +173,7 @@ export async function resolveActiveStorageAuthorizationForSession(
   const resolveConnection =
     options.getActiveStorageConnection ?? getActiveStorageConnectionForSession;
   const activeConnection = await resolveConnection(session);
+  const ownerEmail = getLegacyOwnerEmail(principal);
 
   if (!activeConnection || activeConnection.status !== "connected") {
     return {
@@ -183,12 +219,12 @@ export async function getVerifiedActiveStorageConnectionForSession(
 }
 
 export async function getStorageConnectionsForSession(session: Session) {
-  const ownerEmail = session.user?.email ?? "";
-  if (!ownerEmail) {
+  const principal = getPrincipalFromSessionOrNull(session);
+  if (!principal) {
     return [];
   }
 
-  const connections = getSessionStorageConnections(session);
+  const connections = getSessionStorageConnections(session, principal);
   const primaryConnection = getPrimaryConnection(connections);
   const primary = primaryConnection
     ? await resolveUsableStorageConnection(primaryConnection, session)
@@ -199,10 +235,13 @@ export async function getStorageConnectionsForSession(session: Session) {
   );
 }
 
-function getSessionStorageConnections(session: Session) {
+function getSessionStorageConnections(
+  session: Session,
+  principal: AppPrincipal,
+) {
   return (
-    syncSessionGoogleConnection(session) ??
-    getSafeStorageConnectionsByOwnerEmail(session.user?.email ?? "", {
+    syncSessionGoogleConnection(session, principal) ??
+    getSafeStorageConnectionsByOwnerEmail(getLegacyOwnerEmail(principal), {
       source: "session-storage-connections",
     })
   );
@@ -212,8 +251,10 @@ function readStorageConnectionsByOwnerEmail(
   ownerEmail: string,
   options: StorageConnectionReadOptions = {},
 ): StorageConnectionReadResult {
-  const normalizedOwnerEmail = ownerEmail.trim();
-  if (!normalizedOwnerEmail) {
+  let normalizedOwnerEmail: string;
+  try {
+    normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
+  } catch {
     return { connections: [], unavailable: false };
   }
 
@@ -360,8 +401,8 @@ async function refreshStorageConnectionIfNeeded(connection: StorageConnection) {
   }
 }
 
-function syncSessionGoogleConnection(session: Session) {
-  const ownerEmail = session.user?.email ?? "";
+function syncSessionGoogleConnection(session: Session, principal: AppPrincipal) {
+  const ownerEmail = getLegacyOwnerEmail(principal);
 
   if (!ownerEmail || !session.accessToken || !session.driveConnected) {
     return null;
@@ -404,10 +445,10 @@ function syncSessionGoogleConnection(session: Session) {
     savedConnection = saveStorageConnectionForOwner({
       ownerEmail,
       provider: "google_drive",
-      accountEmail: session.user?.email ?? null,
+      accountEmail: principal.email,
       accountName: session.user?.name ?? null,
       accountImage: session.user?.image ?? null,
-      externalAccountId: session.user?.id ?? session.user?.email ?? null,
+      externalAccountId: session.user?.id ?? principal.email,
       accessToken: session.accessToken,
       refreshToken: null,
       expiresAt: null,
@@ -484,9 +525,15 @@ export function resolveStorageOAuthConnectionDecision(input: {
 }
 
 function matchesCurrentSession(connection: StorageConnection, session: Session) {
+  const principal = getPrincipalFromSessionOrNull(session);
+
+  if (!principal) {
+    return false;
+  }
+
   return matchesStorageAccount(connection, {
-    accountEmail: session.user?.email ?? null,
-    externalAccountId: session.user?.id ?? session.user?.email ?? null,
+    accountEmail: principal.email,
+    externalAccountId: session.user?.id ?? principal.email,
     provider: "google_drive",
   });
 }
@@ -565,4 +612,14 @@ function logStorageConnectionPersistenceFailure(
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown storage persistence error";
+}
+
+function getPrincipalFromSessionOrNull(
+  session: Session | null | undefined,
+): AppPrincipal | null {
+  try {
+    return getAppPrincipalFromSession(session);
+  } catch {
+    return null;
+  }
 }

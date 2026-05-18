@@ -1,4 +1,8 @@
 import { auth } from "@/auth";
+import {
+  getApiPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
 import { getFilingEventsByOwnerEmail } from "@/lib/db";
 import {
   buildDestinationPath,
@@ -17,11 +21,13 @@ import {
 
 export async function GET(request: Request) {
   const session = await auth();
+  const principalResult = getApiPrincipalFromSession(session);
 
-  if (!session?.user?.email) {
+  if (!principalResult.ok || !session) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  const ownerEmail = getLegacyOwnerEmail(principalResult.principal);
   const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
   const activeStorageProvider = activeConnection?.provider ?? null;
 
@@ -37,7 +43,7 @@ export async function GET(request: Request) {
   const status = normalizeHistoryStatusFilter(url.searchParams.get("status"));
   const mover = normalizeHistoryMoverFilter(url.searchParams.get("mover"));
   const sort = normalizeHistorySortOption(url.searchParams.get("sort"));
-  const events = getFilingEventsByOwnerEmail(session.user.email).filter(
+  const events = getFilingEventsByOwnerEmail(ownerEmail).filter(
     (event) => event.storageProvider === activeStorageProvider,
   );
   const filteredEvents = sortHistoryEvents(

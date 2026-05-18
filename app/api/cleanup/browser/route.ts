@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { getApiPrincipalFromSession } from "@/lib/auth/principal";
 import {
   formatGoogleDriveFolderAccessError,
   getGoogleDriveAccessErrorStatus,
@@ -17,6 +18,14 @@ import {
 
 export async function GET(request: Request) {
   const session = await auth();
+  const principalResult = getApiPrincipalFromSession(session);
+  if (!principalResult.ok) {
+    return Response.json(
+      { error: "Sign in before browsing files." },
+      { status: 401 },
+    );
+  }
+
   const storageAuthorization = await resolveActiveStorageAuthorizationForSession(
     session,
     {

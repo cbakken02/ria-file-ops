@@ -3,6 +3,10 @@ import "server-only";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import {
+  getApiPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
+import {
   getFirmSettingsByOwnerEmail,
   type FirmSettings,
   type StorageConnection,
@@ -78,8 +82,9 @@ export async function approveFileItems(input: {
   const requestedFileIds = Array.from(new Set(input.fileIds.filter(Boolean)));
   const requestedCount = requestedFileIds.length;
   const session = await auth();
+  const principalResult = getApiPrincipalFromSession(session);
 
-  if (!session?.user?.email) {
+  if (!principalResult.ok || !session) {
     return buildFileApprovalResult({
       notice: input.labels.authNotice,
       requestedCount,
@@ -87,7 +92,7 @@ export async function approveFileItems(input: {
     });
   }
 
-  const ownerEmail = session.user.email;
+  const ownerEmail = getLegacyOwnerEmail(principalResult.principal);
   const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
 
   if (!activeConnection) {

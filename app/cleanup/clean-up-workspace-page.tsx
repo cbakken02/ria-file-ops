@@ -1,6 +1,10 @@
 import { ProductShell } from "@/components/product-shell";
 import { StorageStatusPanel } from "@/components/storage-status-panel";
 import { WorkspaceStorageStatus } from "@/components/workspace-storage-status";
+import {
+  getAppPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
 import { getFirmSettingsByOwnerEmail } from "@/lib/db";
 import { parseNamingRules } from "@/lib/naming-rules";
 import { requireSession } from "@/lib/session";
@@ -17,9 +21,10 @@ export async function CleanUpWorkspacePage({
   currentPath: "/clean-up";
 }) {
   const session = await requireSession();
-  const ownerEmail = session.user?.email ?? "";
+  const principal = getAppPrincipalFromSession(session);
+  const ownerEmail = getLegacyOwnerEmail(principal);
   const displayConnection = await getActiveStorageConnectionForSession(session);
-  const settings = ownerEmail ? getFirmSettingsByOwnerEmail(ownerEmail) ?? null : null;
+  const settings = getFirmSettingsByOwnerEmail(ownerEmail) ?? null;
   const namingRules = parseNamingRules(
     settings?.namingRulesJson,
     settings?.namingConvention,
