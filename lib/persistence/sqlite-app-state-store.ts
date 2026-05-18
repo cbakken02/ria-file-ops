@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  AuthAuditEvent,
   AppSessionActivity,
   BugReport,
   ClientMemoryRule,
@@ -212,6 +213,24 @@ database.exec(`
 `);
 
 database.exec(`
+  CREATE TABLE IF NOT EXISTS auth_audit_events (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    actor_owner_key TEXT,
+    actor_workspace_id TEXT,
+    actor_email_hash TEXT,
+    resource_type TEXT,
+    resource_id_hash TEXT,
+    provider TEXT,
+    status TEXT,
+    reason TEXT,
+    request_id TEXT,
+    metadata_json TEXT NOT NULL DEFAULT '{}'
+  )
+`);
+
+database.exec(`
   CREATE TABLE IF NOT EXISTS cleanup_file_states (
     id TEXT PRIMARY KEY,
     owner_email TEXT NOT NULL,
@@ -255,6 +274,12 @@ database.exec(`
     ON app_session_activity (owner_email);
   CREATE INDEX IF NOT EXISTS app_session_activity_last_activity_at_idx
     ON app_session_activity (last_activity_at);
+  CREATE INDEX IF NOT EXISTS auth_audit_events_owner_created_idx
+    ON auth_audit_events (actor_owner_key, created_at DESC);
+  CREATE INDEX IF NOT EXISTS auth_audit_events_workspace_created_idx
+    ON auth_audit_events (actor_workspace_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS auth_audit_events_type_created_idx
+    ON auth_audit_events (event_type, created_at DESC);
 `);
 
 database.exec(`
@@ -1169,6 +1194,45 @@ const insertInvalidatedAppSessionActivity = database.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
+const insertAuthAuditEvent = database.prepare(`
+  INSERT INTO auth_audit_events (
+    id,
+    created_at,
+    event_type,
+    actor_owner_key,
+    actor_workspace_id,
+    actor_email_hash,
+    resource_type,
+    resource_id_hash,
+    provider,
+    status,
+    reason,
+    request_id,
+    metadata_json
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+const selectAuthAuditEventsByOwnerEmail = database.prepare(`
+  SELECT
+    id,
+    created_at AS createdAt,
+    event_type AS eventType,
+    actor_owner_key AS actorOwnerKey,
+    actor_workspace_id AS actorWorkspaceId,
+    actor_email_hash AS actorEmailHash,
+    resource_type AS resourceType,
+    resource_id_hash AS resourceIdHash,
+    provider,
+    status,
+    reason,
+    request_id AS requestId,
+    metadata_json AS metadataJson
+  FROM auth_audit_events
+  WHERE actor_owner_key = ?
+  ORDER BY created_at DESC
+  LIMIT 200
+`);
+
 export function getFirmSettingsByOwnerEmail(ownerEmail: string) {
   return selectByOwnerEmail.get(ownerEmail) as FirmSettings | undefined;
 }
@@ -1950,4 +2014,28 @@ export function invalidateAppSessionActivity(input: {
   }
 
   return getAppSessionActivityByIdHash(input.sessionIdHash);
+}
+
+export function appendAuthAuditEvent(input: AuthAuditEvent) {
+  insertAuthAuditEvent.run(
+    input.id,
+    input.createdAt,
+    input.eventType,
+    input.actorOwnerKey,
+    input.actorWorkspaceId,
+    input.actorEmailHash,
+    input.resourceType,
+    input.resourceIdHash,
+    input.provider,
+    input.status,
+    input.reason,
+    input.requestId,
+    input.metadataJson,
+  );
+
+  return input;
+}
+
+export function getAuthAuditEventsByOwnerEmail(ownerEmail: string) {
+  return selectAuthAuditEventsByOwnerEmail.all(ownerEmail) as AuthAuditEvent[];
 }

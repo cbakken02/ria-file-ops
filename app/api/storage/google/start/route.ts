@@ -2,11 +2,12 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAppPrincipal } from "@/lib/auth/principal";
+import { recordAuthAuditEvent } from "@/lib/audit/auth-audit-events";
 import { buildAppUrl } from "@/lib/app-url";
 import { GOOGLE_DRIVE_WRITE_SCOPE } from "@/lib/google-drive";
 
 export async function GET(request: Request) {
-  await requireAppPrincipal();
+  const principal = await requireAppPrincipal();
 
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     redirect("/setup?section=workspace&notice=Google+OAuth+credentials+are+missing+for+this+workspace.");
@@ -39,6 +40,15 @@ export async function GET(request: Request) {
     path: "/",
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
+  });
+
+  recordAuthAuditEvent({
+    eventType: replaceRequested ? "storage.replace_start" : "storage.oauth.start",
+    metadata: { mode: replaceRequested ? "replace" : "connect" },
+    principal,
+    provider: "google_drive",
+    resourceType: "storage_connection",
+    status: "succeeded",
   });
 
   redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);

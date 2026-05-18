@@ -5,6 +5,7 @@ import {
   GOOGLE_DRIVE_READ_SCOPE,
   GOOGLE_DRIVE_WRITE_SCOPE,
 } from "@/lib/google-drive";
+import { recordAuthAuditEvent } from "@/lib/audit/auth-audit-events";
 import { hashSessionIdentifier } from "@/lib/auth/session-activity";
 
 async function refreshGoogleAccessToken(token: {
@@ -98,6 +99,14 @@ export const authOptions: NextAuthOptions = {
       }
 
       if (account) {
+        recordAuthAuditEvent({
+          actorEmail: typeof token.email === "string" ? token.email : null,
+          eventType: "auth.login",
+          metadata: { provider: account.provider },
+          provider: account.provider,
+          resourceType: "app_session",
+          status: "succeeded",
+        });
         token.accessToken = account.access_token;
         token.refreshToken =
           account.refresh_token ??

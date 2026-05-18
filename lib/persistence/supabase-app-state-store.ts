@@ -8,6 +8,7 @@ import {
   runPostgresStatementsSync,
 } from "@/lib/postgres/server";
 import type {
+  AuthAuditEvent,
   AppSessionActivity,
   BugReport,
   ClientMemoryRule,
@@ -61,6 +62,7 @@ type StorageConnectionRow = {
 };
 
 type AppSessionActivityRow = AppSessionActivity;
+type AuthAuditEventRow = AuthAuditEvent;
 
 type FilingEventRow = {
   id: string;
@@ -1500,6 +1502,87 @@ export function invalidateAppSessionActivity(input: {
   );
 
   return mapAppSessionActivityRow(result.rows[0]);
+}
+
+export function appendAuthAuditEvent(input: AuthAuditEvent) {
+  const result = queryPostgresSync<AuthAuditEventRow>(
+    `
+      INSERT INTO public.auth_audit_events (
+        id,
+        created_at,
+        event_type,
+        actor_owner_key,
+        actor_workspace_id,
+        actor_email_hash,
+        resource_type,
+        resource_id_hash,
+        provider,
+        status,
+        reason,
+        request_id,
+        metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
+      RETURNING
+        id,
+        created_at AS "createdAt",
+        event_type AS "eventType",
+        actor_owner_key AS "actorOwnerKey",
+        actor_workspace_id AS "actorWorkspaceId",
+        actor_email_hash AS "actorEmailHash",
+        resource_type AS "resourceType",
+        resource_id_hash AS "resourceIdHash",
+        provider,
+        status,
+        reason,
+        request_id AS "requestId",
+        metadata::text AS "metadataJson"
+    `,
+    [
+      input.id,
+      input.createdAt,
+      input.eventType,
+      input.actorOwnerKey,
+      input.actorWorkspaceId,
+      input.actorEmailHash,
+      input.resourceType,
+      input.resourceIdHash,
+      input.provider,
+      input.status,
+      input.reason,
+      input.requestId,
+      input.metadataJson,
+    ],
+  );
+
+  return result.rows[0] ?? null;
+}
+
+export function getAuthAuditEventsByOwnerEmail(ownerEmail: string) {
+  const result = queryPostgresSync<AuthAuditEventRow>(
+    `
+      SELECT
+        id,
+        created_at AS "createdAt",
+        event_type AS "eventType",
+        actor_owner_key AS "actorOwnerKey",
+        actor_workspace_id AS "actorWorkspaceId",
+        actor_email_hash AS "actorEmailHash",
+        resource_type AS "resourceType",
+        resource_id_hash AS "resourceIdHash",
+        provider,
+        status,
+        reason,
+        request_id AS "requestId",
+        metadata::text AS "metadataJson"
+      FROM public.auth_audit_events
+      WHERE actor_owner_key = $1
+      ORDER BY created_at DESC
+      LIMIT 200
+    `,
+    [ownerEmail],
+  );
+
+  return result.rows;
 }
 
 function getStorageConnectionByOwnerAndIdentity(

@@ -1,4 +1,5 @@
 import type { Session } from "next-auth";
+import { recordAuthAuditEvent } from "@/lib/audit/auth-audit-events";
 import {
   getAppPrincipalFromSession,
   getLegacyOwnerEmail,
@@ -162,6 +163,12 @@ export async function resolveActiveStorageAuthorizationForSession(
   const principal = getPrincipalFromSessionOrNull(session);
 
   if (!session?.user || !principal) {
+    recordAuthAuditEvent({
+      eventType: "storage.access.denied",
+      reason: "unauthenticated",
+      resourceType: "storage_connection",
+      status: "denied",
+    });
     return {
       ok: false,
       error: options.signInMessage ?? "Sign in before using storage.",
@@ -176,6 +183,19 @@ export async function resolveActiveStorageAuthorizationForSession(
   const ownerEmail = getLegacyOwnerEmail(principal);
 
   if (!activeConnection || activeConnection.status !== "connected") {
+    recordAuthAuditEvent({
+      eventType: "storage.access.denied",
+      metadata: {
+        hasActiveConnection: Boolean(activeConnection),
+        status: activeConnection?.status ?? null,
+      },
+      principal,
+      provider: activeConnection?.provider ?? null,
+      reason: activeConnection?.status ?? "missing_active_connection",
+      resourceId: activeConnection?.id ?? null,
+      resourceType: "storage_connection",
+      status: "denied",
+    });
     return {
       ok: false,
       error:
@@ -310,20 +330,7 @@ async function refreshStorageConnectionIfNeeded(connection: StorageConnection) {
   }
 
   if (!connection.refreshToken) {
-    return saveStorageConnectionForOwner({
-      ownerEmail: connection.ownerEmail,
-      provider: connection.provider,
-      accountEmail: connection.accountEmail,
-      accountName: connection.accountName,
-      accountImage: connection.accountImage,
-      externalAccountId: connection.externalAccountId,
-      accessToken: connection.accessToken,
-      refreshToken: connection.refreshToken,
-      expiresAt: connection.expiresAt,
-      grantedScopes: connection.grantedScopes,
-      status: "needs_reauth",
-      makePrimary: connection.isPrimary,
-    });
+    return markStorageConnectionNeedsReauth(connection, "missing_refresh_token");
   }
 
   try {
@@ -347,20 +354,7 @@ async function refreshStorageConnectionIfNeeded(connection: StorageConnection) {
     };
 
     if (!response.ok || !refreshed.access_token) {
-      return saveStorageConnectionForOwner({
-        ownerEmail: connection.ownerEmail,
-        provider: connection.provider,
-        accountEmail: connection.accountEmail,
-        accountName: connection.accountName,
-        accountImage: connection.accountImage,
-        externalAccountId: connection.externalAccountId,
-        accessToken: connection.accessToken,
-        refreshToken: connection.refreshToken,
-        expiresAt: connection.expiresAt,
-        grantedScopes: connection.grantedScopes,
-        status: "needs_reauth",
-        makePrimary: connection.isPrimary,
-      });
+      return markStorageConnectionNeedsReauth(connection, "refresh_failed");
     }
 
     return saveStorageConnectionForOwner({
@@ -384,20 +378,7 @@ async function refreshStorageConnectionIfNeeded(connection: StorageConnection) {
       makePrimary: connection.isPrimary,
     });
   } catch {
-    return saveStorageConnectionForOwner({
-      ownerEmail: connection.ownerEmail,
-      provider: connection.provider,
-      accountEmail: connection.accountEmail,
-      accountName: connection.accountName,
-      accountImage: connection.accountImage,
-      externalAccountId: connection.externalAccountId,
-      accessToken: connection.accessToken,
-      refreshToken: connection.refreshToken,
-      expiresAt: connection.expiresAt,
-      grantedScopes: connection.grantedScopes,
-      status: "needs_reauth",
-      makePrimary: connection.isPrimary,
-    });
+    return markStorageConnectionNeedsReauth(connection, "refresh_exception");
   }
 }
 
@@ -474,7 +455,24 @@ function syncSessionGoogleConnection(session: Session, principal: AppPrincipal) 
   });
 }
 
-export function markStorageConnectionNeedsReauth(connection: StorageConnection) {
+export function markStorageConnectionNeedsReauth(
+  connection: StorageConnection,
+  reason = "provider_access_failed",
+) {
+  recordAuthAuditEvent({
+    actorOwnerKey: connection.ownerEmail,
+    eventType: "storage.needs_reauth",
+    metadata: {
+      accountPresent: Boolean(connection.accountEmail || connection.accountName),
+      reason,
+    },
+    provider: connection.provider,
+    reason,
+    resourceId: connection.id,
+    resourceType: "storage_connection",
+    status: "failed",
+  });
+
   return saveStorageConnectionForOwner({
     ownerEmail: connection.ownerEmail,
     provider: connection.provider,

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getLegacyOwnerEmail, requireAppPrincipal } from "@/lib/auth/principal";
+import { recordAuthAuditEvent } from "@/lib/audit/auth-audit-events";
 import { buildAppUrl } from "@/lib/app-url";
 import {
   getPrimaryStorageConnectionByOwnerEmail,
@@ -40,6 +41,15 @@ export async function GET(request: Request) {
   cookieStore.delete("storage_google_oauth_mode");
 
   if (error) {
+    recordAuthAuditEvent({
+      eventType: "storage.oauth.callback_denied",
+      metadata: { providerError: error },
+      principal,
+      provider: "google_drive",
+      reason: "provider_error",
+      resourceType: "storage_connection",
+      status: "denied",
+    });
     redirect(
       `/setup?section=workspace&notice=${encodeURIComponent(
         `Google returned an authorization error: ${error}.`,
@@ -48,6 +58,20 @@ export async function GET(request: Request) {
   }
 
   if (!code || !state || !savedFlow || state !== savedFlow.state) {
+    recordAuthAuditEvent({
+      eventType: "storage.oauth.callback_denied",
+      metadata: {
+        hasCode: Boolean(code),
+        hasCookieFlow: Boolean(savedFlow),
+        hasState: Boolean(state),
+        mode: savedFlow?.mode ?? null,
+      },
+      principal,
+      provider: "google_drive",
+      reason: "invalid_state",
+      resourceType: "storage_connection",
+      status: "denied",
+    });
     redirect("/setup?section=workspace&notice=The+storage+connection+flow+could+not+be+verified.");
   }
 
@@ -70,6 +94,15 @@ export async function GET(request: Request) {
   const tokenJson = (await tokenResponse.json()) as GoogleTokenResponse;
 
   if (!tokenResponse.ok || !tokenJson.access_token) {
+    recordAuthAuditEvent({
+      eventType: "storage.oauth.callback_denied",
+      metadata: { mode: savedFlow.mode, tokenStatus: tokenResponse.status },
+      principal,
+      provider: "google_drive",
+      reason: "token_exchange_failed",
+      resourceType: "storage_connection",
+      status: "denied",
+    });
     redirect("/setup?section=workspace&notice=Google+did+not+return+a+usable+storage+token.");
   }
 
@@ -85,6 +118,15 @@ export async function GET(request: Request) {
   const userInfo = (await userInfoResponse.json()) as GoogleUserInfo;
 
   if (!userInfoResponse.ok || !userInfo.email) {
+    recordAuthAuditEvent({
+      eventType: "storage.oauth.callback_denied",
+      metadata: { mode: savedFlow.mode, userInfoStatus: userInfoResponse.status },
+      principal,
+      provider: "google_drive",
+      reason: "missing_account_details",
+      resourceType: "storage_connection",
+      status: "denied",
+    });
     redirect("/setup?section=workspace&notice=Google+did+not+return+account+details+for+that+connection.");
   }
 
@@ -100,6 +142,20 @@ export async function GET(request: Request) {
   });
 
   if (!decision.ok) {
+    recordAuthAuditEvent({
+      actorEmail: userInfo.email,
+      eventType: "storage.replace_denied",
+      metadata: {
+        activeAccountLabelPresent: Boolean(decision.activeAccountLabel),
+        candidateAccountPresent: Boolean(userInfo.email),
+        mode: savedFlow.mode,
+      },
+      principal,
+      provider: "google_drive",
+      reason: decision.mode,
+      resourceType: "storage_connection",
+      status: "denied",
+    });
     redirect(
       `/setup?section=workspace&notice=${encodeURIComponent(
         `Storage was not changed. This workspace is already connected to ${decision.activeAccountLabel}. Use Replace storage connection to connect ${userInfo.email}.`,
@@ -129,6 +185,26 @@ export async function GET(request: Request) {
       typeof tokenJson.scope === "string" ? tokenJson.scope.split(" ") : [],
     status: "connected",
     makePrimary: decision.makePrimary,
+  });
+
+  recordAuthAuditEvent({
+    actorEmail: userInfo.email,
+    eventType:
+      decision.mode === "replace"
+        ? "storage.replace_success"
+        : decision.mode === "reconnect"
+          ? "storage.reconnect"
+          : "storage.oauth.callback_success",
+    metadata: {
+      mode: decision.mode,
+      scopeCount:
+        typeof tokenJson.scope === "string" ? tokenJson.scope.split(" ").length : 0,
+    },
+    principal,
+    provider: "google_drive",
+    resourceId: externalAccountId ?? userInfo.email,
+    resourceType: "storage_connection",
+    status: "succeeded",
   });
 
   const notice =
