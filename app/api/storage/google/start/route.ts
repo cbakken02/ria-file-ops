@@ -3,6 +3,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { buildAppUrl } from "@/lib/app-url";
+import {
+  authRateLimitResponse,
+  checkStorageOAuthStartRateLimit,
+} from "@/lib/auth-rate-limit";
 import { GOOGLE_DRIVE_WRITE_SCOPE } from "@/lib/google-drive";
 
 export async function GET(request: Request) {
@@ -14,6 +18,14 @@ export async function GET(request: Request) {
 
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     redirect("/setup?section=workspace&notice=Google+OAuth+credentials+are+missing+for+this+workspace.");
+  }
+
+  const rateLimit = checkStorageOAuthStartRateLimit(
+    request,
+    session.user.email,
+  );
+  if (rateLimit) {
+    return authRateLimitResponse(rateLimit);
   }
 
   const state = crypto.randomUUID();

@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { buildAppUrl } from "@/lib/app-url";
 import {
+  authRateLimitResponse,
+  checkStorageOAuthCallbackRateLimit,
+} from "@/lib/auth-rate-limit";
+import {
   getPrimaryStorageConnectionByOwnerEmail,
   saveStorageConnectionForOwner,
 } from "@/lib/db";
@@ -46,6 +50,14 @@ export async function GET(request: Request) {
 
   if (!code || !state || !savedState || state !== savedState) {
     redirect("/setup?section=workspace&notice=The+storage+connection+flow+could+not+be+verified.");
+  }
+
+  const rateLimit = checkStorageOAuthCallbackRateLimit(
+    request,
+    session.user.email,
+  );
+  if (rateLimit) {
+    return authRateLimitResponse(rateLimit);
   }
 
   const redirectUri = buildAppUrl("/api/storage/google/callback", request);
