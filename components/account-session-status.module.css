@@ -93,6 +93,18 @@
   white-space: nowrap;
 }
 
+.inlineLink {
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(244, 213, 154, 0.6);
+  text-underline-offset: 3px;
+}
+
+.inlineLink:hover {
+  text-decoration-color: currentColor;
+}
+
 .statusMessage {
   margin: 10px 14px 0;
   font-size: 0.76rem;

@@ -183,7 +183,7 @@ export function AccountMenu({
         method: "POST",
       });
     } finally {
-      await signOut({ callbackUrl: "/" });
+      await signOut({ callbackUrl: "/login?reason=logged_out" });
     }
   }
 
