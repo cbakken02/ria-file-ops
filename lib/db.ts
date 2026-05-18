@@ -113,6 +113,42 @@ export type AppSessionActivity = {
   updatedAt: string;
 };
 
+export type AuthAuditEventType =
+  | "auth.login"
+  | "auth.logout"
+  | "auth.session.idle_expired"
+  | "auth.session.absolute_expired"
+  | "auth.session.invalidated"
+  | "auth.session.keepalive"
+  | "auth.access.denied"
+  | "storage.oauth.start"
+  | "storage.oauth.callback_success"
+  | "storage.oauth.callback_denied"
+  | "storage.reconnect"
+  | "storage.replace_start"
+  | "storage.replace_success"
+  | "storage.replace_denied"
+  | "storage.needs_reauth"
+  | "storage.access.denied"
+  | "preview.file.access_denied"
+  | "owner_scope.denied";
+
+export type AuthAuditEvent = {
+  id: string;
+  createdAt: string;
+  eventType: AuthAuditEventType;
+  actorOwnerKey: string | null;
+  actorWorkspaceId: string | null;
+  actorEmailHash: string | null;
+  resourceType: string | null;
+  resourceIdHash: string | null;
+  provider: string | null;
+  status: string | null;
+  reason: string | null;
+  requestId: string | null;
+  metadataJson: string;
+};
+
 export type FilingEvent = {
   id: string;
   ownerEmail: string;
@@ -514,4 +550,27 @@ export function invalidateAppSessionActivity(input: {
   invalidatedAt: string;
 }): AppSessionActivity | null {
   return getActiveAppStateStore().invalidateAppSessionActivity(input);
+}
+
+export function appendAuthAuditEvent(input: AuthAuditEvent): AuthAuditEvent | null {
+  try {
+    return getActiveAppStateStore().appendAuthAuditEvent(input);
+  } catch (error) {
+    if (!isSupabasePersistence()) {
+      throw error;
+    }
+
+    console.warn("[auth-audit] append failed", {
+      message: getErrorMessage(error),
+    });
+    return null;
+  }
+}
+
+export function getAuthAuditEventsByOwnerEmail(
+  ownerEmail: string,
+): AuthAuditEvent[] {
+  return readAppStateValue("auth audit events", [], () =>
+    getActiveAppStateStore().getAuthAuditEventsByOwnerEmail(ownerEmail),
+  );
 }

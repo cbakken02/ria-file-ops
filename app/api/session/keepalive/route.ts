@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { getApiPrincipalFromSession } from "@/lib/auth/principal";
 import { getAccountSessionStatusForSession } from "@/lib/auth/account-session-status";
+import { recordAuthAuditEvent } from "@/lib/audit/auth-audit-events";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,13 @@ export async function POST() {
     session,
     principalResult.principal,
   );
+  recordAuthAuditEvent({
+    eventType: "auth.session.keepalive",
+    metadata: { sessionStatus: status.session.status },
+    principal: principalResult.principal,
+    resourceType: "app_session",
+    status: "succeeded",
+  });
 
   return Response.json(status, {
     headers: {

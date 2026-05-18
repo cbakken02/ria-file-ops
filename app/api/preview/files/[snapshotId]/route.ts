@@ -1,4 +1,5 @@
 import { requireApiPrincipal } from "@/lib/auth/principal";
+import { recordAuthAuditEvent } from "@/lib/audit/auth-audit-events";
 import { previewFileSnapshotBelongsToOwner } from "@/lib/preview-file-access";
 import { readPreviewFileSnapshot } from "@/lib/preview-file-snapshots";
 
@@ -23,6 +24,14 @@ export async function GET(
   });
 
   if (!belongsToOwner) {
+    recordAuthAuditEvent({
+      eventType: "preview.file.access_denied",
+      principal: principalResult.principal,
+      reason: "snapshot_not_owned_by_principal",
+      resourceId: snapshotId,
+      resourceType: "preview_file_snapshot",
+      status: "denied",
+    });
     return new Response("Preview snapshot not found.", { status: 404 });
   }
 

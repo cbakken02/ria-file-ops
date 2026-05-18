@@ -108,6 +108,7 @@ export async function enforceSessionActivity(
   try {
     const existing = store.get(sessionIdHash);
     if (existing?.invalidatedAt) {
+      await recordSessionActivityDenied("invalidated", principal, sessionIdHash);
       throw new SessionActivityError("invalidated");
     }
 
@@ -115,6 +116,11 @@ export async function enforceSessionActivity(
       sessionCreatedAt.getTime() + SESSION_ABSOLUTE_TIMEOUT_MS,
     );
     if (now.getTime() >= absoluteExpiresAt.getTime()) {
+      await recordSessionActivityDenied(
+        "absolute_timeout",
+        principal,
+        sessionIdHash,
+      );
       throw new SessionActivityError("absolute_timeout");
     }
 
@@ -128,6 +134,7 @@ export async function enforceSessionActivity(
       lastActivityAt.getTime() + SESSION_IDLE_TIMEOUT_MS,
     );
     if (now.getTime() >= idleExpiresAt.getTime()) {
+      await recordSessionActivityDenied("idle_timeout", principal, sessionIdHash);
       throw new SessionActivityError("idle_timeout");
     }
 
@@ -196,13 +203,24 @@ export async function invalidateSessionActivityForSession(
     return null;
   }
 
-  return store.invalidate({
+  const record = store.invalidate({
     invalidatedAt: now.toISOString(),
     ownerEmail: principal.ownerKey,
     sessionIdHash,
     userId: principal.userId,
     workspaceId: principal.workspaceId,
   });
+
+  await recordSessionActivityEvent({
+    eventType: "auth.session.invalidated",
+    metadata: { action: "session_logout", sessionIdHash },
+    principal,
+    resourceId: sessionIdHash,
+    resourceType: "app_session",
+    status: "succeeded",
+  });
+
+  return record;
 }
 
 export function setSessionActivityStoreForTests(
@@ -238,4 +256,46 @@ function parseStoredTimestamp(
   }
 
   return parsed;
+}
+
+async function recordSessionActivityDenied(
+  reason: SessionActivityDenialReason,
+  principal: AppPrincipal,
+  sessionIdHash: string,
+) {
+  const eventType =
+    reason === "idle_timeout"
+      ? "auth.session.idle_expired"
+      : reason === "absolute_timeout"
+        ? "auth.session.absolute_expired"
+        : reason === "invalidated"
+          ? "auth.session.invalidated"
+          : "auth.access.denied";
+
+  await recordSessionActivityEvent({
+    eventType,
+    metadata: { reason, sessionIdHash },
+    principal,
+    reason,
+    resourceId: sessionIdHash,
+    resourceType: "app_session",
+    status: "denied",
+  });
+}
+
+async function recordSessionActivityEvent(input: {
+  eventType:
+    | "auth.session.absolute_expired"
+    | "auth.session.idle_expired"
+    | "auth.session.invalidated"
+    | "auth.access.denied";
+  metadata?: Record<string, unknown>;
+  principal: AppPrincipal;
+  reason?: string;
+  resourceId?: string;
+  resourceType: string;
+  status: "denied" | "succeeded";
+}) {
+  const { recordAuthAuditEvent } = await import("@/lib/audit/auth-audit-events");
+  recordAuthAuditEvent(input);
 }
