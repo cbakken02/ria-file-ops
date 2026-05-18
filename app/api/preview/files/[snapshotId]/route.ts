@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { requireApiPrincipal } from "@/lib/auth/principal";
 import { previewFileSnapshotBelongsToOwner } from "@/lib/preview-file-access";
 import { readPreviewFileSnapshot } from "@/lib/preview-file-snapshots";
 
@@ -10,15 +10,15 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ snapshotId: string }> },
 ) {
-  const session = await auth();
+  const principalResult = await requireApiPrincipal();
 
-  if (!session?.user?.email) {
+  if (!principalResult.ok) {
     return new Response("Unauthorized", { status: 401 });
   }
 
   const { snapshotId } = await context.params;
   const belongsToOwner = await previewFileSnapshotBelongsToOwner({
-    ownerEmail: session.user.email,
+    principal: principalResult.principal,
     snapshotId,
   });
 

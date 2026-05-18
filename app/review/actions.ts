@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/session";
 import {
+  getAppPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
+import {
   createFilingEvent,
   getClientMemoryRulesByOwnerEmail,
   getFirmSettingsByOwnerEmail,
@@ -32,11 +36,8 @@ function normalizeOptionalValue(value: FormDataEntryValue | null) {
 
 export async function saveReviewDecisionAction(formData: FormData) {
   const session = await requireSession();
-  const ownerEmail = session.user?.email;
-
-  if (!ownerEmail) {
-    throw new Error("No signed-in email was found for this session.");
-  }
+  const principal = getAppPrincipalFromSession(session);
+  const ownerEmail = getLegacyOwnerEmail(principal);
 
   const fileId = normalizeOptionalValue(formData.get("fileId"));
   const sourceName = normalizeOptionalValue(formData.get("sourceName"));
@@ -178,10 +179,11 @@ export async function saveReviewDecisionAction(formData: FormData) {
 
 export async function fileApprovedDecisionsAction() {
   const session = await requireSession();
-  const ownerEmail = session.user?.email;
+  const principal = getAppPrincipalFromSession(session);
+  const ownerEmail = getLegacyOwnerEmail(principal);
   const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
 
-  if (!ownerEmail || !activeConnection) {
+  if (!activeConnection) {
     throw new Error("An active storage connection is required to file documents.");
   }
 

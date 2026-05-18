@@ -8,6 +8,7 @@ import {
   type RedactedCanonicalDebugShape,
 } from "@/lib/canonical-persistence";
 import type { CanonicalExtractedDocument } from "@/lib/canonical-extracted-document";
+import { normalizeOwnerEmail } from "@/lib/auth/principal";
 import type { DocumentInsight } from "@/lib/document-intelligence";
 import { DOCUMENT_ANALYSIS_VERSION } from "@/lib/document-intelligence";
 import type { GoogleDriveFile } from "@/lib/google-drive";
@@ -95,12 +96,17 @@ export async function readPreviewAnalysisCache(input: {
   ownerEmail: string;
   file: GoogleDriveFile;
 }) {
+  const ownerEmail = normalizeCacheOwnerEmail(input.ownerEmail);
+  if (!ownerEmail) {
+    return null;
+  }
+
   if (!isSupabasePersistence()) {
     await ensureCacheDir();
 
     try {
       const raw = await fs.readFile(
-        getCachePath(input.ownerEmail, input.file.id),
+        getCachePath(ownerEmail, input.file.id),
         "utf8",
       );
       const entry = JSON.parse(raw) as PreviewAnalysisCacheEntry;
@@ -136,7 +142,7 @@ export async function readPreviewAnalysisCache(input: {
         AND file_id = $3
       LIMIT 1
     `,
-    [input.ownerEmail, input.analysisProfile, input.file.id],
+    [ownerEmail, input.analysisProfile, input.file.id],
   );
 
   const entry = mapPreviewAnalysisCacheRow(result.rows[0]);
@@ -154,12 +160,17 @@ export async function writePreviewAnalysisCache(input: {
   previewSnapshotId: string | null;
   analysisRanAt?: string | null;
 }) {
+  const ownerEmail = normalizeCacheOwnerEmail(input.ownerEmail);
+  if (!ownerEmail) {
+    throw new Error("Preview analysis cache requires ownerEmail.");
+  }
+
   if (!isSupabasePersistence()) {
     await ensureCacheDir();
 
     const existing = await readPreviewAnalysisCache({
       analysisProfile: input.analysisProfile,
-      ownerEmail: input.ownerEmail,
+      ownerEmail,
       file: input.file,
     });
     const now = new Date().toISOString();
@@ -178,7 +189,7 @@ export async function writePreviewAnalysisCache(input: {
       insight: input.insight,
       mimeType: input.file.mimeType,
       modifiedTime: input.file.modifiedTime ?? null,
-      ownerEmail: input.ownerEmail,
+      ownerEmail,
       previewSnapshotId: input.previewSnapshotId,
       sourceName: input.file.name,
       driveSize: input.file.size ?? null,
@@ -186,7 +197,7 @@ export async function writePreviewAnalysisCache(input: {
     };
 
     await fs.writeFile(
-      getCachePath(input.ownerEmail, input.file.id),
+      getCachePath(ownerEmail, input.file.id),
       JSON.stringify(payload),
     );
 
@@ -258,7 +269,7 @@ export async function writePreviewAnalysisCache(input: {
     `,
     [
       crypto.randomUUID(),
-      input.ownerEmail,
+      ownerEmail,
       input.analysisProfile,
       DOCUMENT_ANALYSIS_VERSION,
       input.analysisRanAt ?? now,
@@ -287,12 +298,17 @@ export async function clearPreviewAnalysisCacheForFiles(input: {
   ownerEmail: string;
   files: GoogleDriveFile[];
 }) {
+  const ownerEmail = normalizeCacheOwnerEmail(input.ownerEmail);
+  if (!ownerEmail) {
+    return;
+  }
+
   if (!isSupabasePersistence()) {
     await ensureCacheDir();
 
     await Promise.all(
       input.files.map((file) =>
-        fs.unlink(getCachePath(input.ownerEmail, file.id)).catch(() => {}),
+        fs.unlink(getCachePath(ownerEmail, file.id)).catch(() => {}),
       ),
     );
     return;
@@ -309,11 +325,16 @@ export async function clearPreviewAnalysisCacheForFiles(input: {
       WHERE owner_email = $1
         AND file_id = ANY($2::text[])
     `,
-    [input.ownerEmail, fileIds],
+    [ownerEmail, fileIds],
   );
 }
 
 export async function clearPreviewAnalysisCacheForOwner(ownerEmail: string) {
+  const normalizedOwnerEmail = normalizeCacheOwnerEmail(ownerEmail);
+  if (!normalizedOwnerEmail) {
+    return;
+  }
+
   if (!isSupabasePersistence()) {
     await ensureCacheDir();
 
@@ -330,7 +351,7 @@ export async function clearPreviewAnalysisCacheForOwner(ownerEmail: string) {
             const raw = await fs.readFile(filePath, "utf8");
             const parsed = JSON.parse(raw) as PreviewAnalysisCacheEntry;
 
-            if (parsed.ownerEmail !== ownerEmail) {
+            if (parsed.ownerEmail !== normalizedOwnerEmail) {
               return;
             }
 
@@ -348,7 +369,7 @@ export async function clearPreviewAnalysisCacheForOwner(ownerEmail: string) {
       DELETE FROM public.preview_analysis_cache
       WHERE owner_email = $1
     `,
-    [ownerEmail],
+    [normalizedOwnerEmail],
   );
 }
 
@@ -392,4 +413,12 @@ function normalizeJsonValue<T>(value: unknown): T | null {
   }
 
   return value as T;
+}
+
+function normalizeCacheOwnerEmail(ownerEmail: string) {
+  try {
+    return normalizeOwnerEmail(ownerEmail);
+  } catch {
+    return null;
+  }
 }

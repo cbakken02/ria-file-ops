@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { getApiPrincipalFromSession } from "@/lib/auth/principal";
 import {
   getClientMemoryRulesByOwnerEmail,
   getFirmSettingsByOwnerEmail,
@@ -22,6 +23,14 @@ type PreviewRequestBody = {
 
 export async function POST(request: Request) {
   const session = await auth();
+  const principalResult = getApiPrincipalFromSession(session);
+  if (!principalResult.ok) {
+    return Response.json(
+      { error: "Sign in before generating a cleanup preview." },
+      { status: 401 },
+    );
+  }
+
   const storageAuthorization = await resolveActiveStorageAuthorizationForSession(
     session,
     {

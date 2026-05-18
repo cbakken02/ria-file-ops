@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { getLegacyOwnerEmail, requireAppPrincipal } from "@/lib/auth/principal";
 import { buildAppUrl } from "@/lib/app-url";
 import {
   getPrimaryStorageConnectionByOwnerEmail,
@@ -23,11 +23,8 @@ type GoogleUserInfo = {
 };
 
 export async function GET(request: Request) {
-  const session = await auth();
-
-  if (!session?.user?.email) {
-    redirect("/login");
-  }
+  const principal = await requireAppPrincipal();
+  const ownerEmail = getLegacyOwnerEmail(principal);
 
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -91,7 +88,7 @@ export async function GET(request: Request) {
     redirect("/setup?section=workspace&notice=Google+did+not+return+account+details+for+that+connection.");
   }
 
-  const activeConnection = getPrimaryStorageConnectionByOwnerEmail(session.user.email);
+  const activeConnection = getPrimaryStorageConnectionByOwnerEmail(ownerEmail);
   const decision = resolveStorageOAuthConnectionDecision({
     activeConnection,
     candidate: {
@@ -116,7 +113,7 @@ export async function GET(request: Request) {
       : userInfo.sub ?? userInfo.email ?? null;
 
   saveStorageConnectionForOwner({
-    ownerEmail: session.user.email,
+    ownerEmail,
     provider: "google_drive",
     accountEmail: userInfo.email ?? null,
     accountName: userInfo.name ?? null,

@@ -8,6 +8,10 @@ import {
   getFirmSettingsByOwnerEmail,
   getReviewDecisionsByOwnerEmail,
 } from "@/lib/db";
+import {
+  getAppPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
 import { summarizePreviewNormalizationChanges } from "@/lib/processing-preview";
 import {
   readPreviewSnapshot,
@@ -37,16 +41,17 @@ export async function IntakeWorkspacePage({
   const scanStatus = normalizeScanStatus(resolvedSearchParams?.scanStatus);
   const activeTab = normalizeTab(resolvedSearchParams?.tab);
   const session = await requireSession();
-  const ownerEmail = session.user?.email;
+  const principal = getAppPrincipalFromSession(session);
+  const ownerEmail = getLegacyOwnerEmail(principal);
   const displayConnection = await getActiveStorageConnectionForSession(session);
   const activeStorageProvider = displayConnection?.provider ?? null;
-  const settings = ownerEmail ? getFirmSettingsByOwnerEmail(ownerEmail) ?? null : null;
+  const settings = getFirmSettingsByOwnerEmail(ownerEmail) ?? null;
   const namingRules = parseNamingRules(
     settings?.namingRulesJson,
     settings?.namingConvention,
   );
-  const savedDecisions = ownerEmail ? getReviewDecisionsByOwnerEmail(ownerEmail) : [];
-  const filingEvents = ownerEmail ? getFilingEventsByOwnerEmail(ownerEmail) : [];
+  const savedDecisions = getReviewDecisionsByOwnerEmail(ownerEmail);
+  const filingEvents = getFilingEventsByOwnerEmail(ownerEmail);
   const savedDecisionMap = new Map(savedDecisions.map((decision) => [decision.fileId, decision]));
   const snapshot = await readPreviewSnapshot(ownerEmail);
   const snapshotItems = restorePreviewItemsFromSnapshot(snapshot);

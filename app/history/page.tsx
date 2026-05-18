@@ -4,6 +4,10 @@ import { ProductShell } from "@/components/product-shell";
 import { StorageStatusPanel } from "@/components/storage-status-panel";
 import { WorkspaceStorageStatus } from "@/components/workspace-storage-status";
 import { HistoryEventsList } from "@/app/history/history-events";
+import {
+  getAppPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
 import { getFilingEventsByOwnerEmail } from "@/lib/db";
 import {
   displayHistoryActor,
@@ -46,7 +50,8 @@ export default async function HistoryPage({
   const mover = normalizeHistoryMoverFilter(resolvedSearchParams?.mover);
   const sort = normalizeHistorySortOption(resolvedSearchParams?.sort);
   const session = await requireSession();
-  const ownerEmail = session.user?.email ?? "";
+  const principal = getAppPrincipalFromSession(session);
+  const ownerEmail = getLegacyOwnerEmail(principal);
   const displayConnection = getCachedActiveStorageConnectionForSession(session);
   const activeStorageProvider = displayConnection?.provider ?? null;
   const hasCachedStorageAccess = displayConnection?.status === "connected";
@@ -57,7 +62,7 @@ export default async function HistoryPage({
     ? "Filing history can show cached events, but live exports need a reconnect."
     : "Connect storage to use Filing History.";
   const allEvents =
-    ownerEmail && hasCachedStorageAccess && activeStorageProvider
+    hasCachedStorageAccess && activeStorageProvider
       ? getFilingEventsByOwnerEmail(ownerEmail).filter(
           (event) => event.storageProvider === activeStorageProvider,
         )

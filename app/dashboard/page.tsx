@@ -3,6 +3,10 @@ import { ProductShell } from "@/components/product-shell";
 import { StorageStatusPanel } from "@/components/storage-status-panel";
 import { WorkspaceStorageStatus } from "@/components/workspace-storage-status";
 import {
+  getAppPrincipalFromSession,
+  getLegacyOwnerEmail,
+} from "@/lib/auth/principal";
+import {
   getFilingEventsByOwnerEmail,
   getReviewDecisionsByOwnerEmail,
   type FilingEvent,
@@ -17,7 +21,8 @@ import styles from "./page.module.css";
 
 export default async function DashboardPage() {
   const session = await requireSession();
-  const ownerEmail = session.user?.email ?? "";
+  const principal = getAppPrincipalFromSession(session);
+  const ownerEmail = getLegacyOwnerEmail(principal);
   const displayConnection = getCachedActiveStorageConnectionForSession(session);
   const hasCachedStorageAccess = displayConnection?.status === "connected";
   const activeStorageProvider = displayConnection?.provider ?? null;
@@ -29,7 +34,7 @@ export default async function DashboardPage() {
     : "Connect storage to use Dashboard.";
 
   const [previewSnapshot, reviewDecisions, filingEvents] =
-    ownerEmail && hasCachedStorageAccess
+    hasCachedStorageAccess
       ? await Promise.all([
           readDashboardValue<PreviewSnapshot | null>(
             "preview snapshot",

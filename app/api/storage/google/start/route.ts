@@ -1,16 +1,12 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { requireAppPrincipal } from "@/lib/auth/principal";
 import { buildAppUrl } from "@/lib/app-url";
 import { GOOGLE_DRIVE_WRITE_SCOPE } from "@/lib/google-drive";
 
 export async function GET(request: Request) {
-  const session = await auth();
-
-  if (!session?.user?.email) {
-    redirect("/login");
-  }
+  await requireAppPrincipal();
 
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     redirect("/setup?section=workspace&notice=Google+OAuth+credentials+are+missing+for+this+workspace.");

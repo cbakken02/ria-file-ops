@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  getLegacyOwnerEmail,
+  requireAppPrincipal,
+} from "@/lib/auth/principal";
+import { assertCanUseStorageConnection } from "@/lib/auth/resource-guards";
+import {
   deleteStorageConnectionForOwner,
   getStorageConnectionByOwnerAndId,
   saveFirmSettingsForOwner,
@@ -20,7 +25,6 @@ import {
   serializeFolderTemplate,
   type ReviewRuleValue,
 } from "@/lib/setup-config";
-import { requireSession } from "@/lib/session";
 
 export type SaveSettingsState = {
   status: "idle" | "success" | "error";
@@ -41,12 +45,8 @@ export async function saveFirmSettings(
   formData: FormData,
 ): Promise<SaveSettingsState> {
   try {
-    const session = await requireSession();
-    const ownerEmail = session.user?.email;
-
-    if (!ownerEmail) {
-      throw new Error("No signed-in email was found for this session.");
-    }
+    const principal = await requireAppPrincipal();
+    const ownerEmail = getLegacyOwnerEmail(principal);
 
     const firmName = getTextValue(formData, "firmName");
     const sourceFolder = parseFolderValue(
@@ -119,8 +119,8 @@ export async function saveFirmSettings(
 
 export async function removeStorageConnectionAction(connectionId: string) {
   try {
-    const session = await requireSession();
-    const ownerEmail = session.user?.email ?? "";
+    const principal = await requireAppPrincipal();
+    const ownerEmail = getLegacyOwnerEmail(principal);
     const normalizedConnectionId = connectionId.trim();
 
     if (!ownerEmail || !normalizedConnectionId) {
@@ -135,6 +135,7 @@ export async function removeStorageConnectionAction(connectionId: string) {
     if (!existing) {
       throw new Error("That storage connection could not be found.");
     }
+    assertCanUseStorageConnection(principal, existing);
 
     deleteStorageConnectionForOwner({
       ownerEmail,

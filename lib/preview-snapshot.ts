@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { normalizeOwnerEmail } from "@/lib/auth/principal";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
 import { queryPostgres, withPostgresClient } from "@/lib/postgres/server";
 import type { PreviewItem } from "@/lib/processing-preview";
@@ -53,10 +54,6 @@ function getPreviewSnapshotDir() {
     : path.join(process.cwd(), "data", "preview-snapshots");
 }
 
-function normalizeOwnerEmail(ownerEmail?: string | null) {
-  return ownerEmail?.trim().toLowerCase() || null;
-}
-
 function getOwnerSnapshotPath(ownerEmail: string) {
   const cacheKey = crypto
     .createHash("sha1")
@@ -74,7 +71,7 @@ export async function writePreviewSnapshot(input: PreviewSnapshotWriteInput) {
   const payload = buildPreviewSnapshotPayload(input);
 
   if (!isSupabasePersistence()) {
-    const ownerEmail = normalizeOwnerEmail(input.ownerEmail);
+    const ownerEmail = normalizePreviewOwnerEmail(input.ownerEmail);
     const targetPath = ownerEmail
       ? getOwnerSnapshotPath(ownerEmail)
       : getLegacySnapshotPath();
@@ -83,7 +80,7 @@ export async function writePreviewSnapshot(input: PreviewSnapshotWriteInput) {
     return;
   }
 
-  const ownerEmail = input.ownerEmail?.trim().toLowerCase();
+  const ownerEmail = normalizePreviewOwnerEmail(input.ownerEmail);
   if (!ownerEmail) {
     throw new Error(
       "writePreviewSnapshot requires ownerEmail when PERSISTENCE_BACKEND=supabase.",
@@ -140,7 +137,7 @@ export async function removePreviewSnapshotItems(input: {
   ownerEmail: string;
   sourceFolderFallback?: string | null;
 }) {
-  const ownerEmail = input.ownerEmail.trim().toLowerCase();
+  const ownerEmail = normalizePreviewOwnerEmail(input.ownerEmail);
   const itemIds = Array.from(new Set(input.itemIds.filter(Boolean)));
   if (!ownerEmail || itemIds.length === 0) {
     return null;
@@ -244,7 +241,7 @@ export async function removePreviewSnapshotItems(input: {
 
 export async function readPreviewSnapshot(ownerEmail?: string | null) {
   if (!isSupabasePersistence()) {
-    const normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
+    const normalizedOwnerEmail = normalizePreviewOwnerEmail(ownerEmail);
     const targetPath = normalizedOwnerEmail
       ? getOwnerSnapshotPath(normalizedOwnerEmail)
       : getLegacySnapshotPath();
@@ -257,7 +254,7 @@ export async function readPreviewSnapshot(ownerEmail?: string | null) {
     }
   }
 
-  const normalizedOwnerEmail = ownerEmail?.trim().toLowerCase();
+  const normalizedOwnerEmail = normalizePreviewOwnerEmail(ownerEmail);
   if (!normalizedOwnerEmail) {
     return null;
   }
@@ -294,7 +291,7 @@ export async function readPreviewSnapshot(ownerEmail?: string | null) {
 }
 
 export async function clearPreviewSnapshotForOwner(ownerEmail: string) {
-  const normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
+  const normalizedOwnerEmail = normalizePreviewOwnerEmail(ownerEmail);
   if (!normalizedOwnerEmail) {
     return;
   }
@@ -394,7 +391,7 @@ function buildPreviewSnapshotPayload(
   input: PreviewSnapshotWriteInput,
 ): PreviewSnapshot {
   return {
-    ownerEmail: normalizeOwnerEmail(input.ownerEmail),
+    ownerEmail: normalizePreviewOwnerEmail(input.ownerEmail),
     generatedAt: new Date().toISOString(),
     sourceFolder: input.sourceFolder,
     destinationRoot: input.destinationRoot,
@@ -452,4 +449,12 @@ function buildPreviewSnapshotPayload(
       phase1ReviewPriority: item.phase1ReviewPriority,
     })),
   };
+}
+
+function normalizePreviewOwnerEmail(ownerEmail?: string | null) {
+  try {
+    return normalizeOwnerEmail(ownerEmail ?? "");
+  } catch {
+    return null;
+  }
 }
