@@ -4,11 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { AccountSessionStatus } from "@/components/account-session-status";
+import type { SafeAccountSessionStatus } from "@/lib/auth/account-session-status";
 import type { ProductNavPath } from "@/lib/product-navigation";
 import styles from "./product-shell.module.css";
 
 type AccountMenuProps = {
   accountMeta: string | null;
+  accountSessionStatus: SafeAccountSessionStatus;
   accountSubtitle: string;
   currentPath: ProductNavPath;
   displayName: string;
@@ -18,6 +21,7 @@ type AccountMenuProps = {
 
 export function AccountMenu({
   accountMeta,
+  accountSessionStatus,
   accountSubtitle,
   currentPath,
   displayName,
@@ -232,6 +236,8 @@ export function AccountMenu({
             </div>
           </div>
 
+          <AccountSessionStatus initialStatus={accountSessionStatus} />
+
           <div className={styles.accountMenuLinks} role="menu">
             <Link
               className={
@@ -301,6 +307,13 @@ export function AccountMenu({
             </button>
           </div>
         </div>
+      ) : null}
+
+      {!open ? (
+        <AccountSessionStatus
+          initialStatus={accountSessionStatus}
+          showDetails={false}
+        />
       ) : null}
 
       {reportBugOpen ? (

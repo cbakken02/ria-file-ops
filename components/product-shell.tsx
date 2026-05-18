@@ -1,6 +1,8 @@
 import type { Session } from "next-auth";
 import { AccountMenu } from "@/components/account-menu";
 import { ProductNav } from "@/components/product-nav";
+import { getAppPrincipalFromSession } from "@/lib/auth/principal";
+import { getAccountSessionStatusForSession } from "@/lib/auth/account-session-status";
 import { PRODUCT_NAV_ITEMS, type ProductNavPath } from "@/lib/product-navigation";
 import styles from "./product-shell.module.css";
 
@@ -28,6 +30,11 @@ export async function ProductShell({
   const initials = resolveInitials(displayName, email);
   const profileImage = session.user?.image?.trim() || null;
   const accountSubtitle = email;
+  const principal = getAppPrincipalFromSession(session);
+  const accountSessionStatus = await getAccountSessionStatusForSession(
+    session,
+    principal,
+  );
 
   return (
     <div className={styles.shell}>
@@ -49,12 +56,13 @@ export async function ProductShell({
 
         <AccountMenu
           accountMeta={null}
+          accountSessionStatus={accountSessionStatus}
           accountSubtitle={accountSubtitle}
-        currentPath={currentPath}
-        displayName={displayName}
-        image={profileImage}
-        initials={initials}
-      />
+          currentPath={currentPath}
+          displayName={displayName}
+          image={profileImage}
+          initials={initials}
+        />
       </aside>
 
       <div className={styles.content}>{children}</div>
