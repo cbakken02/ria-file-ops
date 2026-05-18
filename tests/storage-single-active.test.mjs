@@ -188,13 +188,15 @@ test("storage connection API and OAuth callback expose single-active behavior", 
   const apiSource = readRepoFile("app/api/storage/connections/route.ts");
   const startSource = readRepoFile("app/api/storage/google/start/route.ts");
   const callbackSource = readRepoFile("app/api/storage/google/callback/route.ts");
+  const oauthFlowSource = readRepoFile("lib/storage/google-oauth-flow.ts");
 
   assert.match(apiSource, /activeConnection/);
   assert.match(apiSource, /status/);
   assert.match(apiSource, /canReconnect/);
   assert.match(apiSource, /canReplace/);
   assert.match(apiSource, /connections: connections\.map/);
-  assert.match(startSource, /storage_google_oauth_flow/);
+  assert.match(startSource, /GOOGLE_STORAGE_OAUTH_FLOW_COOKIE/);
+  assert.match(oauthFlowSource, /storage_google_oauth_flow/);
   assert.match(startSource, /buildGoogleOAuthFlowCookie/);
   assert.match(startSource, /replace/);
   assert.match(callbackSource, /parseGoogleOAuthFlowCookie/);
