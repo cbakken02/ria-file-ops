@@ -1759,12 +1759,7 @@ export function deleteStorageConnectionForOwner(input: {
     deleteStorageConnectionByOwnerAndId.run(input.ownerEmail, input.connectionId);
 
     if (existing.isPrimary) {
-      const remaining = getStorageConnectionsByOwnerEmail(input.ownerEmail);
-
-      if (remaining.length > 0) {
-        clearPrimaryStorageConnections.run(now, input.ownerEmail);
-        markStorageConnectionPrimary.run(now, input.ownerEmail, remaining[0]!.id);
-      }
+      clearPrimaryStorageConnections.run(now, input.ownerEmail);
     }
   })();
 

@@ -6,6 +6,7 @@ import {
   getPrimaryStorageConnectionByOwnerEmail,
   saveStorageConnectionForOwner,
 } from "@/lib/db";
+import { resolveStorageOAuthConnectionDecision } from "@/lib/storage-connections";
 
 type GoogleTokenResponse = {
   access_token?: string;
@@ -33,8 +34,13 @@ export async function GET(request: Request) {
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
   const cookieStore = await cookies();
-  const savedState = cookieStore.get("storage_google_oauth_state")?.value;
+  const savedFlow = parseGoogleOAuthFlowCookie(
+    cookieStore.get("storage_google_oauth_flow")?.value,
+  );
+  cookieStore.delete("storage_google_oauth_flow");
+  // Clear legacy split-flow cookies if an older browser session still has them.
   cookieStore.delete("storage_google_oauth_state");
+  cookieStore.delete("storage_google_oauth_mode");
 
   if (error) {
     redirect(
@@ -44,7 +50,7 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!code || !state || !savedState || state !== savedState) {
+  if (!code || !state || !savedFlow || state !== savedFlow.state) {
     redirect("/setup?section=workspace&notice=The+storage+connection+flow+could+not+be+verified.");
   }
 
@@ -85,13 +91,37 @@ export async function GET(request: Request) {
     redirect("/setup?section=workspace&notice=Google+did+not+return+account+details+for+that+connection.");
   }
 
+  const activeConnection = getPrimaryStorageConnectionByOwnerEmail(session.user.email);
+  const decision = resolveStorageOAuthConnectionDecision({
+    activeConnection,
+    candidate: {
+      accountEmail: userInfo.email,
+      externalAccountId: userInfo.sub ?? userInfo.email ?? null,
+      provider: "google_drive",
+    },
+    replaceRequested: savedFlow.mode === "replace",
+  });
+
+  if (!decision.ok) {
+    redirect(
+      `/setup?section=workspace&notice=${encodeURIComponent(
+        `Storage was not changed. This workspace is already connected to ${decision.activeAccountLabel}. Use Replace storage connection to connect ${userInfo.email}.`,
+      )}`,
+    );
+  }
+
+  const externalAccountId =
+    decision.mode === "reconnect" && activeConnection
+      ? activeConnection.externalAccountId ?? userInfo.sub ?? userInfo.email ?? null
+      : userInfo.sub ?? userInfo.email ?? null;
+
   saveStorageConnectionForOwner({
     ownerEmail: session.user.email,
     provider: "google_drive",
     accountEmail: userInfo.email ?? null,
     accountName: userInfo.name ?? null,
     accountImage: userInfo.picture ?? null,
-    externalAccountId: userInfo.sub ?? userInfo.email ?? null,
+    externalAccountId,
     accessToken: tokenJson.access_token,
     refreshToken: tokenJson.refresh_token ?? null,
     expiresAt:
@@ -101,12 +131,32 @@ export async function GET(request: Request) {
     grantedScopes:
       typeof tokenJson.scope === "string" ? tokenJson.scope.split(" ") : [],
     status: "connected",
-    makePrimary: !getPrimaryStorageConnectionByOwnerEmail(session.user.email),
+    makePrimary: decision.makePrimary,
   });
+
+  const notice =
+    decision.mode === "replace"
+      ? `${userInfo.email} replaced the workspace storage connection.`
+      : decision.mode === "reconnect"
+        ? `${userInfo.email} was reconnected.`
+        : `${userInfo.email} was connected as workspace storage.`;
 
   redirect(
     `/setup?section=workspace&notice=${encodeURIComponent(
-      `${userInfo.email} was added as a storage connection.`,
+      notice,
     )}`,
   );
+}
+
+function parseGoogleOAuthFlowCookie(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const [state, mode] = value.split(":", 2);
+  if (!state || (mode !== "connect" && mode !== "replace")) {
+    return null;
+  }
+
+  return { mode, state };
 }

@@ -16,6 +16,10 @@ export async function GET(request: Request) {
     redirect("/setup?section=workspace&notice=Google+OAuth+credentials+are+missing+for+this+workspace.");
   }
 
+  const url = new URL(request.url);
+  const replaceRequested =
+    url.searchParams.get("replace") === "1" ||
+    url.searchParams.get("mode") === "replace";
   const state = crypto.randomUUID();
   const redirectUri = buildAppUrl("/api/storage/google/callback", request);
   const params = new URLSearchParams({
@@ -30,7 +34,10 @@ export async function GET(request: Request) {
   });
 
   const cookieStore = await cookies();
-  cookieStore.set("storage_google_oauth_state", state, {
+  cookieStore.set("storage_google_oauth_flow", buildGoogleOAuthFlowCookie({
+    mode: replaceRequested ? "replace" : "connect",
+    state,
+  }), {
     httpOnly: true,
     maxAge: 60 * 10,
     path: "/",
@@ -39,4 +46,11 @@ export async function GET(request: Request) {
   });
 
   redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+}
+
+function buildGoogleOAuthFlowCookie(input: {
+  mode: "connect" | "replace";
+  state: string;
+}) {
+  return `${input.state}:${input.mode}`;
 }

@@ -8,6 +8,8 @@ import {
 } from "@/lib/db";
 import { requireSession } from "@/lib/session";
 
+// Internal migration/admin escape hatch only. Normal workspace UI is single-storage
+// and must not let users switch among historical connection records.
 export async function setActiveStorageForPathAction(formData: FormData) {
   const session = await requireSession();
   const ownerEmail = session.user?.email ?? "";
@@ -15,6 +17,15 @@ export async function setActiveStorageForPathAction(formData: FormData) {
   const returnTo = normalizeReturnPath(
     String(formData.get("returnTo") ?? "").trim(),
   );
+
+  if (!isInternalStorageSwitchingEnabled()) {
+    redirect(
+      withNotice(
+        returnTo,
+        "Storage switching is disabled. Use Replace storage connection instead.",
+      ),
+    );
+  }
 
   if (!ownerEmail || !connectionId) {
     redirect(returnTo);
@@ -50,4 +61,13 @@ function normalizeReturnPath(raw: string) {
   }
 
   return raw;
+}
+
+function isInternalStorageSwitchingEnabled() {
+  return process.env.STORAGE_CONNECTION_SWITCHING_MIGRATION_ENABLED === "true";
+}
+
+function withNotice(returnTo: string, notice: string) {
+  const separator = returnTo.includes("?") ? "&" : "?";
+  return `${returnTo}${separator}notice=${encodeURIComponent(notice)}`;
 }

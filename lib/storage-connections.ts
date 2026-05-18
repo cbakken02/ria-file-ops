@@ -42,6 +42,18 @@ export type ActiveStorageAuthorizationResult =
       status: 401;
     };
 
+export type StorageOAuthConnectionDecision =
+  | {
+      ok: true;
+      mode: "connect" | "reconnect" | "replace";
+      makePrimary: true;
+    }
+  | {
+      ok: false;
+      mode: "blocked_different_account";
+      activeAccountLabel: string;
+    };
+
 export function storageConnectionHasWriteAccess(connection: StorageConnection | null) {
   if (!connection) {
     return false;
@@ -59,8 +71,9 @@ export function getSafeStorageConnectionsByOwnerEmail(
 
 export function getCachedActiveStorageConnectionForSession(
   session: Session,
+  options: StorageConnectionReadOptions = {},
 ): StorageConnection | null {
-  return getPrimaryConnection(getCachedStorageConnectionsForSession(session));
+  return getPrimaryConnection(getCachedStorageConnectionsForSession(session, options));
 }
 
 export function getCachedStorageConnectionsForSession(
@@ -222,7 +235,7 @@ function readStorageConnectionsByOwnerEmail(
 }
 
 function getPrimaryConnection(connections: StorageConnection[]) {
-  return connections.find((connection) => connection.isPrimary) ?? connections[0] ?? null;
+  return connections.find((connection) => connection.isPrimary) ?? null;
 }
 
 async function resolveUsableStorageConnection(
@@ -366,14 +379,21 @@ function syncSessionGoogleConnection(session: Session) {
   const existingConnection = connections.find((connection) =>
     matchesCurrentSession(connection, session),
   );
+  const activeConnection = getPrimaryConnection(connections);
   const sessionDriveScopes = getSessionDriveScopes(session);
   const nextStatus = session.authError ? "needs_reauth" : "connected";
-  const hasPrimaryConnection = connections.some((connection) => connection.isPrimary);
+  const canSyncSessionConnection =
+    !activeConnection ||
+    (existingConnection ? activeConnection.id === existingConnection.id : false);
+
+  if (!canSyncSessionConnection) {
+    return connections;
+  }
 
   if (
     existingConnection &&
     existingConnection.status === nextStatus &&
-    (hasPrimaryConnection || existingConnection.isPrimary) &&
+    existingConnection.isPrimary &&
     haveSameScopes(existingConnection.grantedScopes, sessionDriveScopes)
   ) {
     return connections;
@@ -393,7 +413,7 @@ function syncSessionGoogleConnection(session: Session) {
       expiresAt: null,
       grantedScopes: sessionDriveScopes,
       status: nextStatus,
-      makePrimary: !hasPrimaryConnection,
+      makePrimary: !activeConnection || existingConnection?.isPrimary === true,
     });
   } catch (error) {
     logStorageConnectionPersistenceFailure(
@@ -430,15 +450,70 @@ export function markStorageConnectionNeedsReauth(connection: StorageConnection) 
   });
 }
 
-function matchesCurrentSession(connection: StorageConnection, session: Session) {
-  const sessionUserId = session.user?.id ?? null;
-  const sessionEmail = session.user?.email ?? null;
+export function resolveStorageOAuthConnectionDecision(input: {
+  activeConnection: StorageConnection | null | undefined;
+  candidate: {
+    accountEmail?: string | null;
+    externalAccountId?: string | null;
+    provider: string;
+  };
+  replaceRequested?: boolean;
+}): StorageOAuthConnectionDecision {
+  const activeConnection = input.activeConnection ?? null;
 
-  return (
-    connection.provider === "google_drive" &&
-    ((sessionUserId && connection.externalAccountId === sessionUserId) ||
-      (sessionEmail && connection.accountEmail === sessionEmail))
-  );
+  if (!activeConnection) {
+    return { ok: true, makePrimary: true, mode: "connect" };
+  }
+
+  if (matchesStorageAccount(activeConnection, input.candidate)) {
+    return { ok: true, makePrimary: true, mode: "reconnect" };
+  }
+
+  if (input.replaceRequested) {
+    return { ok: true, makePrimary: true, mode: "replace" };
+  }
+
+  return {
+    ok: false,
+    activeAccountLabel:
+      activeConnection.accountEmail ??
+      activeConnection.accountName ??
+      "the current storage account",
+    mode: "blocked_different_account",
+  };
+}
+
+function matchesCurrentSession(connection: StorageConnection, session: Session) {
+  return matchesStorageAccount(connection, {
+    accountEmail: session.user?.email ?? null,
+    externalAccountId: session.user?.id ?? session.user?.email ?? null,
+    provider: "google_drive",
+  });
+}
+
+function matchesStorageAccount(
+  connection: StorageConnection,
+  candidate: {
+    accountEmail?: string | null;
+    externalAccountId?: string | null;
+    provider: string;
+  },
+) {
+  if (connection.provider !== candidate.provider) {
+    return false;
+  }
+
+  const candidateExternalAccountId = candidate.externalAccountId?.trim() ?? "";
+  if (
+    candidateExternalAccountId &&
+    connection.externalAccountId === candidateExternalAccountId
+  ) {
+    return true;
+  }
+
+  const connectionEmail = connection.accountEmail?.trim().toLowerCase() ?? "";
+  const candidateEmail = candidate.accountEmail?.trim().toLowerCase() ?? "";
+  return Boolean(connectionEmail && candidateEmail && connectionEmail === candidateEmail);
 }
 
 function shouldUseSessionStorageAccess(

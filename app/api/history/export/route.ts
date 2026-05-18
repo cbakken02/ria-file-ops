@@ -12,7 +12,6 @@ import {
   sortHistoryEvents,
 } from "@/lib/history-view";
 import {
-  getStorageConnectionsForSession,
   getVerifiedActiveStorageConnectionForSession,
 } from "@/lib/storage-connections";
 
@@ -24,11 +23,7 @@ export async function GET(request: Request) {
   }
 
   const activeConnection = await getVerifiedActiveStorageConnectionForSession(session);
-  const storageConnections = await getStorageConnectionsForSession(session);
-  const displayConnection =
-    storageConnections.find((connection) => connection.isPrimary) ?? null;
-  const activeStorageProvider =
-    displayConnection?.provider ?? activeConnection?.provider ?? null;
+  const activeStorageProvider = activeConnection?.provider ?? null;
 
   if (!activeConnection || !activeStorageProvider) {
     return new Response(
