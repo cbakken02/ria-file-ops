@@ -1,6 +1,7 @@
 import type { CleanupOverride } from "@/lib/cleanup-preview";
 import { runCleanupPlanForIds } from "@/lib/cleanup-approval";
 import type { CleanupMode, CleanupScope } from "@/lib/cleanup-types";
+import { requireApiPrincipal } from "@/lib/auth/principal";
 
 type RunRequestBody = {
   mode?: CleanupMode;
@@ -10,6 +11,11 @@ type RunRequestBody = {
 };
 
 export async function POST(request: Request) {
+  const principalResult = await requireApiPrincipal();
+  if (!principalResult.ok) {
+    return principalResult.response;
+  }
+
   const body = (await request.json().catch(() => null)) as RunRequestBody | null;
   const scope = body?.scope;
   const mode = body?.mode;

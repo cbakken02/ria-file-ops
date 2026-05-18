@@ -1,10 +1,16 @@
 import { applyCleanupSuggestionsForIds } from "@/lib/cleanup-approval";
+import { requireApiPrincipal } from "@/lib/auth/principal";
 
 type ApplyRequestBody = {
   selectedIds?: unknown;
 };
 
 export async function POST(request: Request) {
+  const principalResult = await requireApiPrincipal();
+  if (!principalResult.ok) {
+    return principalResult.response;
+  }
+
   const body = (await request.json().catch(() => null)) as ApplyRequestBody | null;
   const selectedIds = Array.isArray(body?.selectedIds)
     ? Array.from(
