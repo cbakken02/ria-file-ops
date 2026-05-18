@@ -13,35 +13,14 @@ import type {
   ReviewDecisionStatus,
   StorageConnection,
   StorageConnectionStatus,
-  WaitlistSignup,
 } from "@/lib/db";
 import type {
   CleanupFileState,
   CleanupFileStateUpsertInput,
 } from "@/lib/cleanup-types";
-import type {
-  WaitlistSignupInput,
-  WaitlistSignupUpsertResult,
-} from "@/lib/waitlist-signups";
 
 type CleanupFileStateRow = Omit<CleanupFileState, "reasons"> & {
   reasonsJson: string | null;
-};
-
-type WaitlistSignupRow = {
-  createdAt: string;
-  email: string;
-  fileSystemOther: string | null;
-  fileSystemsJson: string;
-  firm: string;
-  id: string;
-  name: string;
-  notes: string | null;
-  painPointsJson: string;
-  phone: string | null;
-  source: WaitlistSignup["source"];
-  status: WaitlistSignup["status"];
-  updatedAt: string;
 };
 
 function ensureTableColumn(
@@ -219,24 +198,6 @@ database.exec(`
 `);
 
 database.exec(`
-  CREATE TABLE IF NOT EXISTS waitlist_signups (
-    id TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    firm TEXT NOT NULL,
-    phone TEXT,
-    file_systems_json TEXT NOT NULL DEFAULT '[]',
-    file_system_other TEXT,
-    pain_points_json TEXT NOT NULL DEFAULT '[]',
-    notes TEXT,
-    status TEXT NOT NULL DEFAULT 'new',
-    source TEXT NOT NULL DEFAULT 'join_waitlist_page'
-  )
-`);
-
-database.exec(`
   CREATE TABLE IF NOT EXISTS cleanup_file_states (
     id TEXT PRIMARY KEY,
     owner_email TEXT NOT NULL,
@@ -263,13 +224,6 @@ database.exec(`
     updated_at TEXT NOT NULL,
     UNIQUE(owner_email, file_id)
   )
-`);
-
-database.exec(`
-  CREATE INDEX IF NOT EXISTS waitlist_signups_created_at_idx
-    ON waitlist_signups (created_at);
-  CREATE INDEX IF NOT EXISTS waitlist_signups_status_idx
-    ON waitlist_signups (status);
 `);
 
 database.exec(`
@@ -1134,84 +1088,6 @@ const insertBugReport = database.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?)
 `);
 
-const selectWaitlistSignupByEmail = database.prepare(`
-  SELECT
-    id,
-    created_at AS createdAt,
-    updated_at AS updatedAt,
-    name,
-    email,
-    firm,
-    phone,
-    file_systems_json AS fileSystemsJson,
-    file_system_other AS fileSystemOther,
-    pain_points_json AS painPointsJson,
-    notes,
-    status,
-    source
-  FROM waitlist_signups
-  WHERE email = ?
-  LIMIT 1
-`);
-
-const selectWaitlistSignups = database.prepare(`
-  SELECT
-    id,
-    created_at AS createdAt,
-    updated_at AS updatedAt,
-    name,
-    email,
-    firm,
-    phone,
-    file_systems_json AS fileSystemsJson,
-    file_system_other AS fileSystemOther,
-    pain_points_json AS painPointsJson,
-    notes,
-    status,
-    source
-  FROM waitlist_signups
-  ORDER BY created_at DESC, id DESC
-`);
-
-const insertWaitlistSignup = database.prepare(`
-  INSERT INTO waitlist_signups (
-    id,
-    created_at,
-    updated_at,
-    name,
-    email,
-    firm,
-    phone,
-    file_systems_json,
-    file_system_other,
-    pain_points_json,
-    notes,
-    status,
-    source
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
-
-const updateWaitlistSignup = database.prepare(`
-  UPDATE waitlist_signups
-  SET
-    updated_at = ?,
-    name = ?,
-    firm = ?,
-    phone = ?,
-    file_systems_json = ?,
-    file_system_other = ?,
-    pain_points_json = ?,
-    notes = ?,
-    source = ?
-  WHERE email = ?
-`);
-
-const updateWaitlistSignupStatus = database.prepare(`
-  UPDATE waitlist_signups
-  SET status = ?, updated_at = ?
-  WHERE id = ?
-`);
-
 export function getFirmSettingsByOwnerEmail(ownerEmail: string) {
   return selectByOwnerEmail.get(ownerEmail) as FirmSettings | undefined;
 }
@@ -1639,36 +1515,6 @@ function mapCleanupFileStateRow(row: CleanupFileStateRow): CleanupFileState {
   };
 }
 
-function mapWaitlistSignupRow(
-  row: WaitlistSignupRow | undefined,
-): WaitlistSignup | undefined {
-  if (!row) {
-    return undefined;
-  }
-
-  return {
-    createdAt: row.createdAt,
-    email: row.email,
-    fileSystemOther: row.fileSystemOther,
-    fileSystems: parseStringArray(row.fileSystemsJson).filter(
-      (value): value is WaitlistSignup["fileSystems"][number] =>
-        typeof value === "string",
-    ),
-    firm: row.firm,
-    id: row.id,
-    name: row.name,
-    notes: row.notes,
-    painPoints: parseStringArray(row.painPointsJson).filter(
-      (value): value is WaitlistSignup["painPoints"][number] =>
-        typeof value === "string",
-    ),
-    phone: row.phone,
-    source: row.source,
-    status: row.status,
-    updatedAt: row.updatedAt,
-  };
-}
-
 function parseStringArray(value: string | null | undefined) {
   if (!value) {
     return [];
@@ -1943,76 +1789,4 @@ export function createBugReport(input: {
     input.message,
     createdAt,
   );
-}
-
-export function upsertWaitlistSignup(
-  input: WaitlistSignupInput,
-): WaitlistSignupUpsertResult {
-  const existing = selectWaitlistSignupByEmail.get(input.email) as
-    | WaitlistSignupRow
-    | undefined;
-  const now = new Date().toISOString();
-  const fileSystemsJson = JSON.stringify(input.fileSystems);
-  const painPointsJson = JSON.stringify(input.painPoints);
-
-  if (existing) {
-    updateWaitlistSignup.run(
-      now,
-      input.name,
-      input.firm,
-      input.phone,
-      fileSystemsJson,
-      input.fileSystemOther,
-      painPointsJson,
-      input.notes,
-      input.source,
-      input.email,
-    );
-  } else {
-    insertWaitlistSignup.run(
-      crypto.randomUUID(),
-      now,
-      now,
-      input.name,
-      input.email,
-      input.firm,
-      input.phone,
-      fileSystemsJson,
-      input.fileSystemOther,
-      painPointsJson,
-      input.notes,
-      "new",
-      input.source,
-    );
-  }
-
-  const row = selectWaitlistSignupByEmail.get(input.email) as
-    | WaitlistSignupRow
-    | undefined;
-  const signup = mapWaitlistSignupRow(row);
-
-  if (!signup) {
-    throw new Error("Waitlist signup was not returned after saving.");
-  }
-
-  return {
-    alreadyExisted: Boolean(existing),
-    signup,
-  };
-}
-
-export function getWaitlistSignups(): WaitlistSignup[] {
-  return (selectWaitlistSignups.all() as WaitlistSignupRow[])
-    .map(mapWaitlistSignupRow)
-    .filter((signup): signup is WaitlistSignup => Boolean(signup));
-}
-
-export function setWaitlistSignupStatus(input: {
-  id: string;
-  status: WaitlistSignup["status"];
-}): WaitlistSignup | null {
-  updateWaitlistSignupStatus.run(input.status, new Date().toISOString(), input.id);
-
-  const signup = getWaitlistSignups().find((item) => item.id === input.id);
-  return signup ?? null;
 }
