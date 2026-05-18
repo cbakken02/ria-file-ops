@@ -80,6 +80,26 @@
   margin-bottom: 8px;
 }
 
+.statusBox {
+  margin-top: 22px;
+  padding: 14px 16px;
+  border: 1px solid rgba(123, 173, 226, 0.24);
+  border-radius: 16px;
+  background: rgba(123, 173, 226, 0.1);
+  color: #dcecff;
+  line-height: 1.55;
+}
+
+.statusBox strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.statusBox p {
+  margin: 0;
+  color: #b7c9dd;
+}
+
 .warningBox {
   margin-top: 18px;
   padding: 14px 16px;

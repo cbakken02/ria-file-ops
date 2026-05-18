@@ -145,6 +145,19 @@ export function AccountSessionStatus({
               <strong>{status.storage.accountIdentifier}</strong>
             </div>
           ) : null}
+          {status.storage.needsReconnect ? (
+            <div className={styles.detailRow}>
+              <span>Storage action</span>
+              <strong>
+                <a
+                  className={styles.inlineLink}
+                  href={getStorageReconnectHref(status.storage.provider)}
+                >
+                  Reconnect storage
+                </a>
+              </strong>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -235,6 +248,16 @@ function getStorageTone(status: SafeAccountSessionStatus["storage"]["status"]) {
   }
 
   return "toneMuted";
+}
+
+function getStorageReconnectHref(
+  provider: SafeAccountSessionStatus["storage"]["provider"],
+) {
+  if (provider === "google_drive") {
+    return "/api/storage/google/start";
+  }
+
+  return "/setup";
 }
 
 function formatRemainingTime(remainingMs: number) {
