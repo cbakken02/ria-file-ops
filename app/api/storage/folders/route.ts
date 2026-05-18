@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { getApiPrincipalFromSession } from "@/lib/auth/principal";
-import { listDriveFolders } from "@/lib/google-drive";
 import { getVerifiedActiveStorageConnectionForSession } from "@/lib/storage-connections";
+import { getStorageProviderAdapterForConnection } from "@/lib/storage/provider-registry";
 
 export async function GET() {
   const session = await auth();
@@ -22,7 +22,11 @@ export async function GET() {
   }
 
   try {
-    const folders = await listDriveFolders(activeConnection.accessToken);
+    const storageProvider =
+      getStorageProviderAdapterForConnection(activeConnection);
+    const folders = await storageProvider.listFolders({
+      connection: activeConnection,
+    });
 
     return Response.json({
       folders: folders.map((folder) => ({

@@ -4,6 +4,7 @@ import {
   getFirmSettingsByOwnerEmail,
   type ClientMemoryRule,
   type FirmSettings,
+  type StorageConnection,
 } from "@/lib/db";
 import {
   downloadDriveFile as downloadGoogleDriveFile,
@@ -28,6 +29,8 @@ import {
   markStorageConnectionNeedsReauth,
   resolveActiveStorageAuthorizationForSession,
 } from "@/lib/storage-connections";
+import { getStorageProviderAdapterForConnection } from "@/lib/storage/provider-registry";
+import type { StorageProviderAdapter } from "@/lib/storage/provider-types";
 
 type RefreshIntakeQueueDependencies = {
   buildProcessingPreview?: typeof buildProcessingPreviewQueue;
@@ -36,6 +39,7 @@ type RefreshIntakeQueueDependencies = {
   downloadDriveFile?: typeof downloadGoogleDriveFile;
   getDriveFileMetadata?: typeof getGoogleDriveFileMetadata;
   listFilesInFolder?: typeof listGoogleDriveFilesInFolder;
+  storageProviderAdapter?: StorageProviderAdapter;
   writePreviewSnapshot?: typeof writePreviewQueueSnapshot;
 };
 
@@ -87,6 +91,7 @@ export async function refreshIntakeQueueForSession(
     return await refreshIntakeQueue({
       accessToken: activeConnection.accessToken,
       clientMemoryRules: getClientMemoryRulesByOwnerEmail(ownerEmail),
+      connection: activeConnection,
       deps: options.deps,
       forceFresh: options.forceFresh,
       ownerEmail,
@@ -104,6 +109,7 @@ export async function refreshIntakeQueueForSession(
 export async function refreshIntakeQueue(input: {
   accessToken: string;
   clientMemoryRules: ClientMemoryRule[];
+  connection?: StorageConnection;
   deps?: RefreshIntakeQueueDependencies;
   forceFresh?: boolean;
   ownerEmail: string;
@@ -114,12 +120,36 @@ export async function refreshIntakeQueue(input: {
     clearPreviewAnalysisCacheForOwnerDefault;
   const clearPreviewSnapshotForOwner =
     input.deps?.clearPreviewSnapshotForOwner ?? clearPreviewSnapshotForOwnerDefault;
+  const storageProviderAdapter =
+    input.deps?.storageProviderAdapter ??
+    (input.connection ? getStorageProviderAdapterForConnection(input.connection) : null);
   const getDriveFileMetadata =
-    input.deps?.getDriveFileMetadata ?? getGoogleDriveFileMetadata;
+    input.deps?.getDriveFileMetadata ??
+    (storageProviderAdapter && input.connection
+      ? (_accessToken: string, fileId: string) =>
+          storageProviderAdapter.getFileMetadata({
+            connection: input.connection!,
+            fileId,
+          })
+      : getGoogleDriveFileMetadata);
   const listFilesInFolder =
-    input.deps?.listFilesInFolder ?? listGoogleDriveFilesInFolder;
+    input.deps?.listFilesInFolder ??
+    (storageProviderAdapter && input.connection
+      ? (_accessToken: string, folderId: string) =>
+          storageProviderAdapter.listFolder({
+            connection: input.connection!,
+            folderId,
+          })
+      : listGoogleDriveFilesInFolder);
   const downloadDriveFile =
-    input.deps?.downloadDriveFile ?? downloadGoogleDriveFile;
+    input.deps?.downloadDriveFile ??
+    (storageProviderAdapter && input.connection
+      ? (_accessToken: string, fileId: string) =>
+          storageProviderAdapter.downloadFile({
+            connection: input.connection!,
+            fileId,
+          })
+      : downloadGoogleDriveFile);
   const buildProcessingPreview =
     input.deps?.buildProcessingPreview ?? buildProcessingPreviewQueue;
   const writePreviewSnapshot =
@@ -214,7 +244,10 @@ export async function refreshIntakeQueue(input: {
 async function loadDriveFolderMetadata(input: {
   accessToken: string;
   folderId: string;
-  getDriveFileMetadata: typeof getGoogleDriveFileMetadata;
+  getDriveFileMetadata: (
+    accessToken: string,
+    fileId: string,
+  ) => Promise<GoogleDriveFile>;
   purpose: "destination root" | "source folder";
 }) {
   let folder: GoogleDriveFile;
@@ -241,7 +274,10 @@ async function loadDriveFolderMetadata(input: {
 async function loadDriveFolderFiles(input: {
   accessToken: string;
   folderId: string;
-  listFilesInFolder: typeof listGoogleDriveFilesInFolder;
+  listFilesInFolder: (
+    accessToken: string,
+    folderId: string,
+  ) => Promise<GoogleDriveFile[]>;
   purpose: "destination root" | "source folder";
 }) {
   try {

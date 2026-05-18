@@ -15,8 +15,11 @@ import {
   GOOGLE_DRIVE_READ_SCOPE,
   GOOGLE_DRIVE_WRITE_SCOPE,
   isGoogleDriveAccessFailure,
-  verifyDriveBrowserAccess,
 } from "@/lib/google-drive";
+import {
+  getStorageProviderAdapterForConnection,
+  UnsupportedStorageProviderError,
+} from "@/lib/storage/provider-registry";
 
 type StorageConnectionReadOptions = {
   source?: string;
@@ -222,14 +225,16 @@ export async function getVerifiedActiveStorageConnectionForSession(
     return null;
   }
 
-  if (activeConnection.provider !== "google_drive") {
-    return activeConnection;
-  }
-
   try {
-    await verifyDriveBrowserAccess(activeConnection.accessToken);
+    const storageProvider =
+      getStorageProviderAdapterForConnection(activeConnection);
+    await storageProvider.healthCheck({ connection: activeConnection });
     return activeConnection;
   } catch (error) {
+    if (error instanceof UnsupportedStorageProviderError) {
+      return null;
+    }
+
     if (isGoogleDriveAccessFailure(error)) {
       markStorageConnectionNeedsReauth(activeConnection);
     }
