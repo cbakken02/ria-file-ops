@@ -51,7 +51,7 @@ Immediate business-threatening issues for real client data or public demos:
 | Critical | Verify Supabase Data API exposure and revoke public access until RLS policies and grants are tested. | If `anon` or `authenticated` can access public tables/views without policies, users can bypass app owner checks. | Supabase |
 | Critical | Stop serving arbitrary Drive/snapshot bytes inline from the app origin. | A scriptable Drive file rendered same-origin could call authenticated APIs as the signed-in user. | Code, Vercel |
 | Critical | Remove OAuth access tokens from the browser-visible NextAuth session and remove the legacy Drive `signIn()` path. | A Drive-scoped token in the browser can expose the user's Drive access. | Code, Google Cloud rotation if exposed |
-| Critical | Keep production fail-closed persistence checks in release verification. | Accidental SQLite in production would mean plaintext OAuth tokens and non-multi-user local state; code now blocks this when production-like env markers are present. | Code done, Vercel env verification |
+| Mitigated / monitor | Keep production fail-closed persistence checks in release verification. | Accidental SQLite in production would mean plaintext OAuth tokens and non-multi-user local state; code now blocks this when production-like env markers are present. | Code done, Vercel env verification |
 | Critical | Add a production admission gate for allowed users/firms/domains/account status. | Public Google sign-in is not acceptable for sensitive RIA/client documents. | Code, Google Cloud |
 
 ## High Priority Fixes
@@ -215,7 +215,7 @@ Current dependency state:
 - `next-auth@4.24.13` is close to latest patch but remains on the older v4 line; plan an Auth.js/NextAuth upgrade path after token/session shape is fixed.
 - File parsing depends on `pdf-parse`, `pdfjs-dist`, and native canvas/rendering packages. These need faster patch cadence and sandboxing because they process untrusted files.
 - Native/install-script packages include `better-sqlite3`, `sharp`, and `unrs-resolver`. Treat install scripts and prebuilt binaries as higher supply-chain risk.
-- `better-sqlite3` is useful for local development but is risky as a production dependency if SQLite fallback remains possible.
+- `better-sqlite3` is useful for local development but would be risky as a production dependency if the PROD-001 fail-closed guard regresses.
 
 Dependency hardening:
 
