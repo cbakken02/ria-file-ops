@@ -240,7 +240,9 @@ test("service factory selects safe audit backends", () => {
 
     process.env.DATA_INTELLIGENCE_V2_AUDIT_BACKEND = "auto";
     process.env.PERSISTENCE_BACKEND = "supabase";
-    process.env.SUPABASE_DB_URL_POOLER = "postgresql://user:password@localhost:6543/postgres";
+    process.env.SUPABASE_DB_URL_POOLER = "supabase-pooler-db-url";
+    process.env.APP_ENCRYPTION_KEY =
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     resetDataIntelligenceV2ServiceFactoryForTests();
     assert.ok(getDefaultV2AuditSink() instanceof PostgresV2AuditSink);
   } finally {
