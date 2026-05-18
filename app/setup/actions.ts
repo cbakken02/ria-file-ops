@@ -6,6 +6,7 @@ import {
   requireAppPrincipal,
 } from "@/lib/auth/principal";
 import { assertCanUseStorageConnection } from "@/lib/auth/resource-guards";
+import { assertSensitiveActionAuthorized } from "@/lib/auth/sensitive-actions";
 import {
   deleteStorageConnectionForOwner,
   getStorageConnectionByOwnerAndId,
@@ -136,6 +137,11 @@ export async function removeStorageConnectionAction(connectionId: string) {
       throw new Error("That storage connection could not be found.");
     }
     assertCanUseStorageConnection(principal, existing);
+    assertSensitiveActionAuthorized(principal, "storage.remove_connection", {
+      provider: existing.provider,
+      resourceId: existing.id,
+      resourceType: "storage_connection",
+    });
 
     deleteStorageConnectionForOwner({
       ownerEmail,

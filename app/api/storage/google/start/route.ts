@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAppPrincipal } from "@/lib/auth/principal";
+import { assertSensitiveActionAuthorized } from "@/lib/auth/sensitive-actions";
 import { recordAuthAuditEvent } from "@/lib/audit/auth-audit-events";
 import { buildAppUrl } from "@/lib/app-url";
 import { GOOGLE_DRIVE_WRITE_SCOPE } from "@/lib/google-drive";
@@ -17,6 +18,13 @@ export async function GET(request: Request) {
   const replaceRequested =
     url.searchParams.get("replace") === "1" ||
     url.searchParams.get("mode") === "replace";
+  if (replaceRequested) {
+    assertSensitiveActionAuthorized(principal, "storage.replace_connection", {
+      provider: "google_drive",
+      resourceType: "storage_connection",
+    });
+  }
+
   const state = crypto.randomUUID();
   const redirectUri = buildAppUrl("/api/storage/google/callback", request);
   const params = new URLSearchParams({

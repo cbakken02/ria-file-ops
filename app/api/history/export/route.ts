@@ -3,6 +3,7 @@ import {
   getApiPrincipalFromSession,
   getLegacyOwnerEmail,
 } from "@/lib/auth/principal";
+import { getSensitiveActionAuthorizationResult } from "@/lib/auth/sensitive-actions";
 import { getFilingEventsByOwnerEmail } from "@/lib/db";
 import {
   buildDestinationPath,
@@ -25,6 +26,15 @@ export async function GET(request: Request) {
 
   if (!principalResult.ok || !session) {
     return new Response("Unauthorized", { status: 401 });
+  }
+
+  const sensitiveActionResult = getSensitiveActionAuthorizationResult(
+    principalResult.principal,
+    "history.export_data",
+    { resourceType: "filing_history" },
+  );
+  if (!sensitiveActionResult.ok) {
+    return new Response("Forbidden", { status: 403 });
   }
 
   const ownerEmail = getLegacyOwnerEmail(principalResult.principal);
