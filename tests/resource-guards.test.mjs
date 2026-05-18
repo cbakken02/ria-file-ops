@@ -91,4 +91,6 @@ test("preview snapshot and file guards enforce owner scope", () => {
   assert.throws(() =>
     assertCanAccessPreviewFile(principal, { ownerEmail: "other@example.com" }),
   );
+  assert.throws(() => assertCanAccessPreviewFile(principal, null));
+  assert.throws(() => assertCanAccessPreviewFile(principal, {}));
 });

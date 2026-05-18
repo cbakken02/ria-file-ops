@@ -62,14 +62,13 @@ export function assertCanAccessPreviewFile(
   principal: AppPrincipal,
   previewFileRecordOrSnapshot: OwnerScopedResource | null | undefined,
 ) {
-  if (
-    previewFileRecordOrSnapshot?.ownerKey ||
-    previewFileRecordOrSnapshot?.ownerEmail
-  ) {
-    requireOwnerScopedResource(
-      principal,
-      previewFileRecordOrSnapshot.ownerKey ??
-        previewFileRecordOrSnapshot.ownerEmail,
-    );
+  const resourceOwnerKey =
+    previewFileRecordOrSnapshot?.ownerKey ??
+    previewFileRecordOrSnapshot?.ownerEmail;
+
+  if (!resourceOwnerKey) {
+    throw new AppPrincipalError("Preview file not found.", 403);
   }
+
+  requireOwnerScopedResource(principal, resourceOwnerKey);
 }
