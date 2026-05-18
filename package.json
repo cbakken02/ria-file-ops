@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
-    "next": "16.2.2",
+    "next": "16.2.6",
     "next-auth": "^4.24.13",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.4.296",
@@ -27,7 +27,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.2",
+    "eslint-config-next": "16.2.6",
     "typescript": "^5"
   }
 }
