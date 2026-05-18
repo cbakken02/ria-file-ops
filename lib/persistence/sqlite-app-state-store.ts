@@ -20,6 +20,7 @@ import type {
   CleanupFileState,
   CleanupFileStateUpsertInput,
 } from "@/lib/cleanup-types";
+import { normalizeStorageOwnerKey } from "@/lib/storage-connection-invariants";
 
 type CleanupFileStateRow = Omit<CleanupFileState, "reasons"> & {
   reasonsJson: string | null;
@@ -987,7 +988,7 @@ const selectStorageConnectionsByOwnerEmail = database.prepare(`
     created_at AS createdAt,
     updated_at AS updatedAt
   FROM storage_connections
-  WHERE owner_email = ?
+  WHERE lower(trim(owner_email)) = ?
   ORDER BY is_primary DESC, updated_at DESC
 `);
 
@@ -1009,7 +1010,7 @@ const selectPrimaryStorageConnectionByOwnerEmail = database.prepare(`
     created_at AS createdAt,
     updated_at AS updatedAt
   FROM storage_connections
-  WHERE owner_email = ? AND is_primary = 1
+  WHERE lower(trim(owner_email)) = ? AND is_primary = 1
   LIMIT 1
 `);
 
@@ -1031,7 +1032,7 @@ const selectStorageConnectionByOwnerAndId = database.prepare(`
     created_at AS createdAt,
     updated_at AS updatedAt
   FROM storage_connections
-  WHERE owner_email = ? AND id = ?
+  WHERE lower(trim(owner_email)) = ? AND id = ?
   LIMIT 1
 `);
 
@@ -1053,7 +1054,7 @@ const selectStorageConnectionByOwnerAndProviderIdentity = database.prepare(`
     created_at AS createdAt,
     updated_at AS updatedAt
   FROM storage_connections
-  WHERE owner_email = ?
+  WHERE lower(trim(owner_email)) = ?
     AND provider = ?
     AND (
       (external_account_id IS NOT NULL AND external_account_id = ?)
@@ -1067,7 +1068,7 @@ const clearPrimaryStorageConnections = database.prepare(`
   SET
     is_primary = 0,
     updated_at = ?
-  WHERE owner_email = ?
+  WHERE lower(trim(owner_email)) = ?
 `);
 
 const markStorageConnectionPrimary = database.prepare(`
@@ -1075,7 +1076,7 @@ const markStorageConnectionPrimary = database.prepare(`
   SET
     is_primary = 1,
     updated_at = ?
-  WHERE owner_email = ? AND id = ?
+  WHERE lower(trim(owner_email)) = ? AND id = ?
 `);
 
 const insertStorageConnection = database.prepare(`
@@ -1111,12 +1112,12 @@ const updateStorageConnection = database.prepare(`
     is_primary = ?,
     status = ?,
     updated_at = ?
-  WHERE owner_email = ? AND id = ?
+  WHERE lower(trim(owner_email)) = ? AND id = ?
 `);
 
 const deleteStorageConnectionByOwnerAndId = database.prepare(`
   DELETE FROM storage_connections
-  WHERE owner_email = ? AND id = ?
+  WHERE lower(trim(owner_email)) = ? AND id = ?
 `);
 
 const insertBugReport = database.prepare(`
@@ -1770,9 +1771,10 @@ export function upsertClientMemoryRule(input: {
 }
 
 export function getStorageConnectionsByOwnerEmail(ownerEmail: string) {
+  const normalizedOwnerEmail = normalizeStorageOwnerKey(ownerEmail);
   return (
     selectStorageConnectionsByOwnerEmail
-      .all(ownerEmail)
+      .all(normalizedOwnerEmail)
       .map((row) =>
         mapStorageConnectionRow(
           row as Parameters<typeof mapStorageConnectionRow>[0],
@@ -1782,7 +1784,8 @@ export function getStorageConnectionsByOwnerEmail(ownerEmail: string) {
 }
 
 export function getPrimaryStorageConnectionByOwnerEmail(ownerEmail: string) {
-  const row = selectPrimaryStorageConnectionByOwnerEmail.get(ownerEmail);
+  const normalizedOwnerEmail = normalizeStorageOwnerKey(ownerEmail);
+  const row = selectPrimaryStorageConnectionByOwnerEmail.get(normalizedOwnerEmail);
   if (!row) {
     return undefined;
   }
@@ -1796,7 +1799,11 @@ export function getStorageConnectionByOwnerAndId(
   ownerEmail: string,
   connectionId: string,
 ) {
-  const row = selectStorageConnectionByOwnerAndId.get(ownerEmail, connectionId);
+  const normalizedOwnerEmail = normalizeStorageOwnerKey(ownerEmail);
+  const row = selectStorageConnectionByOwnerAndId.get(
+    normalizedOwnerEmail,
+    connectionId,
+  );
   if (!row) {
     return undefined;
   }
@@ -1821,20 +1828,21 @@ export function saveStorageConnectionForOwner(input: {
   makePrimary?: boolean;
 }) {
   const now = new Date().toISOString();
+  const ownerEmail = normalizeStorageOwnerKey(input.ownerEmail);
   const existing = selectStorageConnectionByOwnerAndProviderIdentity.get(
-    input.ownerEmail,
+    ownerEmail,
     input.provider,
     input.externalAccountId,
     input.accountEmail,
   ) as Parameters<typeof mapStorageConnectionRow>[0] | undefined;
   const hasPrimary = Boolean(
-    getPrimaryStorageConnectionByOwnerEmail(input.ownerEmail),
+    getPrimaryStorageConnectionByOwnerEmail(ownerEmail),
   );
   const shouldMakePrimary = input.makePrimary || !hasPrimary;
   const grantedScopes = JSON.stringify(input.grantedScopes);
 
   if (shouldMakePrimary) {
-    clearPrimaryStorageConnections.run(now, input.ownerEmail);
+    clearPrimaryStorageConnections.run(now, ownerEmail);
   }
 
   if (existing) {
@@ -1849,17 +1857,17 @@ export function saveStorageConnectionForOwner(input: {
       shouldMakePrimary ? 1 : existing.isPrimary ? 1 : 0,
       input.status ?? "connected",
       now,
-      input.ownerEmail,
+      ownerEmail,
       existing.id,
     );
 
-    return getStorageConnectionByOwnerAndId(input.ownerEmail, existing.id) ?? null;
+    return getStorageConnectionByOwnerAndId(ownerEmail, existing.id) ?? null;
   }
 
   const id = crypto.randomUUID();
   insertStorageConnection.run(
     id,
-    input.ownerEmail,
+    ownerEmail,
     input.provider,
     input.accountEmail,
     input.accountName,
@@ -1875,7 +1883,7 @@ export function saveStorageConnectionForOwner(input: {
     now,
   );
 
-  return getStorageConnectionByOwnerAndId(input.ownerEmail, id) ?? null;
+  return getStorageConnectionByOwnerAndId(ownerEmail, id) ?? null;
 }
 
 export function setPrimaryStorageConnectionForOwner(input: {
@@ -1883,36 +1891,38 @@ export function setPrimaryStorageConnectionForOwner(input: {
   connectionId: string;
 }) {
   const now = new Date().toISOString();
-  clearPrimaryStorageConnections.run(now, input.ownerEmail);
-  markStorageConnectionPrimary.run(now, input.ownerEmail, input.connectionId);
+  const ownerEmail = normalizeStorageOwnerKey(input.ownerEmail);
+  clearPrimaryStorageConnections.run(now, ownerEmail);
+  markStorageConnectionPrimary.run(now, ownerEmail, input.connectionId);
 
-  return getStorageConnectionByOwnerAndId(input.ownerEmail, input.connectionId) ?? null;
+  return getStorageConnectionByOwnerAndId(ownerEmail, input.connectionId) ?? null;
 }
 
 export function deleteStorageConnectionForOwner(input: {
   ownerEmail: string;
   connectionId: string;
 }) {
+  const ownerEmail = normalizeStorageOwnerKey(input.ownerEmail);
   const existing = getStorageConnectionByOwnerAndId(
-    input.ownerEmail,
+    ownerEmail,
     input.connectionId,
   );
 
   if (!existing) {
-    return getStorageConnectionsByOwnerEmail(input.ownerEmail);
+    return getStorageConnectionsByOwnerEmail(ownerEmail);
   }
 
   const now = new Date().toISOString();
 
   database.transaction(() => {
-    deleteStorageConnectionByOwnerAndId.run(input.ownerEmail, input.connectionId);
+    deleteStorageConnectionByOwnerAndId.run(ownerEmail, input.connectionId);
 
     if (existing.isPrimary) {
-      clearPrimaryStorageConnections.run(now, input.ownerEmail);
+      clearPrimaryStorageConnections.run(now, ownerEmail);
     }
   })();
 
-  return getStorageConnectionsByOwnerEmail(input.ownerEmail);
+  return getStorageConnectionsByOwnerEmail(ownerEmail);
 }
 
 export function createBugReport(input: {
