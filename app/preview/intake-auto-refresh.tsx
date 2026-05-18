@@ -17,14 +17,6 @@ export function IntakeAutoRefresh({ activeTab, enabled }: Props) {
       return;
     }
 
-    const navigationEntry = performance.getEntriesByType("navigation")[0] as
-      | PerformanceNavigationTiming
-      | undefined;
-
-    if (navigationEntry?.type !== "reload") {
-      return;
-    }
-
     const guardKey = [
       "ria-file-ops:intake-auto-refresh",
       window.location.pathname,
@@ -58,6 +50,7 @@ export function IntakeAutoRefresh({ activeTab, enabled }: Props) {
       .catch(() => {
         if (!controller.signal.aborted) {
           sessionStorage.setItem(guardKey, "failed");
+          router.refresh();
         }
       });
 

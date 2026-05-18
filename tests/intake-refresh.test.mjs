@@ -44,13 +44,14 @@ test("Intake page does not render the old visible Refresh Intake control", () =>
   assert.equal(pageSource.includes("RefreshIntakeButton"), false);
 });
 
-test("Intake auto refresh only runs after a real browser reload", () => {
+test("Intake auto refresh runs on eligible mounts and is guarded per page load", () => {
   const source = readRepoFile("app/preview/intake-auto-refresh.tsx");
 
-  assert.match(source, /getEntriesByType\("navigation"\)/);
-  assert.match(source, /navigationEntry\?\.type !== "reload"/);
+  assert.equal(source.includes('getEntriesByType("navigation")'), false);
   assert.match(source, /sessionStorage\.getItem\(guardKey\)/);
   assert.match(source, /fetch\("\/api\/preview\/refresh"/);
+  assert.match(source, /sessionStorage\.setItem\(guardKey, "failed"\)/);
+  assert.match(source, /router\.refresh\(\)/);
 });
 
 test("preview refresh API is wired to the shared Intake refresh helper", () => {
