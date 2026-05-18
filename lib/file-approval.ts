@@ -82,7 +82,7 @@ export async function approveFileItems(input: {
   const requestedFileIds = Array.from(new Set(input.fileIds.filter(Boolean)));
   const requestedCount = requestedFileIds.length;
   const session = await auth();
-  const principalResult = getApiPrincipalFromSession(session);
+  const principalResult = await getApiPrincipalFromSession(session);
 
   if (!principalResult.ok || !session) {
     return buildFileApprovalResult({

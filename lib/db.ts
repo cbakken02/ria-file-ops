@@ -102,6 +102,17 @@ export type BugReport = {
   createdAt: string;
 };
 
+export type AppSessionActivity = {
+  sessionIdHash: string;
+  ownerEmail: string;
+  userId: string;
+  workspaceId: string;
+  createdAt: string;
+  lastActivityAt: string;
+  invalidatedAt: string | null;
+  updatedAt: string;
+};
+
 export type FilingEvent = {
   id: string;
   ownerEmail: string;
@@ -475,4 +486,32 @@ export function createBugReport(input: {
   message: string;
 }): void {
   return getActiveAppStateStore().createBugReport(input);
+}
+
+export function getAppSessionActivityByIdHash(
+  sessionIdHash: string,
+): AppSessionActivity | null {
+  return getActiveAppStateStore().getAppSessionActivityByIdHash(sessionIdHash);
+}
+
+export function upsertAppSessionActivity(input: {
+  sessionIdHash: string;
+  ownerEmail: string;
+  userId: string;
+  workspaceId: string;
+  createdAt: string;
+  lastActivityAt: string;
+  updatedAt: string;
+}): AppSessionActivity | null {
+  return getActiveAppStateStore().upsertAppSessionActivity(input);
+}
+
+export function invalidateAppSessionActivity(input: {
+  sessionIdHash: string;
+  ownerEmail: string;
+  userId: string;
+  workspaceId: string;
+  invalidatedAt: string;
+}): AppSessionActivity | null {
+  return getActiveAppStateStore().invalidateAppSessionActivity(input);
 }

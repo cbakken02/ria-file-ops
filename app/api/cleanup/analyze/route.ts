@@ -27,7 +27,7 @@ type AnalyzeRequestBody = {
 
 export async function POST(request: Request) {
   const session = await auth();
-  const principalResult = getApiPrincipalFromSession(session);
+  const principalResult = await getApiPrincipalFromSession(session);
   const activeConnection = session
     ? await getVerifiedActiveStorageConnectionForSession(session)
     : null;

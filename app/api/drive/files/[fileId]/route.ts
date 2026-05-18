@@ -12,7 +12,7 @@ export async function GET(
   context: { params: Promise<{ fileId: string }> },
 ) {
   const session = await auth();
-  const principalResult = getApiPrincipalFromSession(session);
+  const principalResult = await getApiPrincipalFromSession(session);
   const activeConnection = session
     ? await getVerifiedActiveStorageConnectionForSession(session)
     : null;

@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { getApiPrincipalFromSession } from "@/lib/auth/principal";
 import {
   buildDataIntelligenceV2AuthContext,
 } from "@/lib/data-intelligence-v2/auth-context";
@@ -15,6 +16,17 @@ export async function POST(request: Request) {
   try {
     const config = getDataIntelligenceV2Config(process.env);
     const session = await auth();
+    const principalResult = await getApiPrincipalFromSession(session);
+    if (!principalResult.ok) {
+      return NextResponse.json(
+        { error: principalResult.error },
+        {
+          status: principalResult.status,
+          headers: V2_CHAT_API_NO_CACHE_HEADERS,
+        },
+      );
+    }
+
     const authContext = buildDataIntelligenceV2AuthContext({
       session,
       config,

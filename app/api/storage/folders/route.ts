@@ -5,7 +5,7 @@ import { getVerifiedActiveStorageConnectionForSession } from "@/lib/storage-conn
 
 export async function GET() {
   const session = await auth();
-  const principalResult = getApiPrincipalFromSession(session);
+  const principalResult = await getApiPrincipalFromSession(session);
   const activeConnection = session
     ? await getVerifiedActiveStorageConnectionForSession(session)
     : null;

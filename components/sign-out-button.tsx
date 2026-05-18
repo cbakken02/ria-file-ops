@@ -7,10 +7,21 @@ type Props = {
 };
 
 export function SignOutButton({ className }: Props) {
+  async function handleSignOut() {
+    try {
+      await fetch("/api/session/logout", {
+        credentials: "same-origin",
+        method: "POST",
+      });
+    } finally {
+      await signOut({ callbackUrl: "/" });
+    }
+  }
+
   return (
     <button
       className={className}
-      onClick={() => signOut({ callbackUrl: "/" })}
+      onClick={handleSignOut}
       type="button"
     >
       Log out

@@ -15,7 +15,7 @@ import {
 
 export async function POST(request: Request) {
   const session = await auth();
-  const principalResult = getApiPrincipalFromSession(session);
+  const principalResult = await getApiPrincipalFromSession(session);
 
   if (!principalResult.ok) {
     return dataIntelligenceJsonResponse({ error: "Unauthorized" }, { status: 401 });

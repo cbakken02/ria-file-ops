@@ -172,6 +172,17 @@ export function AccountMenu({
     });
   }
 
+  async function handleSignOut() {
+    try {
+      await fetch("/api/session/logout", {
+        credentials: "same-origin",
+        method: "POST",
+      });
+    } finally {
+      await signOut({ callbackUrl: "/" });
+    }
+  }
+
   return (
     <div
       className={`${styles.accountMenu} ${open ? styles.accountMenuOpen : ""}`}
@@ -279,7 +290,7 @@ export function AccountMenu({
 
             <button
               className={styles.accountActionButton}
-              onClick={() => signOut({ callbackUrl: "/" })}
+              onClick={handleSignOut}
               role="menuitem"
               type="button"
             >

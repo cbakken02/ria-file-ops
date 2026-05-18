@@ -21,7 +21,7 @@ import {
 
 export async function GET(request: Request) {
   const session = await auth();
-  const principalResult = getApiPrincipalFromSession(session);
+  const principalResult = await getApiPrincipalFromSession(session);
 
   if (!principalResult.ok || !session) {
     return new Response("Unauthorized", { status: 401 });

@@ -2,6 +2,8 @@ import { DefaultSession } from "next-auth";
 
 declare module "next-auth" {
   interface Session {
+    appSessionCreatedAt?: string;
+    appSessionIdHash?: string;
     accessToken?: string;
     authError?: string;
     driveConnected: boolean;
@@ -15,6 +17,8 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT {
+    appSessionCreatedAt?: number;
+    appSessionId?: string;
     accessToken?: string;
     expiresAt?: number;
     error?: string;

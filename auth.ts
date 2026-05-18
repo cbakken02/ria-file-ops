@@ -1,9 +1,11 @@
+import crypto from "node:crypto";
 import { getServerSession, type NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import {
   GOOGLE_DRIVE_READ_SCOPE,
   GOOGLE_DRIVE_WRITE_SCOPE,
 } from "@/lib/google-drive";
+import { hashSessionIdentifier } from "@/lib/auth/session-activity";
 
 async function refreshGoogleAccessToken(token: {
   accessToken?: string;
@@ -87,6 +89,14 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, account }) {
+      if (typeof token.appSessionId !== "string") {
+        token.appSessionId = crypto.randomUUID();
+      }
+
+      if (typeof token.appSessionCreatedAt !== "number") {
+        token.appSessionCreatedAt = Date.now();
+      }
+
       if (account) {
         token.accessToken = account.access_token;
         token.refreshToken =
@@ -113,6 +123,14 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      session.appSessionIdHash =
+        typeof token.appSessionId === "string"
+          ? hashSessionIdentifier(token.appSessionId)
+          : undefined;
+      session.appSessionCreatedAt =
+        typeof token.appSessionCreatedAt === "number"
+          ? new Date(token.appSessionCreatedAt).toISOString()
+          : undefined;
       session.accessToken =
         typeof token.accessToken === "string" ? token.accessToken : undefined;
       session.grantedScopes = Array.isArray(token.grantedScopes)
