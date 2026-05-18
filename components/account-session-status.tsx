@@ -145,12 +145,6 @@ export function AccountSessionStatus({
               <strong>{status.storage.accountIdentifier}</strong>
             </div>
           ) : null}
-          <div className={styles.detailRow}>
-            <span>Workspace</span>
-            <strong className={styles.workspaceId}>
-              {status.user.workspaceId}
-            </strong>
-          </div>
         </div>
       ) : null}
 

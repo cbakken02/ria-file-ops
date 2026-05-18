@@ -212,7 +212,7 @@ test("session status and keepalive routes are API-safe and no-store", () => {
   ]) {
     const source = readRepoFile(relativePath);
 
-    assert.match(source, /getApiPrincipalFromSession\(session\)/);
+    assert.match(source, /getApiPrincipalFromSession\(session/);
     assert.match(source, /principalResult\.response/);
     assert.match(source, /getAccountSessionStatusForSession/);
     assert.match(source, /Cache-Control/);
@@ -221,6 +221,14 @@ test("session status and keepalive routes are API-safe and no-store", () => {
     assert.doesNotMatch(source, /refreshToken/);
   }
 
+  assert.match(
+    readRepoFile("app/api/session/status/route.ts"),
+    /touchSessionActivity:\s*false/,
+  );
+  assert.doesNotMatch(
+    readRepoFile("app/api/session/keepalive/route.ts"),
+    /touchSessionActivity:\s*false/,
+  );
   assert.match(readRepoFile("app/api/session/keepalive/route.ts"), /POST/);
 });
 
@@ -251,4 +259,5 @@ test("account status UI keeps single-storage language", () => {
   assert.match(combinedSource, /Storage account/);
   assert.match(combinedSource, /Log out/);
   assert.match(combinedSource, /\/api\/session\/keepalive/);
+  assert.doesNotMatch(combinedSource, /Workspace<\/span>/);
 });

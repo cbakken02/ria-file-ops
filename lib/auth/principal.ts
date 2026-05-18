@@ -56,6 +56,10 @@ type PrincipalSession =
   | null
   | undefined;
 
+type PrincipalSessionOptions = {
+  touchSessionActivity?: boolean;
+};
+
 export class AppPrincipalError extends Error {
   readonly status: 401 | 403;
 
@@ -114,10 +118,13 @@ export async function getAppPrincipalOrNull() {
 
 export async function getAppPrincipalResultFromSession(
   session: PrincipalSession,
+  options: PrincipalSessionOptions = {},
 ): Promise<AppPrincipalResult> {
   try {
     const principal = getAppPrincipalFromSession(session);
-    await enforceSessionActivity(session, principal);
+    await enforceSessionActivity(session, principal, {
+      touch: options.touchSessionActivity,
+    });
     return { ok: true, principal };
   } catch (error) {
     return appPrincipalErrorResult(error);
@@ -179,8 +186,9 @@ export function getLegacyOwnerEmail(principal: AppPrincipal) {
 
 export async function getApiPrincipalFromSession(
   session: PrincipalSession,
+  options: PrincipalSessionOptions = {},
 ): Promise<ApiPrincipalResult> {
-  const result = await getAppPrincipalResultFromSession(session);
+  const result = await getAppPrincipalResultFromSession(session, options);
 
   if (result.ok) {
     return { ok: true, principal: result.principal };

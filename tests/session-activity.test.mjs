@@ -214,6 +214,64 @@ test("activity updates are throttled", async () => {
   assert.equal(outsideThrottle.calls.upsert, 1);
 });
 
+test("read-only activity checks do not extend the idle timer", async () => {
+  const lastActivityAt = new Date(
+    NOW.getTime() - SESSION_ACTIVITY_UPDATE_THROTTLE_MS - 1,
+  ).toISOString();
+  const memory = makeMemoryStore([
+    makeRecord({
+      lastActivityAt,
+    }),
+  ]);
+
+  const result = await enforceSessionActivity(makeSession(), makePrincipal(), {
+    now: NOW,
+    store: memory.store,
+    touch: false,
+  });
+
+  assert.equal(result.touched, false);
+  assert.equal(memory.calls.upsert, 0);
+  assert.equal(result.record.lastActivityAt, lastActivityAt);
+  assert.equal(memory.records.get(SESSION_HASH)?.lastActivityAt, lastActivityAt);
+});
+
+test("read-only activity checks without an existing record use session age", async () => {
+  const memory = makeMemoryStore();
+
+  const recent = await enforceSessionActivity(
+    makeSession(new Date(NOW.getTime() - 10 * 60 * 1000)),
+    makePrincipal(),
+    {
+      now: NOW,
+      store: memory.store,
+      touch: false,
+    },
+  );
+
+  assert.equal(recent.touched, false);
+  assert.equal(memory.calls.upsert, 0);
+  assert.equal(
+    recent.record.lastActivityAt,
+    new Date(NOW.getTime() - 10 * 60 * 1000).toISOString(),
+  );
+
+  await assert.rejects(
+    enforceSessionActivity(
+      makeSession(new Date(NOW.getTime() - SESSION_IDLE_TIMEOUT_MS - 1)),
+      makePrincipal(),
+      {
+        now: NOW,
+        store: memory.store,
+        touch: false,
+      },
+    ),
+    (error) =>
+      error instanceof SessionActivityError &&
+      error.reason === "idle_timeout",
+  );
+});
+
 test("invalidated sessions fail closed", async () => {
   const memory = makeMemoryStore([
     makeRecord({

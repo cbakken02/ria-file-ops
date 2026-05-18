@@ -6,7 +6,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const session = await auth();
-  const principalResult = await getApiPrincipalFromSession(session);
+  const principalResult = await getApiPrincipalFromSession(session, {
+    touchSessionActivity: false,
+  });
 
   if (!principalResult.ok) {
     return principalResult.response;

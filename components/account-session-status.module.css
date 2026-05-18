@@ -93,12 +93,6 @@
   white-space: nowrap;
 }
 
-.workspaceId {
-  font-family:
-    var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 0.68rem !important;
-}
-
 .statusMessage {
   margin: 10px 14px 0;
   font-size: 0.76rem;

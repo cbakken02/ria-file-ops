@@ -61,6 +61,7 @@ type SessionActivitySession =
 type SessionActivityOptions = {
   now?: Date;
   store?: SessionActivityStore;
+  touch?: boolean;
 };
 
 const defaultStore: SessionActivityStore = {
@@ -117,9 +118,12 @@ export async function enforceSessionActivity(
       throw new SessionActivityError("absolute_timeout");
     }
 
+    const readOnly = options.touch === false;
     const lastActivityAt = existing
       ? parseStoredTimestamp(existing.lastActivityAt, "lastActivityAt")
-      : now;
+      : readOnly
+        ? sessionCreatedAt
+        : now;
     const idleExpiresAt = new Date(
       lastActivityAt.getTime() + SESSION_IDLE_TIMEOUT_MS,
     );
@@ -127,10 +131,12 @@ export async function enforceSessionActivity(
       throw new SessionActivityError("idle_timeout");
     }
 
+    const canTouch = !readOnly;
     const shouldTouch =
-      !existing ||
-      now.getTime() - lastActivityAt.getTime() >=
-        SESSION_ACTIVITY_UPDATE_THROTTLE_MS;
+      canTouch &&
+      (!existing ||
+        now.getTime() - lastActivityAt.getTime() >=
+          SESSION_ACTIVITY_UPDATE_THROTTLE_MS);
     const record = shouldTouch
       ? store.upsert({
           createdAt: sessionCreatedAt.toISOString(),
@@ -141,7 +147,16 @@ export async function enforceSessionActivity(
           userId: principal.userId,
           workspaceId: principal.workspaceId,
         })
-      : existing;
+      : existing ?? {
+          createdAt: sessionCreatedAt.toISOString(),
+          invalidatedAt: null,
+          lastActivityAt: sessionCreatedAt.toISOString(),
+          ownerEmail: principal.ownerKey,
+          sessionIdHash,
+          updatedAt: sessionCreatedAt.toISOString(),
+          userId: principal.userId,
+          workspaceId: principal.workspaceId,
+        };
 
     if (!record) {
       throw new SessionActivityError("verification_failed");
