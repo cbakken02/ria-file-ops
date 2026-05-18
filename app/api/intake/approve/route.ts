@@ -1,4 +1,5 @@
 import { approvePreviewItemsForIds, normalizePreviewTab } from "@/lib/intake-approval";
+import { requireApiPrincipal } from "@/lib/auth/principal";
 
 type ApproveRequestBody = {
   fileIds?: unknown;
@@ -6,6 +7,11 @@ type ApproveRequestBody = {
 };
 
 export async function POST(request: Request) {
+  const principalResult = await requireApiPrincipal();
+  if (!principalResult.ok) {
+    return principalResult.response;
+  }
+
   const body = (await request.json().catch(() => null)) as ApproveRequestBody | null;
   const tab =
     typeof body?.tab === "string" ? normalizePreviewTab(body.tab) : "all";
