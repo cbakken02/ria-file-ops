@@ -25,6 +25,7 @@ import type {
   CleanupFileState,
   CleanupFileStateUpsertInput,
 } from "@/lib/cleanup-types";
+import { normalizeStorageOwnerKey } from "@/lib/storage-connection-invariants";
 
 type FirmSettingsRow = {
   id: string;
@@ -1103,13 +1104,14 @@ export function upsertClientMemoryRule(input: {
 }
 
 export function getStorageConnectionsByOwnerEmail(ownerEmail: string) {
+  const normalizedOwnerEmail = normalizeStorageOwnerKey(ownerEmail);
   const result = queryPostgresSync<StorageConnectionRow>(
     `
       ${STORAGE_CONNECTION_SELECT}
-      WHERE owner_email = $1
+      WHERE lower(trim(owner_email)) = $1
       ORDER BY is_primary DESC, updated_at DESC
     `,
-    [ownerEmail],
+    [normalizedOwnerEmail],
   );
 
   return result.rows
@@ -1118,14 +1120,15 @@ export function getStorageConnectionsByOwnerEmail(ownerEmail: string) {
 }
 
 export function getPrimaryStorageConnectionByOwnerEmail(ownerEmail: string) {
+  const normalizedOwnerEmail = normalizeStorageOwnerKey(ownerEmail);
   const result = queryPostgresSync<StorageConnectionRow>(
     `
       ${STORAGE_CONNECTION_SELECT}
-      WHERE owner_email = $1 AND is_primary = true
+      WHERE lower(trim(owner_email)) = $1 AND is_primary = true
       ORDER BY updated_at DESC
       LIMIT 1
     `,
-    [ownerEmail],
+    [normalizedOwnerEmail],
   );
 
   return mapStorageConnectionRow(result.rows[0]);
@@ -1135,9 +1138,10 @@ export function getStorageConnectionByOwnerAndId(
   ownerEmail: string,
   connectionId: string,
 ) {
+  const normalizedOwnerEmail = normalizeStorageOwnerKey(ownerEmail);
   const result = queryPostgresSync<StorageConnectionRow>(
-    `${STORAGE_CONNECTION_SELECT} WHERE owner_email = $1 AND id = $2`,
-    [ownerEmail, connectionId],
+    `${STORAGE_CONNECTION_SELECT} WHERE lower(trim(owner_email)) = $1 AND id = $2`,
+    [normalizedOwnerEmail, connectionId],
   );
 
   return mapStorageConnectionRow(result.rows[0]);
@@ -1158,6 +1162,7 @@ export function saveStorageConnectionForOwner(input: {
   makePrimary?: boolean;
 }) {
   const now = new Date().toISOString();
+  const ownerEmail = normalizeStorageOwnerKey(input.ownerEmail);
   const identityKey =
     buildStorageConnectionIdentityKey(
       input.provider,
@@ -1165,11 +1170,11 @@ export function saveStorageConnectionForOwner(input: {
       input.accountEmail,
     ) ?? `generated:${crypto.randomUUID()}`;
   const existing = getStorageConnectionByOwnerAndIdentity(
-    input.ownerEmail,
+    ownerEmail,
     input.provider,
     identityKey,
   );
-  const hasPrimary = Boolean(getPrimaryStorageConnectionByOwnerEmail(input.ownerEmail));
+  const hasPrimary = Boolean(getPrimaryStorageConnectionByOwnerEmail(ownerEmail));
   const shouldMakePrimary = Boolean(input.makePrimary || !hasPrimary);
   const effectiveRefreshToken = input.refreshToken ?? existing?.refreshToken ?? null;
   const encryptedAccessToken = encryptServerValue(input.accessToken);
@@ -1184,9 +1189,9 @@ export function saveStorageConnectionForOwner(input: {
       text: `
         UPDATE public.storage_connections
         SET is_primary = false, updated_at = $2
-        WHERE owner_email = $1
+        WHERE lower(trim(owner_email)) = $1
       `,
-      params: [input.ownerEmail, now],
+      params: [ownerEmail, now],
     });
   }
 
@@ -1206,7 +1211,7 @@ export function saveStorageConnectionForOwner(input: {
           is_primary = $9,
           status = $10,
           updated_at = $11
-        WHERE owner_email = $12 AND id = $13
+        WHERE lower(trim(owner_email)) = $12 AND id = $13
       `,
       params: [
         input.accountEmail,
@@ -1220,13 +1225,13 @@ export function saveStorageConnectionForOwner(input: {
         shouldMakePrimary ? true : existing.isPrimary,
         input.status ?? "connected",
         now,
-        input.ownerEmail,
+        ownerEmail,
         existing.id,
       ],
     });
     statements.push({
-      text: `${STORAGE_CONNECTION_SELECT} WHERE owner_email = $1 AND id = $2`,
-      params: [input.ownerEmail, existing.id],
+      text: `${STORAGE_CONNECTION_SELECT} WHERE lower(trim(owner_email)) = $1 AND id = $2`,
+      params: [ownerEmail, existing.id],
     });
   } else {
     const id = crypto.randomUUID();
@@ -1255,7 +1260,7 @@ export function saveStorageConnectionForOwner(input: {
       `,
       params: [
         id,
-        input.ownerEmail,
+        ownerEmail,
         input.provider,
         input.accountEmail,
         input.accountName,
@@ -1272,8 +1277,8 @@ export function saveStorageConnectionForOwner(input: {
       ],
     });
     statements.push({
-      text: `${STORAGE_CONNECTION_SELECT} WHERE owner_email = $1 AND id = $2`,
-      params: [input.ownerEmail, id],
+      text: `${STORAGE_CONNECTION_SELECT} WHERE lower(trim(owner_email)) = $1 AND id = $2`,
+      params: [ownerEmail, id],
     });
   }
 
@@ -1290,27 +1295,28 @@ export function setPrimaryStorageConnectionForOwner(input: {
   connectionId: string;
 }) {
   const now = new Date().toISOString();
+  const ownerEmail = normalizeStorageOwnerKey(input.ownerEmail);
   const result = runPostgresStatementsSync<StorageConnectionRow>(
     [
       {
         text: `
           UPDATE public.storage_connections
           SET is_primary = false, updated_at = $2
-          WHERE owner_email = $1
+          WHERE lower(trim(owner_email)) = $1
         `,
-        params: [input.ownerEmail, now],
+        params: [ownerEmail, now],
       },
       {
         text: `
           UPDATE public.storage_connections
           SET is_primary = true, updated_at = $3
-          WHERE owner_email = $1 AND id = $2
+          WHERE lower(trim(owner_email)) = $1 AND id = $2
         `,
-        params: [input.ownerEmail, input.connectionId, now],
+        params: [ownerEmail, input.connectionId, now],
       },
       {
-        text: `${STORAGE_CONNECTION_SELECT} WHERE owner_email = $1 AND id = $2`,
-        params: [input.ownerEmail, input.connectionId],
+        text: `${STORAGE_CONNECTION_SELECT} WHERE lower(trim(owner_email)) = $1 AND id = $2`,
+        params: [ownerEmail, input.connectionId],
       },
     ],
     {
@@ -1326,31 +1332,32 @@ export function deleteStorageConnectionForOwner(input: {
   ownerEmail: string;
   connectionId: string;
 }) {
+  const ownerEmail = normalizeStorageOwnerKey(input.ownerEmail);
   const existing = getStorageConnectionByOwnerAndId(
-    input.ownerEmail,
+    ownerEmail,
     input.connectionId,
   );
 
   if (!existing) {
-    return getStorageConnectionsByOwnerEmail(input.ownerEmail);
+    return getStorageConnectionsByOwnerEmail(ownerEmail);
   }
 
   queryPostgresSync(
     `
       WITH deleted AS (
         DELETE FROM public.storage_connections
-        WHERE owner_email = $1 AND id = $2
+        WHERE lower(trim(owner_email)) = $1 AND id = $2
         RETURNING is_primary
       )
       UPDATE public.storage_connections
       SET is_primary = false, updated_at = $3
-      WHERE owner_email = $1
+      WHERE lower(trim(owner_email)) = $1
         AND EXISTS (SELECT 1 FROM deleted WHERE is_primary = true)
     `,
-    [input.ownerEmail, input.connectionId, new Date().toISOString()],
+    [ownerEmail, input.connectionId, new Date().toISOString()],
   );
 
-  return getStorageConnectionsByOwnerEmail(input.ownerEmail);
+  return getStorageConnectionsByOwnerEmail(ownerEmail);
 }
 
 export function createBugReport(input: {
@@ -1593,7 +1600,7 @@ function getStorageConnectionByOwnerAndIdentity(
   const result = queryPostgresSync<StorageConnectionRow>(
     `
       ${STORAGE_CONNECTION_SELECT}
-      WHERE owner_email = $1 AND provider = $2 AND identity_key = $3
+      WHERE lower(trim(owner_email)) = $1 AND provider = $2 AND identity_key = $3
     `,
     [ownerEmail, provider, identityKey],
   );
