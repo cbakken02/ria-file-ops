@@ -5,6 +5,7 @@ import { normalizeOwnerEmail } from "@/lib/auth/principal";
 import { isSupabasePersistence } from "@/lib/persistence/backend";
 import { queryPostgres, withPostgresClient } from "@/lib/postgres/server";
 import type { PreviewItem } from "@/lib/processing-preview";
+import { getSafeErrorMetadata } from "@/lib/safe-logging";
 
 export type PreviewSnapshot = {
   ownerEmail?: string | null;
@@ -284,7 +285,7 @@ export async function readPreviewSnapshot(ownerEmail?: string | null) {
     return normalizeSnapshotValue(result.rows[0]?.snapshotJson);
   } catch (error) {
     console.warn("[preview-snapshot] read failed", {
-      message: error instanceof Error ? error.message : "Unknown preview snapshot read error",
+      ...getSafeErrorMetadata(error),
     });
     return null;
   }

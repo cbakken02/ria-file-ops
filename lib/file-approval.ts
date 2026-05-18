@@ -20,6 +20,10 @@ import {
   getVerifiedActiveStorageConnectionForSession,
   storageConnectionHasWriteAccess,
 } from "@/lib/storage-connections";
+import {
+  getSafeErrorMetadata,
+  hashLogIdentifier,
+} from "@/lib/safe-logging";
 
 export type FileApprovalFailedItem = {
   fileId: string;
@@ -223,12 +227,9 @@ export async function approveFileItems(input: {
           await item.onSuccess?.(success);
         } catch (error) {
           console.warn("[file-approval] post-success update failed", {
-            errorMessage:
-              error instanceof Error
-                ? error.message
-                : "Unknown post-success update error.",
-            fileId: item.fileId,
-            sourceName: item.sourceName,
+            ...getSafeErrorMetadata(error, { includeMessage: false }),
+            fileIdHash: hashLogIdentifier(item.fileId),
+            hasSourceName: Boolean(item.sourceName),
           });
         }
       } else {
@@ -250,9 +251,9 @@ export async function approveFileItems(input: {
         sourceName: item.sourceName,
       });
       console.error("[file-approval] filing failed", {
-        errorMessage,
-        fileId: item.fileId,
-        sourceName: item.sourceName,
+        ...getSafeErrorMetadata(error, { includeMessage: false }),
+        fileIdHash: hashLogIdentifier(item.fileId),
+        hasSourceName: Boolean(item.sourceName),
       });
     }
   }

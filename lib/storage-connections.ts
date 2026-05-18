@@ -16,6 +16,7 @@ import {
   GOOGLE_DRIVE_WRITE_SCOPE,
   isGoogleDriveAccessFailure,
 } from "@/lib/google-drive";
+import { getSafeErrorMetadata } from "@/lib/safe-logging";
 import {
   getStorageProviderAdapterForConnection,
   UnsupportedStorageProviderError,
@@ -607,14 +608,10 @@ function logStorageConnectionPersistenceFailure(
   operation: "read" | "write",
 ) {
   console.warn("[storage-connections] persistence failure", {
-    message: getErrorMessage(error),
+    ...getSafeErrorMetadata(error),
     operation,
     source,
   });
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unknown storage persistence error";
 }
 
 function getPrincipalFromSessionOrNull(
