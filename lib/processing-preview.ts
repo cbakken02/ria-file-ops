@@ -319,6 +319,7 @@ export async function buildProcessingPreview(
   clientMemoryRules: ClientMemoryRule[] = [],
   options: {
     analysisMode?: "default" | "preview";
+    forceFreshAnalysis?: boolean;
   } = {},
 ) {
   const folderTemplate = normalizeFolderTemplate(settings?.folderTemplate);
@@ -344,6 +345,7 @@ export async function buildProcessingPreview(
         clientMemoryRules,
         settings?.ownerEmail ?? null,
         resolveAnalysisProfileForMode(options.analysisMode ?? "default"),
+        options.forceFreshAnalysis ?? false,
       ),
     ),
   );
@@ -374,6 +376,7 @@ async function buildPreviewItem(
   clientMemoryRules: ClientMemoryRule[],
   ownerEmail: string | null,
   analysisProfile: AnalysisProfile,
+  forceFreshAnalysis: boolean,
 ): Promise<PreviewItem> {
   const {
     insight,
@@ -386,6 +389,7 @@ async function buildPreviewItem(
     getFileBuffer,
     ownerEmail,
     analysisProfile,
+    forceFreshAnalysis,
   });
   const detectedClient = insight.detectedClient;
   const detectedClient2 = insight.detectedClient2;
@@ -527,9 +531,10 @@ async function loadPreviewArtifacts(input: {
   getFileBuffer: (fileId: string) => Promise<Buffer>;
   ownerEmail: string | null;
   analysisProfile: AnalysisProfile;
+  forceFreshAnalysis: boolean;
 }) {
   const previewFileSnapshotsEnabled = !isSupabasePersistence();
-  const cachedEntry = input.ownerEmail
+  const cachedEntry = input.ownerEmail && !input.forceFreshAnalysis
     ? await readPreviewAnalysisCache({
         analysisProfile: input.analysisProfile,
         ownerEmail: input.ownerEmail,

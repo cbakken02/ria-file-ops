@@ -5,7 +5,14 @@ import {
 } from "@/lib/db";
 import { buildCleanupPreview } from "@/lib/cleanup-preview";
 import type { CleanupMode, CleanupScope } from "@/lib/cleanup-types";
-import { getVerifiedActiveStorageConnectionForSession } from "@/lib/storage-connections";
+import {
+  formatGoogleDriveFolderAccessError,
+  getGoogleDriveAccessErrorStatus,
+} from "@/lib/google-drive";
+import {
+  markStorageConnectionNeedsReauth,
+  resolveActiveStorageAuthorizationForSession,
+} from "@/lib/storage-connections";
 
 type PreviewRequestBody = {
   mode?: CleanupMode;
@@ -15,15 +22,23 @@ type PreviewRequestBody = {
 
 export async function POST(request: Request) {
   const session = await auth();
-  const activeConnection = session
-    ? await getVerifiedActiveStorageConnectionForSession(session)
-    : null;
+  const storageAuthorization = await resolveActiveStorageAuthorizationForSession(
+    session,
+    {
+      reconnectMessage:
+        "Reconnect the active storage connection before generating a cleanup preview.",
+      signInMessage: "Sign in before generating a cleanup preview.",
+    },
+  );
 
-  if (!session?.user?.email || !activeConnection) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!storageAuthorization.ok) {
+    return Response.json(
+      { error: storageAuthorization.error },
+      { status: storageAuthorization.status },
+    );
   }
 
-  const ownerEmail = session.user.email;
+  const { connection: activeConnection, ownerEmail } = storageAuthorization;
   const body = (await request.json().catch(() => null)) as PreviewRequestBody | null;
   const scope = body?.scope;
   const mode = body?.mode;
@@ -55,14 +70,21 @@ export async function POST(request: Request) {
 
     return Response.json(preview);
   } catch (error) {
+    const status = getGoogleDriveAccessErrorStatus(error);
+    if (status === 401) {
+      markStorageConnectionNeedsReauth(activeConnection);
+    }
+
     return Response.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "Clean Up preview could not be generated.",
+          status === 401
+            ? formatGoogleDriveFolderAccessError(error, "selected folder")
+            : error instanceof Error
+              ? error.message
+              : "Clean Up preview could not be generated.",
       },
-      { status: 500 },
+      { status },
     );
   }
 }

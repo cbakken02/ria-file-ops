@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { previewFileSnapshotBelongsToOwner } from "@/lib/preview-file-access";
 import { readPreviewFileSnapshot } from "@/lib/preview-file-snapshots";
 
 function safeFilename(value: string) {
@@ -11,11 +12,20 @@ export async function GET(
 ) {
   const session = await auth();
 
-  if (!session?.user) {
+  if (!session?.user?.email) {
     return new Response("Unauthorized", { status: 401 });
   }
 
   const { snapshotId } = await context.params;
+  const belongsToOwner = await previewFileSnapshotBelongsToOwner({
+    ownerEmail: session.user.email,
+    snapshotId,
+  });
+
+  if (!belongsToOwner) {
+    return new Response("Preview snapshot not found.", { status: 404 });
+  }
+
   const snapshot = await readPreviewFileSnapshot(snapshotId);
 
   if (!snapshot) {

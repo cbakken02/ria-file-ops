@@ -11,6 +11,7 @@
 .queueList,
 .noteCard,
 .noticeCard,
+.scanStatusPanel,
 .queueSection {
   width: min(1180px, 100%);
   margin: 0 auto;
@@ -128,6 +129,63 @@
 .noteCard,
 .noticeCard {
   padding: 14px 0;
+}
+
+.scanStatusPanel {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.scanStatusHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.scanStatusHeader h2 {
+  margin: 4px 0 0;
+  font-size: 1.08rem;
+  line-height: 1.2;
+}
+
+.scanStatusGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 20px;
+  margin: 0;
+}
+
+.scanStatusGrid div {
+  min-width: 0;
+}
+
+.scanStatusGrid dt {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.scanStatusGrid dd {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  color: var(--foreground);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.scanStatusGrid dd span {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
 }
 
 .noteCard strong,
@@ -839,10 +897,15 @@
   }
 
   .header,
+  .scanStatusHeader,
   .rowContent,
   .rowButton,
   .intakeModalHeader {
     flex-direction: column;
+  }
+
+  .scanStatusGrid {
+    grid-template-columns: 1fr 1fr;
   }
 
   .fileComparisonGrid {
@@ -894,8 +957,13 @@
   }
 
   .noteCard,
-  .noticeCard {
+  .noticeCard,
+  .scanStatusPanel {
     padding: 14px 0;
+  }
+
+  .scanStatusGrid {
+    grid-template-columns: 1fr;
   }
 
   .rowButton {

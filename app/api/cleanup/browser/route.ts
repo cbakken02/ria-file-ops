@@ -1,7 +1,8 @@
 import { auth } from "@/auth";
 import {
+  formatGoogleDriveFolderAccessError,
+  getGoogleDriveAccessErrorStatus,
   getDriveFolderTrail,
-  isGoogleDriveAccessFailure,
   listDriveBrowserItems,
 } from "@/lib/google-drive";
 import {
@@ -9,22 +10,30 @@ import {
   getFilingEventsByOwnerEmail,
 } from "@/lib/db";
 import { resolveCleanupBrowserState } from "@/lib/cleanup-file-state";
-import { getActiveStorageConnectionForSession } from "@/lib/storage-connections";
+import {
+  markStorageConnectionNeedsReauth,
+  resolveActiveStorageAuthorizationForSession,
+} from "@/lib/storage-connections";
 
 export async function GET(request: Request) {
   const session = await auth();
-  const ownerEmail = session?.user?.email ?? null;
-  const activeConnection = session
-    ? await getActiveStorageConnectionForSession(session)
-    : null;
+  const storageAuthorization = await resolveActiveStorageAuthorizationForSession(
+    session,
+    {
+      reconnectMessage:
+        "Reconnect the active storage connection to browse files.",
+      signInMessage: "Sign in before browsing files.",
+    },
+  );
 
-  if (!ownerEmail || !activeConnection || activeConnection.status !== "connected") {
+  if (!storageAuthorization.ok) {
     return Response.json(
-      { error: "Reconnect the active storage connection to browse files." },
-      { status: 401 },
+      { error: storageAuthorization.error },
+      { status: storageAuthorization.status },
     );
   }
 
+  const { connection: activeConnection, ownerEmail } = storageAuthorization;
   const url = new URL(request.url);
   const folderId = url.searchParams.get("folderId")?.trim() || "root";
   const includeTrail = url.searchParams.get("includeTrail") !== "0";
@@ -103,14 +112,16 @@ export async function GET(request: Request) {
       ...(trail ? { trail } : {}),
     });
   } catch (error) {
+    const status = getGoogleDriveAccessErrorStatus(error);
+    if (status === 401) {
+      markStorageConnectionNeedsReauth(activeConnection);
+    }
+
     return Response.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "The selected storage folder could not be loaded.",
+        error: formatGoogleDriveFolderAccessError(error, "selected folder"),
       },
-      { status: error instanceof Error && isGoogleDriveAccessFailure(error) ? 401 : 500 },
+      { status },
     );
   }
 }
