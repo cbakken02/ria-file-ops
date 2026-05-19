@@ -56,6 +56,19 @@ Production smoke passed after deployment:
 Admin view of the submitted smoke record still requires signing in as an
 allowlisted admin user.
 
+## Abuse Protection
+
+- Public waitlist submissions now have basic server-side throttling by request
+  IP and normalized email using the shared in-memory limiter.
+- The form includes a visually hidden honeypot field. Legitimate users should
+  not see or fill it; filled honeypot submissions receive a generic failure
+  message and are not saved.
+- This is private-MVP spam protection only. It is not a replacement for durable
+  shared rate limiting, Vercel Firewall rules, or CAPTCHA/Cloudflare Turnstile
+  if public spam appears.
+- CAPTCHA/Turnstile remains intentionally deferred so the first public waitlist
+  flow stays low-friction.
+
 ## Rollback Notes
 
 If the landing or waitlist release needs rollback:

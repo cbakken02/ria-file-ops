@@ -4,12 +4,29 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { validateWaitlistSignupFormData } from "../lib/waitlist-signups.ts";
+import {
+  WAITLIST_GENERIC_FAILURE_MESSAGE,
+  WAITLIST_RATE_LIMIT_MESSAGE,
+  checkWaitlistSubmissionAbuse,
+} from "../lib/waitlist-abuse-protection.ts";
+import {
+  WAITLIST_HONEYPOT_FIELD_NAME,
+  validateWaitlistSignupFormData,
+} from "../lib/waitlist-signups.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function readRepoFile(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
+}
+
+function createValidWaitlistFormData(email = "jane@example.com") {
+  const formData = new FormData();
+  formData.set("name", "Jane Advisor");
+  formData.set("email", email);
+  formData.set("firm", "Advisory Ops LLC");
+  formData.append("fileSystems", "google_drive");
+  return formData;
 }
 
 test("waitlist validation normalizes email and rejects invalid selections", () => {
@@ -41,6 +58,81 @@ test("waitlist validation normalizes email and rejects invalid selections", () =
   const invalidResult = validateWaitlistSignupFormData(invalid);
   assert.equal(invalidResult.ok, false);
   assert.equal(invalidResult.fieldErrors.fileSystems, "Select a valid file location.");
+});
+
+test("valid waitlist submissions pass basic abuse protection", () => {
+  const result = checkWaitlistSubmissionAbuse({
+    formData: createValidWaitlistFormData(),
+    headers: new Headers({ "x-forwarded-for": "203.0.113.70" }),
+    store: new Map(),
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test("honeypot-filled waitlist submissions are rejected with a generic message", () => {
+  const formData = createValidWaitlistFormData();
+  formData.set(WAITLIST_HONEYPOT_FIELD_NAME, "https://bot.example");
+
+  const result = checkWaitlistSubmissionAbuse({
+    formData,
+    headers: new Headers({ "x-forwarded-for": "203.0.113.71" }),
+    store: new Map(),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.message, WAITLIST_GENERIC_FAILURE_MESSAGE);
+  assert.doesNotMatch(result.message, /honeypot|bot|spam/i);
+});
+
+test("waitlist submissions are rate limited by email and IP without raw identifiers", () => {
+  const emailStore = new Map();
+  const headers = new Headers({ "x-forwarded-for": "203.0.113.72" });
+
+  for (let index = 0; index < 3; index += 1) {
+    assert.equal(
+      checkWaitlistSubmissionAbuse({
+        formData: createValidWaitlistFormData("jane@example.com"),
+        headers,
+        now: 1_000 + index,
+        store: emailStore,
+      }).ok,
+      true,
+    );
+  }
+
+  const emailLimited = checkWaitlistSubmissionAbuse({
+    formData: createValidWaitlistFormData("JANE@EXAMPLE.COM"),
+    headers,
+    now: 2_000,
+    store: emailStore,
+  });
+  assert.equal(emailLimited.ok, false);
+  assert.equal(emailLimited.message, WAITLIST_RATE_LIMIT_MESSAGE);
+  assert.equal(JSON.stringify([...emailStore.keys()]).includes("jane@example.com"), false);
+
+  const ipStore = new Map();
+  for (let index = 0; index < 5; index += 1) {
+    assert.equal(
+      checkWaitlistSubmissionAbuse({
+        formData: createValidWaitlistFormData(`person-${index}@example.com`),
+        headers: new Headers({ "x-forwarded-for": "203.0.113.73" }),
+        now: 3_000 + index,
+        store: ipStore,
+      }).ok,
+      true,
+    );
+  }
+
+  const ipLimited = checkWaitlistSubmissionAbuse({
+    formData: createValidWaitlistFormData("person-six@example.com"),
+    headers: new Headers({ "x-forwarded-for": "203.0.113.73" }),
+    now: 4_000,
+    store: ipStore,
+  });
+  assert.equal(ipLimited.ok, false);
+  assert.equal(ipLimited.message, WAITLIST_RATE_LIMIT_MESSAGE);
+  assert.equal(JSON.stringify([...ipStore.keys()]).includes("203.0.113.73"), false);
 });
 
 test("landing page routes waitlist CTAs to the restored waitlist flow", () => {
@@ -102,10 +194,14 @@ test("waitlist migration is additive and keeps the public table behind RLS", () 
 test("waitlist persistence stays behind the central persistence backend boundary", () => {
   const storeSource = readRepoFile("lib/waitlist-store.ts");
   const actionSource = readRepoFile("app/join-waitlist/actions.ts");
+  const formSource = readRepoFile("app/join-waitlist/waitlist-form.tsx");
 
   assert.match(storeSource, /isSupabasePersistence/);
   assert.match(storeSource, /queryPostgresSync/);
   assert.match(storeSource, /getSqliteDatabase/);
   assert.match(actionSource, /getSafeErrorMetadata/);
+  assert.match(actionSource, /checkWaitlistSubmissionAbuse/);
+  assert.match(actionSource, /await headers\(\)/);
+  assert.match(formSource, /WAITLIST_HONEYPOT_FIELD_NAME/);
   assert.equal(actionSource.includes("console.error(\"[waitlist] signup failed\", error)"), false);
 });

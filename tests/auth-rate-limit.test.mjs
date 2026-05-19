@@ -5,6 +5,7 @@ import {
   buildRateLimitKey,
   checkRateLimit,
   getClientIpAddress,
+  getClientIpAddressFromHeaders,
 } from "../lib/rate-limit.ts";
 import {
   authRateLimitResponse,
@@ -94,6 +95,15 @@ test("client IP extraction prefers the first forwarded IP", () => {
   });
 
   assert.equal(getClientIpAddress(request), "203.0.113.30");
+});
+
+test("client IP extraction works from server action header readers", () => {
+  const headers = new Headers({
+    "cf-connecting-ip": "203.0.113.31",
+    "x-real-ip": "198.51.100.31",
+  });
+
+  assert.equal(getClientIpAddressFromHeaders(headers), "198.51.100.31");
 });
 
 test("rate limit keys hash identity material instead of storing it raw", () => {

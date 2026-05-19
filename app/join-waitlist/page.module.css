@@ -158,6 +158,16 @@
   z-index: 1;
 }
 
+.honeypotField {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .formHeader {
   margin-bottom: 18px;
 }

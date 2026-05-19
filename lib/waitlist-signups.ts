@@ -45,6 +45,8 @@ export const WAITLIST_FILE_SYSTEM_OPTIONS = [
   },
 ] as const;
 
+export const WAITLIST_HONEYPOT_FIELD_NAME = "website";
+
 export const WAITLIST_PAIN_POINT_OPTIONS = [
   {
     label: "New-client onboarding uploads",
