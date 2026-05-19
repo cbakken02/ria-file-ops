@@ -61,7 +61,16 @@ test("login page wires explicit logout reason to the Google account picker promp
   assert.doesNotMatch(`${loginSource}\n${buttonSource}`, /prompt:\s*"consent"/);
 });
 
-test("explicit logout clears app session state before returning to post-logout login", () => {
+test("landing page exposes a subtle signed-out state with account-picker sign-in path", () => {
+  const landingSource = readRepoFile("app/page.tsx");
+
+  assert.match(landingSource, /signed_out/);
+  assert.match(landingSource, /You&apos;re signed out\./);
+  assert.match(landingSource, /POST_LOGOUT_SIGN_IN_URL/);
+  assert.match(landingSource, /!isAuthenticated && signedOut === "1"/);
+});
+
+test("explicit logout clears app session state before returning to signed-out landing", () => {
   const accountMenuSource = readRepoFile("components/account-menu.tsx");
   const signOutButtonSource = readRepoFile("components/sign-out-button.tsx");
   const logoutRouteSource = readRepoFile("app/api/session/logout/route.ts");
@@ -69,10 +78,9 @@ test("explicit logout clears app session state before returning to post-logout l
   for (const source of [accountMenuSource, signOutButtonSource]) {
     assert.match(source, /fetch\("\/api\/session\/logout"/);
     assert.match(source, /method:\s*"POST"/);
-    assert.match(
-      source,
-      /signOut\(\{\s*callbackUrl:\s*"\/login\?reason=logged_out"/s,
-    );
+    assert.match(source, /POST_LOGOUT_LANDING_URL/);
+    assert.match(source, /signOut\(\{\s*callbackUrl:\s*POST_LOGOUT_LANDING_URL/s);
+    assert.doesNotMatch(source, /callbackUrl:\s*"\/login\?reason=logged_out"/s);
   }
 
   assert.match(logoutRouteSource, /invalidateSessionActivityForSession/);

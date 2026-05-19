@@ -31,12 +31,13 @@ test("login page explains safe auth outcomes without exposing tenant internals",
   assert.doesNotMatch(source, /ownerKey|legacyOwnerEmail|appSessionIdHash|session token/i);
 });
 
-test("account logout returns users to a clear signed-out login state", () => {
+test("account logout returns users to a clear signed-out landing state", () => {
   const source = readRepoFile("components/account-menu.tsx");
 
   assert.match(source, /fetch\("\/api\/session\/logout"/);
   assert.match(source, /method:\s*"POST"/);
-  assert.match(source, /signOut\(\{\s*callbackUrl:\s*"\/login\?reason=logged_out"/s);
+  assert.match(source, /POST_LOGOUT_LANDING_URL/);
+  assert.match(source, /signOut\(\{\s*callbackUrl:\s*POST_LOGOUT_LANDING_URL/s);
   assert.doesNotMatch(source, /deleteStorageConnection/i);
 });
 
