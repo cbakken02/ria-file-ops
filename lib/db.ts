@@ -7,6 +7,13 @@ import { ensureCleanupFileStateSchema } from "@/lib/persistence/cleanup-file-sta
 import { isSupabasePersistence } from "@/lib/persistence/backend";
 import * as supabaseAppStateStore from "@/lib/persistence/supabase-app-state-store";
 import { getSafeErrorMetadata } from "@/lib/safe-logging";
+import * as waitlistStore from "@/lib/waitlist-store";
+import type {
+  WaitlistSignup,
+  WaitlistSignupInput,
+  WaitlistSignupStatus,
+  WaitlistSignupUpsertResult,
+} from "@/lib/waitlist-signups";
 
 export type FirmSettings = {
   id: string;
@@ -570,4 +577,21 @@ export function getAuthAuditEventsByOwnerEmail(
   return readAppStateValue("auth audit events", [], () =>
     getActiveAppStateStore().getAuthAuditEventsByOwnerEmail(ownerEmail),
   );
+}
+
+export function upsertWaitlistSignup(
+  input: WaitlistSignupInput,
+): WaitlistSignupUpsertResult {
+  return waitlistStore.upsertWaitlistSignup(input);
+}
+
+export function getWaitlistSignups(): WaitlistSignup[] {
+  return waitlistStore.getWaitlistSignups();
+}
+
+export function setWaitlistSignupStatus(input: {
+  id: string;
+  status: WaitlistSignupStatus;
+}): WaitlistSignup | null {
+  return waitlistStore.setWaitlistSignupStatus(input);
 }
