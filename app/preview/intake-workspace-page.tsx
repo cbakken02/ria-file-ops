@@ -18,6 +18,10 @@ import {
   restorePreviewItemsFromSnapshot,
   type PreviewSnapshot,
 } from "@/lib/preview-snapshot";
+import {
+  checkIntakeSourceFreshness,
+  type IntakeFreshnessResult,
+} from "@/lib/intake-freshness";
 import { requireSession } from "@/lib/session";
 import { getReviewRuleOption, normalizeFolderTemplate } from "@/lib/setup-config";
 import { parseNamingRules } from "@/lib/naming-rules";
@@ -44,7 +48,6 @@ export async function IntakeWorkspacePage({
   const principal = getAppPrincipalFromSession(session);
   const ownerEmail = getLegacyOwnerEmail(principal);
   const displayConnection = await getActiveStorageConnectionForSession(session);
-  const activeStorageProvider = displayConnection?.provider ?? null;
   const settings = getFirmSettingsByOwnerEmail(ownerEmail) ?? null;
   const namingRules = parseNamingRules(
     settings?.namingRulesJson,
@@ -55,13 +58,24 @@ export async function IntakeWorkspacePage({
   const savedDecisionMap = new Map(savedDecisions.map((decision) => [decision.fileId, decision]));
   const snapshot = await readPreviewSnapshot(ownerEmail);
   const snapshotItems = restorePreviewItemsFromSnapshot(snapshot);
-
+  const sourceFreshness = await checkIntakeSourceFreshness({
+    connection: displayConnection,
+    snapshot,
+    sourceFolderId: settings?.sourceFolderId,
+  });
+  const effectiveDisplayConnection =
+    sourceFreshness.status === "not_checked" &&
+    sourceFreshness.reason === "storage_auth_failed" &&
+    displayConnection
+      ? { ...displayConnection, status: "needs_reauth" as const }
+      : displayConnection;
+  const activeStorageProvider = effectiveDisplayConnection?.provider ?? null;
   const canRescanIntake =
     Boolean(settings?.sourceFolderId) &&
-    Boolean(displayConnection) &&
-    displayConnection?.status === "connected";
-  const storageStatusTitle = getIntakeStorageStatusTitle(displayConnection);
-  const storageStatusSummary = getIntakeStorageStatusSummary(displayConnection);
+    Boolean(effectiveDisplayConnection) &&
+    effectiveDisplayConnection?.status === "connected";
+  const storageStatusTitle = getIntakeStorageStatusTitle(effectiveDisplayConnection);
+  const storageStatusSummary = getIntakeStorageStatusSummary(effectiveDisplayConnection);
   const liveQueueError =
     settings?.sourceFolderId && !canRescanIntake ? storageStatusSummary : null;
   const lastScanError = scanStatus === "error" ? notice ?? null : null;
@@ -104,7 +118,7 @@ export async function IntakeWorkspacePage({
           </p>
         </div>
         <div className={styles.headerActions}>
-          <WorkspaceStorageStatus connection={displayConnection} />
+          <WorkspaceStorageStatus connection={effectiveDisplayConnection} />
         </div>
       </header>
 
@@ -128,7 +142,7 @@ export async function IntakeWorkspacePage({
                 Rescan source folder
               </button>
             </form>
-          ) : displayConnection?.provider === "google_drive" ? (
+          ) : effectiveDisplayConnection?.provider === "google_drive" ? (
             <Link className={styles.primaryAction} href="/api/storage/google/start">
               Reconnect Google Drive
             </Link>
@@ -144,13 +158,13 @@ export async function IntakeWorkspacePage({
         <dl className={styles.scanStatusGrid}>
           <div>
             <dt>Provider</dt>
-            <dd>{getProviderLabel(displayConnection?.provider ?? null)}</dd>
+            <dd>{getProviderLabel(effectiveDisplayConnection?.provider ?? null)}</dd>
           </div>
           <div>
             <dt>Google account</dt>
             <dd>
-              {displayConnection?.accountEmail ??
-                displayConnection?.accountName ??
+              {effectiveDisplayConnection?.accountEmail ??
+                effectiveDisplayConnection?.accountName ??
                 "Not connected"}
             </dd>
           </div>
@@ -172,14 +186,21 @@ export async function IntakeWorkspacePage({
             <dd>{getCacheStateLabel(snapshot, preview.items.length)}</dd>
           </div>
           <div>
+            <dt>Drive freshness</dt>
+            <dd>
+              {getFreshnessLabel(sourceFreshness)}
+              <span>{getFreshnessDetail(sourceFreshness)}</span>
+            </dd>
+          </div>
+          <div>
             <dt>Last error</dt>
             <dd>{lastScanError ?? "None"}</dd>
           </div>
         </dl>
         {settings?.sourceFolderId ? (
           <p className={styles.scanStatusHelp}>
-            Browser refresh shows the saved queue from the last completed rescan.
-            Use Rescan source folder to check Drive for new or changed files.
+            Browser refresh checks Drive metadata without downloading files. Use
+            Rescan source folder to rebuild and analyze the queue.
           </p>
         ) : null}
       </section>
@@ -191,7 +212,17 @@ export async function IntakeWorkspacePage({
         </section>
       ) : null}
 
-      {!displayConnection ? (
+      {sourceFreshness.status === "stale" ? (
+        <section className={styles.noteCard}>
+          <strong>Source folder changed — Rescan needed</strong>
+          <p>
+            {getFreshnessSummary(sourceFreshness)} Rescan source folder to rebuild
+            the queue and analyze the changed files.
+          </p>
+        </section>
+      ) : null}
+
+      {!effectiveDisplayConnection ? (
         <section className={styles.noteCard}>
           <strong>Connect storage</strong>
           <p>Connect Google Drive in Settings before choosing an intake folder.</p>
@@ -202,7 +233,7 @@ export async function IntakeWorkspacePage({
             Open workspace settings
           </Link>
         </section>
-      ) : displayConnection.status !== "connected" ? (
+      ) : effectiveDisplayConnection.status !== "connected" ? (
         <section className={styles.noteCard}>
           <strong>Reconnect storage</strong>
           <p>
@@ -357,6 +388,89 @@ function getCacheStateLabel(
   }
 
   return `Saved queue with ${itemCount} item${itemCount === 1 ? "" : "s"}`;
+}
+
+function getFreshnessLabel(freshness: IntakeFreshnessResult) {
+  if (freshness.status === "stale") {
+    return "Source folder changed — Rescan needed";
+  }
+
+  if (freshness.status === "current") {
+    return "Drive metadata matches saved queue";
+  }
+
+  if (freshness.reason === "storage_auth_failed") {
+    return "Reconnect needed";
+  }
+
+  if (freshness.reason === "metadata_check_failed") {
+    return "Could not verify Drive metadata";
+  }
+
+  return "Not checked";
+}
+
+function getFreshnessDetail(freshness: IntakeFreshnessResult) {
+  if (freshness.status === "stale") {
+    return getFreshnessSummary(freshness);
+  }
+
+  if (freshness.status === "current") {
+    return `Checked ${formatFileCount(freshness.liveFileCount)} without downloading contents.`;
+  }
+
+  if (freshness.reason === "no_source_folder") {
+    return "Choose a source folder before checking Drive freshness.";
+  }
+
+  if (freshness.reason === "no_active_connection") {
+    return "Connect or reconnect Google Drive before checking source folder freshness.";
+  }
+
+  if (freshness.reason === "storage_auth_failed") {
+    return "Reconnect Google Drive before checking the source folder again.";
+  }
+
+  if (freshness.reason === "unsupported_provider") {
+    return "This storage provider does not support source folder freshness checks yet.";
+  }
+
+  return "Use Rescan source folder to retry the metadata check.";
+}
+
+function getFreshnessSummary(
+  freshness: Extract<IntakeFreshnessResult, { status: "stale" }>,
+) {
+  const parts = [
+    freshness.newFileCount
+      ? formatLabeledFileCount(freshness.newFileCount, "new")
+      : null,
+    freshness.changedFileCount
+      ? formatLabeledFileCount(freshness.changedFileCount, "changed")
+      : null,
+    freshness.removedFileCount
+      ? formatLabeledFileCount(freshness.removedFileCount, "removed")
+      : null,
+    freshness.unprocessedFileCount
+      ? formatNeedsAnalysisCount(freshness.unprocessedFileCount)
+      : null,
+  ].filter(Boolean);
+
+  return parts.length
+    ? `${parts.join(", ")}.`
+    : "Drive metadata differs from the saved queue.";
+}
+
+function formatFileCount(count: number) {
+  return `${count} file${count === 1 ? "" : "s"}`;
+}
+
+function formatLabeledFileCount(count: number, label: string) {
+  return `${count} ${label} file${count === 1 ? "" : "s"}`;
+}
+
+function formatNeedsAnalysisCount(count: number) {
+  return `${formatFileCount(count)} ${count === 1 ? "needs" : "need"} analysis`;
 }
 
 function getIntakeStorageStatusTitle(

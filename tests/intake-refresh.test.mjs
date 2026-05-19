@@ -9,6 +9,10 @@ import {
   getGoogleDriveAccessErrorStatus,
 } from "../lib/google-drive.ts";
 import {
+  checkIntakeSourceFreshness,
+  compareIntakeSourceFreshness,
+} from "../lib/intake-freshness.ts";
+import {
   IntakeRefreshError,
   refreshIntakeQueue,
 } from "../lib/intake-refresh.ts";
@@ -117,15 +121,223 @@ test("Intake exposes a server-side Rescan source folder action instead of the br
   assert.match(pageSource, /Displayed queue/);
   assert.match(
     pageSource,
-    /Browser refresh shows the saved queue from the last completed rescan\./,
+    /Browser refresh checks Drive metadata without downloading files\./,
   );
-  assert.match(pageSource, /Use Rescan source folder to check Drive/);
+  assert.match(pageSource, /Drive freshness/);
+  assert.match(pageSource, /Source folder changed — Rescan needed/);
+  assert.match(pageSource, /checkIntakeSourceFreshness/);
   assert.equal(pageSource.includes("Cached intake preview needs a browser refresh"), false);
   assert.equal(pageSource.includes("Sidebar navigation no longer scans Drive"), false);
   assert.equal(pageSource.includes("listFilesInFolder"), false);
+  assert.equal(pageSource.includes("downloadDriveFile"), false);
+  assert.equal(pageSource.includes("buildProcessingPreview"), false);
   assert.equal(pageSource.includes("refreshIntakeQueueForSession(session"), false);
   assert.match(actionSource, /refreshIntakeQueueForSession\(session,\s*{\s*forceFresh: true/s);
   assert.match(apiSource, /forceFresh: true/);
+});
+
+test("Intake Drive freshness compares live metadata with the saved queue", () => {
+  const result = compareIntakeSourceFreshness({
+    liveFiles: [
+      {
+        id: "same-file",
+        name: "Same.pdf",
+        mimeType: "application/pdf",
+        modifiedTime: "2026-05-18T12:00:00.000Z",
+        size: "100",
+      },
+      {
+        id: "changed-file",
+        name: "Changed.pdf",
+        mimeType: "application/pdf",
+        modifiedTime: "2026-05-18T13:00:00.000Z",
+        size: "200",
+      },
+      {
+        id: "new-file",
+        name: "New.pdf",
+        mimeType: "application/pdf",
+        modifiedTime: "2026-05-18T14:00:00.000Z",
+        size: "300",
+      },
+      {
+        id: "folder",
+        name: "Nested",
+        mimeType: "application/vnd.google-apps.folder",
+      },
+    ],
+    snapshot: {
+      generatedAt: "2026-05-18T12:30:00.000Z",
+      sourceFolder: "Intake",
+      destinationRoot: "Clients",
+      reviewPosture: "Manual review",
+      readyCount: 1,
+      reviewCount: 2,
+      items: [
+        makeSnapshotItem({
+          id: "same-file",
+          sourceName: "Same.pdf",
+          modifiedTime: "2026-05-18T12:00:00.000Z",
+          driveSize: "100",
+        }),
+        makeSnapshotItem({
+          id: "changed-file",
+          sourceName: "Changed.pdf",
+          modifiedTime: "2026-05-18T12:45:00.000Z",
+          driveSize: "200",
+        }),
+        makeSnapshotItem({
+          id: "removed-file",
+          sourceName: "Removed.pdf",
+          modifiedTime: "2026-05-18T11:00:00.000Z",
+          driveSize: "400",
+        }),
+      ],
+    },
+  });
+
+  assert.equal(result.status, "stale");
+  assert.equal(result.liveFileCount, 3);
+  assert.equal(result.savedFileCount, 3);
+  assert.equal(result.newFileCount, 1);
+  assert.equal(result.changedFileCount, 1);
+  assert.equal(result.removedFileCount, 1);
+  assert.equal(result.unprocessedFileCount, 2);
+});
+
+test("Intake Drive freshness treats matching metadata as current", () => {
+  const result = compareIntakeSourceFreshness({
+    liveFiles: [
+      {
+        id: "file-1",
+        name: "Statement.pdf",
+        mimeType: "application/pdf",
+        modifiedTime: "2026-05-18T12:00:00.000Z",
+        size: "100",
+      },
+    ],
+    snapshot: {
+      generatedAt: "2026-05-18T12:30:00.000Z",
+      sourceFolder: "Intake",
+      destinationRoot: "Clients",
+      reviewPosture: "Manual review",
+      readyCount: 1,
+      reviewCount: 0,
+      items: [
+        makeSnapshotItem({
+          id: "file-1",
+          sourceName: "Statement.pdf",
+          modifiedTime: "2026-05-18T12:00:00.000Z",
+          driveSize: "100",
+        }),
+      ],
+    },
+  });
+
+  assert.equal(result.status, "current");
+  assert.equal(result.newFileCount, 0);
+  assert.equal(result.changedFileCount, 0);
+  assert.equal(result.removedFileCount, 0);
+  assert.equal(result.unprocessedFileCount, 0);
+});
+
+test("Intake Drive freshness treats an empty source folder with no saved queue as current", () => {
+  const result = compareIntakeSourceFreshness({
+    liveFiles: [],
+    snapshot: null,
+  });
+
+  assert.equal(result.status, "current");
+  assert.equal(result.liveFileCount, 0);
+  assert.equal(result.savedFileCount, 0);
+  assert.equal(result.newFileCount, 0);
+  assert.equal(result.changedFileCount, 0);
+  assert.equal(result.removedFileCount, 0);
+  assert.equal(result.unprocessedFileCount, 0);
+});
+
+test("Intake browser freshness check lists metadata without downloading files", async () => {
+  const calls = [];
+  const result = await checkIntakeSourceFreshness({
+    connection: makeConnection(),
+    sourceFolderId: "source-folder",
+    snapshot: null,
+    deps: {
+      now: () => new Date("2026-05-18T15:00:00.000Z"),
+      async listFolder({ connection, folderId }) {
+        calls.push(["listFolder", connection.id, folderId]);
+        return [
+          {
+            id: "new-file",
+            name: "New.pdf",
+            mimeType: "application/pdf",
+            modifiedTime: "2026-05-18T14:00:00.000Z",
+            size: "300",
+          },
+        ];
+      },
+    },
+  });
+
+  assert.deepEqual(calls, [["listFolder", "connection-1", "source-folder"]]);
+  assert.equal(result.status, "stale");
+  assert.equal(result.checkedAt, "2026-05-18T15:00:00.000Z");
+  assert.equal(result.newFileCount, 1);
+  assert.equal(result.unprocessedFileCount, 1);
+});
+
+test("Intake browser freshness skips Drive calls when source or storage is missing", async () => {
+  const calls = [];
+  const deps = {
+    async listFolder() {
+      calls.push(["listFolder"]);
+      return [];
+    },
+  };
+
+  const missingSource = await checkIntakeSourceFreshness({
+    connection: makeConnection(),
+    sourceFolderId: null,
+    snapshot: null,
+    deps,
+  });
+  const missingConnection = await checkIntakeSourceFreshness({
+    connection: null,
+    sourceFolderId: "source-folder",
+    snapshot: null,
+    deps,
+  });
+
+  assert.equal(missingSource.status, "not_checked");
+  assert.equal(missingSource.reason, "no_source_folder");
+  assert.equal(missingConnection.status, "not_checked");
+  assert.equal(missingConnection.reason, "no_active_connection");
+  assert.deepEqual(calls, []);
+});
+
+test("Intake browser freshness marks Drive auth failures as reconnect-needed without raw details", async () => {
+  const calls = [];
+  const result = await checkIntakeSourceFreshness({
+    connection: makeConnection(),
+    sourceFolderId: "source-folder",
+    snapshot: null,
+    deps: {
+      async listFolder() {
+        throw new Error("Invalid authentication credentials: provider detail");
+      },
+      markNeedsReauth(connection) {
+        calls.push(["markNeedsReauth", connection.id]);
+        return connection;
+      },
+      now: () => new Date("2026-05-18T15:10:00.000Z"),
+    },
+  });
+
+  assert.equal(result.status, "not_checked");
+  assert.equal(result.reason, "storage_auth_failed");
+  assert.equal(result.checkedAt, "2026-05-18T15:10:00.000Z");
+  assert.deepEqual(calls, [["markNeedsReauth", "connection-1"]]);
+  assert.equal(JSON.stringify(result).includes("provider detail"), false);
 });
 
 test("preview refresh API is wired to the shared Intake refresh helper", () => {
