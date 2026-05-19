@@ -12,7 +12,6 @@ import {
   type StorageConnection,
 } from "@/lib/db";
 import {
-  GOOGLE_DRIVE_READ_SCOPE,
   GOOGLE_DRIVE_WRITE_SCOPE,
   isGoogleDriveAccessFailure,
 } from "@/lib/google-drive";
@@ -128,33 +127,22 @@ export async function getActiveStorageConnectionForSession(
     return null;
   }
 
-  return getActiveStorageConnectionForPrincipal(principal, session);
+  return getActiveStorageConnectionForPrincipal(principal);
 }
 
 export async function getActiveStorageConnectionForPrincipal(
   principal: AppPrincipal,
-  session?: Session,
 ): Promise<StorageConnection | null> {
-  const connections = session
-    ? getSessionStorageConnections(session, principal)
-    : getSafeStorageConnectionsByOwnerEmail(getLegacyOwnerEmail(principal), {
-        source: "principal-storage-connections",
-      });
+  const connections = getSafeStorageConnectionsByOwnerEmail(
+    getLegacyOwnerEmail(principal),
+    {
+      source: "principal-storage-connections",
+    },
+  );
   const primary = getPrimaryConnection(connections);
 
   if (!primary) {
     return null;
-  }
-
-  const sessionAccessToken = session?.accessToken;
-
-  if (session && shouldUseSessionStorageAccess(primary, session) && sessionAccessToken) {
-    return {
-      ...primary,
-      accessToken: sessionAccessToken,
-      grantedScopes: getSessionDriveScopes(session),
-      status: session.authError ? "needs_reauth" : "connected",
-    } satisfies StorageConnection;
   }
 
   return refreshStorageConnectionIfNeeded(primary);
@@ -250,10 +238,10 @@ export async function getStorageConnectionsForSession(session: Session) {
     return [];
   }
 
-  const connections = getSessionStorageConnections(session, principal);
+  const connections = getSessionStorageConnections(principal);
   const primaryConnection = getPrimaryConnection(connections);
   const primary = primaryConnection
-    ? await resolveUsableStorageConnection(primaryConnection, session)
+    ? await refreshStorageConnectionIfNeeded(primaryConnection)
     : null;
 
   return connections.map((connection) =>
@@ -261,16 +249,10 @@ export async function getStorageConnectionsForSession(session: Session) {
   );
 }
 
-function getSessionStorageConnections(
-  session: Session,
-  principal: AppPrincipal,
-) {
-  return (
-    syncSessionGoogleConnection(session, principal) ??
-    getSafeStorageConnectionsByOwnerEmail(getLegacyOwnerEmail(principal), {
-      source: "session-storage-connections",
-    })
-  );
+function getSessionStorageConnections(principal: AppPrincipal) {
+  return getSafeStorageConnectionsByOwnerEmail(getLegacyOwnerEmail(principal), {
+    source: "session-storage-connections",
+  });
 }
 
 function readStorageConnectionsByOwnerEmail(
@@ -303,24 +285,6 @@ function readStorageConnectionsByOwnerEmail(
 
 function getPrimaryConnection(connections: StorageConnection[]) {
   return connections.find((connection) => connection.isPrimary) ?? null;
-}
-
-async function resolveUsableStorageConnection(
-  connection: StorageConnection,
-  session: Session,
-) {
-  const sessionAccessToken = session.accessToken;
-
-  if (shouldUseSessionStorageAccess(connection, session) && sessionAccessToken) {
-    return {
-      ...connection,
-      accessToken: sessionAccessToken,
-      grantedScopes: getSessionDriveScopes(session),
-      status: session.authError ? "needs_reauth" : "connected",
-    } satisfies StorageConnection;
-  }
-
-  return refreshStorageConnectionIfNeeded(connection);
 }
 
 async function refreshStorageConnectionIfNeeded(connection: StorageConnection) {
@@ -386,79 +350,6 @@ async function refreshStorageConnectionIfNeeded(connection: StorageConnection) {
   } catch {
     return markStorageConnectionNeedsReauth(connection, "refresh_exception");
   }
-}
-
-function syncSessionGoogleConnection(session: Session, principal: AppPrincipal) {
-  const ownerEmail = getLegacyOwnerEmail(principal);
-
-  if (!ownerEmail || !session.accessToken || !session.driveConnected) {
-    return null;
-  }
-
-  const readResult = readStorageConnectionsByOwnerEmail(ownerEmail, {
-    source: "sync-session-google-connection",
-  });
-  const connections = readResult.connections;
-
-  if (readResult.unavailable) {
-    return connections;
-  }
-
-  const existingConnection = connections.find((connection) =>
-    matchesCurrentSession(connection, session),
-  );
-  const activeConnection = getPrimaryConnection(connections);
-  const sessionDriveScopes = getSessionDriveScopes(session);
-  const nextStatus = session.authError ? "needs_reauth" : "connected";
-  const canSyncSessionConnection =
-    !activeConnection ||
-    (existingConnection ? activeConnection.id === existingConnection.id : false);
-
-  if (!canSyncSessionConnection) {
-    return connections;
-  }
-
-  if (
-    existingConnection &&
-    existingConnection.status === nextStatus &&
-    existingConnection.isPrimary &&
-    haveSameScopes(existingConnection.grantedScopes, sessionDriveScopes)
-  ) {
-    return connections;
-  }
-
-  let savedConnection: StorageConnection | null = null;
-  try {
-    savedConnection = saveStorageConnectionForOwner({
-      ownerEmail,
-      provider: "google_drive",
-      accountEmail: principal.email,
-      accountName: session.user?.name ?? null,
-      accountImage: session.user?.image ?? null,
-      externalAccountId: session.user?.id ?? principal.email,
-      accessToken: session.accessToken,
-      refreshToken: null,
-      expiresAt: null,
-      grantedScopes: sessionDriveScopes,
-      status: nextStatus,
-      makePrimary: !activeConnection || existingConnection?.isPrimary === true,
-    });
-  } catch (error) {
-    logStorageConnectionPersistenceFailure(
-      error,
-      "sync-session-google-connection",
-      "write",
-    );
-    return connections;
-  }
-
-  if (!savedConnection) {
-    return connections;
-  }
-
-  return getSafeStorageConnectionsByOwnerEmail(ownerEmail, {
-    source: "sync-session-google-connection-after-save",
-  });
 }
 
 export function markStorageConnectionNeedsReauth(
@@ -528,20 +419,6 @@ export function resolveStorageOAuthConnectionDecision(input: {
   };
 }
 
-function matchesCurrentSession(connection: StorageConnection, session: Session) {
-  const principal = getPrincipalFromSessionOrNull(session);
-
-  if (!principal) {
-    return false;
-  }
-
-  return matchesStorageAccount(connection, {
-    accountEmail: principal.email,
-    externalAccountId: session.user?.id ?? principal.email,
-    provider: "google_drive",
-  });
-}
-
 function matchesStorageAccount(
   connection: StorageConnection,
   candidate: {
@@ -565,41 +442,6 @@ function matchesStorageAccount(
   const connectionEmail = connection.accountEmail?.trim().toLowerCase() ?? "";
   const candidateEmail = candidate.accountEmail?.trim().toLowerCase() ?? "";
   return Boolean(connectionEmail && candidateEmail && connectionEmail === candidateEmail);
-}
-
-function shouldUseSessionStorageAccess(
-  connection: StorageConnection,
-  session: Session,
-) {
-  if (!matchesCurrentSession(connection, session) || !session.accessToken) {
-    return false;
-  }
-
-  const sessionDriveScopes = getSessionDriveScopes(session);
-  if (!sessionDriveScopes.length) {
-    return false;
-  }
-
-  const hasPersistedStorageSession =
-    Boolean(connection.refreshToken) || typeof connection.expiresAt === "number";
-
-  return !hasPersistedStorageSession;
-}
-
-function getSessionDriveScopes(session: Session) {
-  return session.grantedScopes.filter(
-    (scope) =>
-      scope === GOOGLE_DRIVE_READ_SCOPE || scope === GOOGLE_DRIVE_WRITE_SCOPE,
-  );
-}
-
-function haveSameScopes(left: string[], right: string[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  const rightScopes = new Set(right);
-  return left.every((scope) => rightScopes.has(scope));
 }
 
 function logStorageConnectionPersistenceFailure(

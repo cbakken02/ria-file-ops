@@ -1,12 +1,11 @@
 "use client";
 
-import { signIn } from "next-auth/react";
-import { GOOGLE_DRIVE_WRITE_SCOPE } from "@/lib/google-drive";
-
 type Props = {
   className: string;
   disabled?: boolean;
 };
+
+const STORAGE_OAUTH_START_PATH = "/api/storage/google/start";
 
 export function GoogleDriveConnectButton({
   className,
@@ -16,18 +15,9 @@ export function GoogleDriveConnectButton({
     <button
       className={className}
       disabled={disabled}
-      onClick={() =>
-        signIn(
-          "google",
-          { callbackUrl: "/setup?section=workspace" },
-          {
-            access_type: "offline",
-            include_granted_scopes: "true",
-            prompt: "consent",
-            scope: `openid email profile ${GOOGLE_DRIVE_WRITE_SCOPE}`,
-          },
-        )
-      }
+      onClick={() => {
+        window.location.assign(STORAGE_OAUTH_START_PATH);
+      }}
       type="button"
     >
       Grant Google Drive access

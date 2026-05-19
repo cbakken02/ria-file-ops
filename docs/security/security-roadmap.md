@@ -16,13 +16,14 @@ What is currently safe:
 - Supabase/Postgres persistence encrypts stored Google access and refresh tokens when `APP_ENCRYPTION_KEY` is configured.
 - Most protected pages, API routes, and Server Actions already use `auth()` or `requireSession()` directly or through a shared helper.
 - Basic in-memory rate limiting now protects NextAuth sign-in/callback and Google Drive OAuth start/callback routes.
+- Browser-visible NextAuth session output no longer includes provider access/refresh tokens or Drive token-derived fields.
+- The legacy Drive connect component now routes to the server-side storage OAuth flow instead of `next-auth/react` Drive-scope sign-in.
 - Sensitive debug logging has been reduced in reviewed paths, with shared safe-logging helpers now available.
 - Data Intelligence V2 is safer than the legacy AI path: it uses model-bound safety checks, `store: false`, and reveal cards for raw sensitive values.
 - Current dependency posture no longer has the direct high-severity Next.js audit findings after the patch to `next@16.2.6`; remaining npm audit findings are moderate.
 
 What is unsafe:
 
-- OAuth provider access tokens can still be copied into the browser-visible NextAuth session shape.
 - Any Google account can sign in unless Google OAuth app settings or app code restrict access.
 - Supabase RLS is not currently a verified production authorization boundary because the app uses direct Postgres credentials and migrations define RLS without policies.
 - Raw Drive file IDs and temporary snapshot IDs are accepted in sensitive routes without enough app-level ownership/resource checks.
@@ -36,7 +37,6 @@ What blocks production readiness:
 
 - Verified owner/org/client authorization for every file, queue, table, and AI/reveal action.
 - Supabase grants/RLS/least-privileged DB role decisions and tests.
-- Removal of browser-visible OAuth token exposure.
 - Vercel/Supabase production env verification for fail-closed persistence.
 - Safe file preview/download architecture for untrusted documents.
 - Data minimization for AI prompts, caches, diagnostics, logs, and generated artifacts.
@@ -50,7 +50,7 @@ Immediate business-threatening issues for real client data or public demos:
 | --- | --- | --- | --- |
 | Critical | Verify Supabase Data API exposure and revoke public access until RLS policies and grants are tested. | If `anon` or `authenticated` can access public tables/views without policies, users can bypass app owner checks. | Supabase |
 | Critical | Stop serving arbitrary Drive/snapshot bytes inline from the app origin. | A scriptable Drive file rendered same-origin could call authenticated APIs as the signed-in user. | Code, Vercel |
-| Critical | Remove OAuth access tokens from the browser-visible NextAuth session and remove the legacy Drive `signIn()` path. | A Drive-scoped token in the browser can expose the user's Drive access. | Code, Google Cloud rotation if exposed |
+| Mitigated / monitor | Keep OAuth access tokens out of the browser-visible NextAuth session and keep the legacy Drive `signIn()` path disabled. | A Drive-scoped token in the browser can expose the user's Drive access; code now keeps the public session token-free and routes Drive authorization through server-side storage OAuth. | Code done, Google Cloud rotation only if prior exposure is suspected |
 | Mitigated / monitor | Keep production fail-closed persistence checks in release verification. | Accidental SQLite in production would mean plaintext OAuth tokens and non-multi-user local state; code now blocks this when production-like env markers are present. | Code done, Vercel env verification |
 | Critical | Add a production admission gate for allowed users/firms/domains/account status. | Public Google sign-in is not acceptable for sensitive RIA/client documents. | Code, Google Cloud |
 
@@ -122,8 +122,7 @@ Minimum production stance:
 
 ## Auth Risks
 
-- `auth.ts` can expose provider access tokens in the public session object.
-- The public `Session` type includes `accessToken`, encouraging client-visible token use.
+- Public NextAuth session output and types no longer include provider access/refresh tokens or Drive token-derived fields.
 - Any Google account can sign in unless admission is restricted.
 - Rate limiting is in-memory and per runtime instance.
 - There is no explicit disabled/suspended account gate.
@@ -157,13 +156,13 @@ Required model:
 
 - Google Drive storage tokens are encrypted only in Supabase/Postgres mode; SQLite stores them plaintext.
 - Disconnect removes local records but does not revoke the Google grant.
-- The older Drive `signIn()` component can request Drive scope through NextAuth and reintroduce token exposure.
+- The older Drive `signIn()` component has been rewritten to use the server-side storage OAuth route; keep regression tests so it cannot reintroduce Drive-scoped NextAuth sign-in.
 - Broad Drive write scope increases blast radius if route authorization is weak.
 - Cached Drive state differs across Intake, Clean Up, Dashboard, and Setup.
 
 Hardening steps:
 
-- Remove the legacy Drive sign-in path.
+- Keep the legacy Drive sign-in path removed and route Drive authorization through `/api/storage/google/start`.
 - Revoke Google grants on disconnect where product behavior allows.
 - Separate production and preview OAuth clients.
 - Review whether Drive scopes can be narrowed or folder access can be constrained by product flow.

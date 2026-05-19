@@ -8,6 +8,8 @@ No confirmed committed production secret was found in git history. The highest r
 
 Post-PROD-001 status: commit `6ca6753` (`fix(persistence): fail closed for production SQLite fallback`) mitigated the persistent production SQLite fallback. Keep release verification for Supabase/Postgres envs. The temporary projection SQLite bridge remains a separate follow-up in PROD-007, and the canonical current status lives in `docs/security/risk-register.md` plus `docs/security/security-roadmap.md`.
 
+Post-AUTH-001 status: the public NextAuth session output and `Session` type no longer include provider access/refresh tokens or Drive token-derived fields. Drive authorization now uses the server-side storage OAuth flow; keep regression tests and consider Google grant rotation only if prior browser-visible Drive token exposure is suspected.
+
 ## 1. Critical fixes to do immediately
 
 Critical here means "fix or verify before real client data, public demos, or additional users." The audits did not confirm an active critical exploit, but these items are production blockers.
@@ -15,7 +17,7 @@ Critical here means "fix or verify before real client data, public demos, or add
 | Priority | Task | Why it matters | Required change |
 | --- | --- | --- | --- |
 | Critical | Verify Supabase Data API exposure for all app tables and views. Revoke public access or keep exposed roles unusable until RLS policies are implemented and tested. | Migrations enable RLS but define no policies. If tables/views are exposed to Supabase `anon` or `authenticated` roles, private client data could be readable or writable outside app authorization. | Supabase dashboard/SQL. Possible code changes later for policy-compatible DB access. |
-| Critical | Remove Google provider access tokens from the browser-visible NextAuth session. | `auth.ts` currently places an OAuth access token on the public session object. If any Drive-scoped NextAuth flow is used, browser code can receive a privileged token. | Code change. Rotate/revoke affected Google grants if Drive-scoped tokens were exposed in production. |
+| Mitigated / monitor | Keep Google provider access tokens out of the browser-visible NextAuth session. | A Drive-scoped token in browser session JSON can expose Drive access; the public session contract is now token-free. | Code done. Rotate/revoke affected Google grants only if Drive-scoped tokens were previously exposed in production. |
 | Mitigated / monitor | Keep production SQLite fallback blocked and verify production envs before release. | SQLite stores OAuth tokens locally and is not a production multi-user boundary. Commit `6ca6753` now blocks persistent `data/*.sqlite` fallback in production-like runtimes. | Code done; verify Vercel/Supabase envs before release. Rotate Google OAuth grants only if plaintext production tokens were stored or copied. |
 | Critical | Add an explicit sign-in admission gate. | Any Google account can currently sign in unless the OAuth app or app code restricts access. That is not acceptable once demos or users expand. | Code change plus optional Google OAuth app restriction. |
 
@@ -26,7 +28,7 @@ Critical here means "fix or verify before real client data, public demos, or add
 | High | Define and implement the Supabase/RLS access model around owner, firm, org, account, or client ownership. | Current isolation is mostly app-layer `owner_email`. RLS is not an effective boundary with the current direct Postgres runtime assumptions. | Code plus Supabase SQL policies. |
 | High | Use a least-privileged Postgres role for the app, without `BYPASSRLS` or table-owner privileges. | RLS cannot protect data if the runtime role bypasses it. | Supabase/database role change and Vercel database URL update. |
 | High | Convert public views to `security_invoker` or revoke client-readable access to them. | Views can bypass underlying table RLS if left with default definer behavior. | Supabase migration/dashboard change. |
-| High | Remove or rewrite the legacy Drive `signIn()` component path so Drive OAuth only uses the server-side storage OAuth flow. | It can reintroduce browser-visible Drive tokens through the NextAuth session. | Code change. |
+| Mitigated / monitor | Keep the legacy Drive `signIn()` component path disabled so Drive OAuth only uses the server-side storage OAuth flow. | Reintroducing Drive-scoped NextAuth sign-in could recreate browser-visible token exposure. | Code done; keep regression tests. |
 | High | Restrict `/api/drive/files/[fileId]` to files known to belong to the active user's configured Drive folders or current app state. | The route can fetch any Drive file accessible to the active token, which is too broad for least-privilege file access. | Code change and route tests. |
 | High | Bind preview snapshots and cached intake queues to owner/session identity. | Intake can read stale cached queue state; cached previews need explicit owner isolation. | Code change and tests. |
 | High | Add route-local auth/ownership checks to sensitive mutation routes, especially cleanup and intake approval paths. | Some routes rely on lower-level helpers instead of obvious route-level guards. | Code change and tests. |
