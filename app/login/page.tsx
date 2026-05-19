@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import { shouldForceGoogleAccountSelection } from "@/lib/auth/google-signin";
 import { getAppPrincipalResultFromSession } from "@/lib/auth/principal";
 import { googleOAuthConfigured } from "@/lib/env";
 import styles from "./page.module.css";
@@ -13,7 +14,9 @@ type LoginPageProps = {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
-  const notice = getLoginNotice(readSingleSearchParam(resolvedSearchParams.reason));
+  const reason = readSingleSearchParam(resolvedSearchParams.reason);
+  const notice = getLoginNotice(reason);
+  const forceAccountSelection = shouldForceGoogleAccountSelection(reason);
   const session = await auth();
   const principalResult = await getAppPrincipalResultFromSession(session);
 
@@ -42,6 +45,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           callbackUrl="/dashboard"
           className={styles.primaryAction}
           disabled={!googleOAuthConfigured}
+          forceAccountSelection={forceAccountSelection}
           label="Sign in with Google"
         />
 

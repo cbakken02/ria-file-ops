@@ -14,7 +14,7 @@ export function SignOutButton({ className }: Props) {
         method: "POST",
       });
     } finally {
-      await signOut({ callbackUrl: "/" });
+      await signOut({ callbackUrl: "/login?reason=logged_out" });
     }
   }
 
