@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/auth";
+import { POST_LOGOUT_SIGN_IN_URL } from "@/lib/auth/google-signin";
 import { FAQAccordion } from "./faq-accordion";
 import { GuidedFilingDemo } from "./guided-filing-demo";
 import styles from "./page.module.css";
@@ -154,9 +155,18 @@ const faqItems = [
   },
 ];
 
-export default async function Home() {
+type HomePageProps = {
+  searchParams?: Promise<{
+    signed_out?: string | string[];
+  }>;
+};
+
+export default async function Home({ searchParams }: HomePageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const signedOut = readSingleSearchParam(resolvedSearchParams.signed_out);
   const session = await auth();
   const isAuthenticated = Boolean(session?.user);
+  const showSignedOutNotice = !isAuthenticated && signedOut === "1";
   const waitlistHref = "/join-waitlist";
   const headerHref = isAuthenticated ? "/dashboard" : waitlistHref;
   const headerLabel = isAuthenticated ? "Go to App" : "Join Waitlist";
@@ -168,6 +178,7 @@ export default async function Home() {
         headerHref={headerHref}
         headerLabel={headerLabel}
       />
+      {showSignedOutNotice ? <SignedOutNotice /> : null}
       <HeroSection waitlistHref={waitlistHref} />
       <GuidedFilingDemo />
       <ManualCleanupSection />
@@ -180,6 +191,10 @@ export default async function Home() {
   );
 }
 
+function readSingleSearchParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 type LandingHeaderProps = {
   isAuthenticated: boolean;
   headerHref: string;
@@ -189,6 +204,18 @@ type LandingHeaderProps = {
 type WaitlistLinkProps = {
   waitlistHref: string;
 };
+
+function SignedOutNotice() {
+  return (
+    <aside className={styles.signedOutNotice} aria-live="polite">
+      <p>
+        <strong>You&apos;re signed out.</strong>
+        <span>Your RIA File Ops app session has ended.</span>
+      </p>
+      <Link href={POST_LOGOUT_SIGN_IN_URL}>Sign in again</Link>
+    </aside>
+  );
+}
 
 function LandingHeader({
   isAuthenticated,

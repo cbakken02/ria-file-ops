@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { POST_LOGOUT_LANDING_URL } from "@/lib/auth/google-signin";
 import { AccountSessionStatus } from "@/components/account-session-status";
 import type { SafeAccountSessionStatus } from "@/lib/auth/account-session-status";
 import type { ProductNavPath } from "@/lib/product-navigation";
@@ -183,7 +184,7 @@ export function AccountMenu({
         method: "POST",
       });
     } finally {
-      await signOut({ callbackUrl: "/login?reason=logged_out" });
+      await signOut({ callbackUrl: POST_LOGOUT_LANDING_URL });
     }
   }
 

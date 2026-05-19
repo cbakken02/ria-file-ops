@@ -1,6 +1,7 @@
 "use client";
 
 import { signOut } from "next-auth/react";
+import { POST_LOGOUT_LANDING_URL } from "@/lib/auth/google-signin";
 
 type Props = {
   className: string;
@@ -14,7 +15,7 @@ export function SignOutButton({ className }: Props) {
         method: "POST",
       });
     } finally {
-      await signOut({ callbackUrl: "/login?reason=logged_out" });
+      await signOut({ callbackUrl: POST_LOGOUT_LANDING_URL });
     }
   }
 

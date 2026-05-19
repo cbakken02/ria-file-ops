@@ -13,6 +13,7 @@
 }
 
 .header,
+.signedOutNotice,
 .hero,
 .guidedDemoSection,
 .objectionSection,
@@ -138,6 +139,45 @@
   gap: 8px;
 }
 
+.signedOutNotice {
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-soft);
+}
+
+.signedOutNotice p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.signedOutNotice strong {
+  color: var(--foreground);
+  font-weight: 780;
+}
+
+.signedOutNotice span {
+  min-width: 0;
+}
+
+.signedOutNotice a {
+  flex-shrink: 0;
+  color: var(--foreground);
+  font-size: 0.9rem;
+  font-weight: 740;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
 .headerPrimaryAction,
 .headerAction {
   justify-content: center;
@@ -180,6 +220,7 @@
 .nav a:focus-visible,
 .headerPrimaryAction:focus-visible,
 .headerAction:focus-visible,
+.signedOutNotice a:focus-visible,
 .primaryAction:focus-visible,
 .secondaryAction:focus-visible,
 .heroTextLink:focus-visible {
@@ -3801,6 +3842,19 @@
 
   .headerActions > a:only-child {
     grid-column: 1 / -1;
+  }
+
+  .signedOutNotice {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .signedOutNotice p {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
   }
 
   .headerPrimaryAction,
