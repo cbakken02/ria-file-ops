@@ -1,7 +1,9 @@
 "use server";
 
+import { headers } from "next/headers";
 import { upsertWaitlistSignup } from "@/lib/db";
 import { getSafeErrorMetadata } from "@/lib/safe-logging";
+import { checkWaitlistSubmissionAbuse } from "@/lib/waitlist-abuse-protection";
 import {
   type WaitlistFormState,
   validateWaitlistSignupFormData,
@@ -11,6 +13,20 @@ export async function submitWaitlistSignup(
   _previousState: WaitlistFormState,
   formData: FormData,
 ): Promise<WaitlistFormState> {
+  const requestHeaders = await headers();
+  const abuseProtection = checkWaitlistSubmissionAbuse({
+    formData,
+    headers: requestHeaders,
+  });
+
+  if (!abuseProtection.ok) {
+    return {
+      fieldErrors: {},
+      message: abuseProtection.message,
+      ok: false,
+    };
+  }
+
   const validation = validateWaitlistSignupFormData(formData);
 
   if (!validation.ok) {

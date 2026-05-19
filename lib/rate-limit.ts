@@ -23,8 +23,16 @@ export type RateLimitStore = Map<string, RateLimitBucket>;
 
 const defaultRateLimitStore: RateLimitStore = new Map();
 
+export type HeaderReader = {
+  get(name: string): string | null;
+};
+
 export function getClientIpAddress(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
+  return getClientIpAddressFromHeaders(request.headers);
+}
+
+export function getClientIpAddressFromHeaders(headers: HeaderReader) {
+  const forwardedFor = headers.get("x-forwarded-for");
   const forwardedIp = forwardedFor
     ?.split(",")
     .map((value) => value.trim())
@@ -34,8 +42,8 @@ export function getClientIpAddress(request: Request) {
   }
 
   return (
-    request.headers.get("x-real-ip")?.trim() ||
-    request.headers.get("cf-connecting-ip")?.trim() ||
+    headers.get("x-real-ip")?.trim() ||
+    headers.get("cf-connecting-ip")?.trim() ||
     "unknown"
   );
 }

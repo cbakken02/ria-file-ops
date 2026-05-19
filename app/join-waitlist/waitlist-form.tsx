@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import {
   WAITLIST_FILE_SYSTEM_OPTIONS,
+  WAITLIST_HONEYPOT_FIELD_NAME,
   WAITLIST_INITIAL_FORM_STATE,
 } from "@/lib/waitlist-signups";
 import { submitWaitlistSignup } from "./actions";
@@ -57,6 +58,16 @@ export function WaitlistForm() {
 
   return (
     <form action={formAction} className={styles.formCard} noValidate>
+      <label className={styles.honeypotField} aria-hidden="true">
+        <span>Website</span>
+        <input
+          autoComplete="off"
+          name={WAITLIST_HONEYPOT_FIELD_NAME}
+          tabIndex={-1}
+          type="text"
+        />
+      </label>
+
       <div className={styles.formHeader}>
         <p className={styles.eyebrow}>Waitlist signup</p>
         <h2>Let&apos;s get you on the waitlist.</h2>
