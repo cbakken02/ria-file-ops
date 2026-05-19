@@ -113,8 +113,17 @@ test("Intake exposes a server-side Rescan source folder action instead of the br
 
   assert.match(pageSource, /Rescan source folder/);
   assert.match(pageSource, /refreshIntakeAction/);
+  assert.match(pageSource, /Last completed rescan/);
+  assert.match(pageSource, /Displayed queue/);
+  assert.match(
+    pageSource,
+    /Browser refresh shows the saved queue from the last completed rescan\./,
+  );
+  assert.match(pageSource, /Use Rescan source folder to check Drive/);
   assert.equal(pageSource.includes("Cached intake preview needs a browser refresh"), false);
   assert.equal(pageSource.includes("Sidebar navigation no longer scans Drive"), false);
+  assert.equal(pageSource.includes("listFilesInFolder"), false);
+  assert.equal(pageSource.includes("refreshIntakeQueueForSession(session"), false);
   assert.match(actionSource, /refreshIntakeQueueForSession\(session,\s*{\s*forceFresh: true/s);
   assert.match(apiSource, /forceFresh: true/);
 });

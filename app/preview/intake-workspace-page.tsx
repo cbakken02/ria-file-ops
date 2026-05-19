@@ -164,11 +164,11 @@ export async function IntakeWorkspacePage({
             </dd>
           </div>
           <div>
-            <dt>Last scan</dt>
+            <dt>Last completed rescan</dt>
             <dd>{formatScanTime(snapshot?.generatedAt ?? null)}</dd>
           </div>
           <div>
-            <dt>Cache state</dt>
+            <dt>Displayed queue</dt>
             <dd>{getCacheStateLabel(snapshot, preview.items.length)}</dd>
           </div>
           <div>
@@ -176,6 +176,12 @@ export async function IntakeWorkspacePage({
             <dd>{lastScanError ?? "None"}</dd>
           </div>
         </dl>
+        {settings?.sourceFolderId ? (
+          <p className={styles.scanStatusHelp}>
+            Browser refresh shows the saved queue from the last completed rescan.
+            Use Rescan source folder to check Drive for new or changed files.
+          </p>
+        ) : null}
       </section>
 
       {liveQueueError ? (
@@ -343,14 +349,14 @@ function getCacheStateLabel(
   itemCount: number,
 ) {
   if (!snapshot) {
-    return "No cached preview";
+    return "No saved queue yet";
   }
 
   if (itemCount === 0) {
-    return "Cached preview is empty";
+    return "Last rescan found no unfiled items";
   }
 
-  return `Cached preview with ${itemCount} item${itemCount === 1 ? "" : "s"}`;
+  return `Saved queue with ${itemCount} item${itemCount === 1 ? "" : "s"}`;
 }
 
 function getIntakeStorageStatusTitle(
