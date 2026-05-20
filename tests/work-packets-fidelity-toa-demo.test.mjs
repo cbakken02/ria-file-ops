@@ -44,6 +44,16 @@ import {
   normalizeLocalExecutionReviewArtifactId,
 } from "../lib/work-packets/dev-demo/local-execution-review-artifact-registry.ts";
 import {
+  EXECUTION_LAB_TEMPLATE_BUCKET,
+  FIDELITY_TOA_STORED_TEMPLATE_ID,
+  FIDELITY_TOA_STORED_TEMPLATE_OBJECT_PATH,
+  StoredExecutionLabTemplateError,
+  getStoredExecutionLabTemplateStatusForError,
+  loadStoredFidelityToaTemplate,
+  normalizeFidelityToaTemplateSource,
+  resolveFidelityToaTemplateForWebsiteRun,
+} from "../lib/work-packets/dev-demo/execution-lab-template-storage.ts";
+import {
   WEBSITE_FIDELITY_TOA_DEMO_ARTIFACT_ID,
   WebsiteFidelityToaDemoError,
   assertValidTemplatePdfBuffer,
@@ -566,6 +576,9 @@ test("Jon Smith Fidelity TOA review view model shapes the artifact for a future 
     verificationSummary: verifyJonSmithFidelityToaFieldValues(
       makeVerifiedOutputFieldValues(),
     ),
+    templateSource: "stored_template",
+    templateId: FIDELITY_TOA_STORED_TEMPLATE_ID,
+    templateSha256: "a".repeat(64),
     createdAt: "2026-05-19T00:00:00.000Z",
   });
   const testArtifactPath =
@@ -586,6 +599,9 @@ test("Jon Smith Fidelity TOA review view model shapes the artifact for a future 
     assert.equal(viewModel.header.demoId, "jon_smith_fidelity_toa_dev_demo");
     assert.equal(viewModel.header.status, "passed");
     assert.equal(viewModel.header.displayStatus, "Demo completed");
+    assert.equal(viewModel.header.template.source, "stored_template");
+    assert.equal(viewModel.header.template.templateId, FIDELITY_TOA_STORED_TEMPLATE_ID);
+    assert.equal(viewModel.header.template.sha256, "a".repeat(64));
     assert.equal(viewModel.header.generatedPdfPath, JON_SMITH_FIDELITY_TOA_FILLED_OUTPUT_PATH);
     assert.equal(viewModel.header.warning.includes("Dev-only fake-data"), true);
     assert.equal(viewModel.taskContext.receivingCustodian, "Fidelity");
@@ -602,6 +618,9 @@ test("Jon Smith Fidelity TOA review view model shapes the artifact for a future 
     assert.equal(viewModel.completionPlan.summary.manualReviewRows, 2);
     assert.equal(viewModel.artifactRefs.generatedPdfPath, JON_SMITH_FIDELITY_TOA_FILLED_OUTPUT_PATH);
     assert.equal(viewModel.artifactRefs.reviewJsonPath, testArtifactPath);
+    assert.equal(viewModel.artifactRefs.templateSource, "stored_template");
+    assert.equal(viewModel.artifactRefs.templateId, FIDELITY_TOA_STORED_TEMPLATE_ID);
+    assert.equal(viewModel.artifactRefs.templateSha256, "a".repeat(64));
     assert.equal(viewModel.artifactRefs.publicUrl, null);
     assert.equal(viewModel.safety.rawSensitiveValuesIncluded, false);
     assert.equal(
@@ -748,7 +767,10 @@ test("Execution Lab review display surface is dev-only and does not hardcode raw
   assert.match(componentSource, /viewModel/);
   assert.match(routeSource, /requireExecutionLabDemoPrincipal/);
   assert.match(actionSource, /runWebsiteJonSmithFidelityToaDemo/);
+  assert.match(actionSource, /resolveFidelityToaTemplateForWebsiteRun/);
   assert.match(actionSource, /templatePdf/);
+  assert.match(routeSource, /Use stored Fidelity TOA template/);
+  assert.match(routeSource, /Upload one-off override/);
   assert.match(pdfRouteSource, /readWebsiteFidelityToaDemoPdf/);
   assert.match(pdfRouteSource, /Content-Disposition/);
   assert.match(pdfRouteSource, /download/);
@@ -858,6 +880,125 @@ test("website Execution Lab demo registry validates ids and template uploads saf
   );
 });
 
+test("stored Execution Lab template loader fails closed with safe statuses", async () => {
+  await assert.rejects(
+    () =>
+      loadStoredFidelityToaTemplate({
+        env: {},
+        fetchImpl: async () => {
+          throw new Error("fetch should not run without config");
+        },
+      }),
+    (error) =>
+      error instanceof StoredExecutionLabTemplateError &&
+      error.code === "stored_template_not_configured",
+  );
+
+  await assert.rejects(
+    () =>
+      loadStoredFidelityToaTemplate({
+        env: {
+          SUPABASE_URL: "https://example.supabase.co",
+          SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+        },
+        fetchImpl: async () => new Response("missing", { status: 404 }),
+      }),
+    (error) =>
+      error instanceof StoredExecutionLabTemplateError &&
+      error.code === "stored_template_missing",
+  );
+
+  await assert.rejects(
+    () =>
+      loadStoredFidelityToaTemplate({
+        env: {
+          SUPABASE_URL: "https://example.supabase.co",
+          SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+        },
+        fetchImpl: async () => new Response("not a pdf", { status: 200 }),
+      }),
+    (error) =>
+      error instanceof StoredExecutionLabTemplateError &&
+      error.code === "stored_template_invalid_pdf",
+  );
+
+  const downloadFailure = await loadStoredFidelityToaTemplate({
+    env: {
+      SUPABASE_URL: "https://example.supabase.co/",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+    },
+    fetchImpl: async (url, init) => {
+      assert.equal(
+        url,
+        `https://example.supabase.co/storage/v1/object/${EXECUTION_LAB_TEMPLATE_BUCKET}/${FIDELITY_TOA_STORED_TEMPLATE_OBJECT_PATH}`,
+      );
+      assert.equal(init?.headers?.apikey, "service-role-key");
+      assert.equal(init?.headers?.authorization, "Bearer service-role-key");
+      return new Response("%PDF-1.7\n", { status: 200 });
+    },
+  });
+
+  assert.equal(downloadFailure.templateMetadata.source, "stored_template");
+  assert.equal(downloadFailure.templateMetadata.templateId, FIDELITY_TOA_STORED_TEMPLATE_ID);
+  assert.match(downloadFailure.templateMetadata.sha256 ?? "", /^[a-f0-9]{64}$/);
+  assert.equal(
+    getStoredExecutionLabTemplateStatusForError(
+      new StoredExecutionLabTemplateError(
+        "not configured",
+        "stored_template_not_configured",
+      ),
+    ),
+    "stored_template_not_configured",
+  );
+});
+
+test("Execution Lab template source selector keeps upload override working", async () => {
+  const uploadFormData = new FormData();
+  uploadFormData.set("templateSource", "upload_override");
+  uploadFormData.set(
+    "templatePdf",
+    new Blob([Buffer.from("%PDF-1.7\n")], { type: "application/pdf" }),
+    "fidelity-toa-template.pdf",
+  );
+
+  const uploadResult = await resolveFidelityToaTemplateForWebsiteRun({
+    formData: uploadFormData,
+    loadStoredTemplate: async () => {
+      throw new Error("stored template should not be loaded for upload override");
+    },
+  });
+
+  assert.equal(normalizeFidelityToaTemplateSource(null), "stored_template");
+  assert.equal(uploadResult.templatePdfBuffer.toString("utf8"), "%PDF-1.7\n");
+  assert.equal(uploadResult.templateMetadata.source, "upload_override");
+  assert.match(uploadResult.templateMetadata.sha256 ?? "", /^[a-f0-9]{64}$/);
+
+  const storedFormData = new FormData();
+  storedFormData.set("templateSource", "stored_template");
+
+  const storedResult = await resolveFidelityToaTemplateForWebsiteRun({
+    formData: storedFormData,
+    loadStoredTemplate: async () => ({
+      templatePdfBuffer: Buffer.from("%PDF-stored\n"),
+      templateMetadata: {
+        source: "stored_template",
+        templateId: FIDELITY_TOA_STORED_TEMPLATE_ID,
+        sha256: "b".repeat(64),
+      },
+    }),
+  });
+
+  assert.equal(storedResult.templatePdfBuffer.toString("utf8"), "%PDF-stored\n");
+  assert.equal(storedResult.templateMetadata.source, "stored_template");
+  assert.equal(storedResult.templateMetadata.templateId, FIDELITY_TOA_STORED_TEMPLATE_ID);
+  assert.equal(storedResult.templateMetadata.sha256, "b".repeat(64));
+
+  const serialized = JSON.stringify({ uploadResult, storedResult });
+  assert.doesNotMatch(serialized, /000126789/);
+  assert.doesNotMatch(serialized, /900012345/);
+  assert.doesNotMatch(serialized, /234567890/);
+});
+
 test("website Execution Lab demo maps missing pypdf runtime to safe status", () => {
   const wrapped = classifyWebsiteFidelityToaDemoRuntimeError(
     new PdfFillAdapterError(
@@ -908,6 +1049,8 @@ test("website Execution Lab demo run is Node-native when the template is present
   });
 
   assert.equal(result.artifact.id, WEBSITE_FIDELITY_TOA_DEMO_ARTIFACT_ID);
+  assert.equal(result.artifact.templateSource, "upload_override");
+  assert.match(result.artifact.templateSha256 ?? "", /^[a-f0-9]{64}$/);
   assert.equal(result.verificationStatus, "passed");
   assert.equal(result.filledFieldCount, 14);
   assert.equal(result.selectedOptionCount, 3);

@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExecutionLabReviewSurface } from "@/components/work-packets/execution-lab-review-surface";
+import {
+  FIDELITY_TOA_TEMPLATE_SOURCE_FIELD,
+  FIDELITY_TOA_UPLOAD_FIELD,
+} from "@/lib/work-packets/dev-demo/execution-lab-template-storage";
 import { requireExecutionLabDemoPrincipal } from "@/lib/work-packets/dev-demo/execution-lab-demo-access";
 import {
   LocalExecutionReviewArtifactRegistryError,
@@ -191,9 +195,29 @@ function DemoActionPanel({
         <StatusNotice status={status} />
       </div>
       <form action={runJonSmithFidelityToaWebsiteDemoAction} className={styles.runForm}>
+        <fieldset className={styles.templateSourceGroup}>
+          <legend>Source</legend>
+          <label className={styles.radioChoice}>
+            <input
+              name={FIDELITY_TOA_TEMPLATE_SOURCE_FIELD}
+              type="radio"
+              value="stored_template"
+              defaultChecked
+            />
+            Use stored Fidelity TOA template
+          </label>
+          <label className={styles.radioChoice}>
+            <input
+              name={FIDELITY_TOA_TEMPLATE_SOURCE_FIELD}
+              type="radio"
+              value="upload_override"
+            />
+            Upload one-off override
+          </label>
+        </fieldset>
         <label>
-          Fidelity TOA PDF
-          <input name="templatePdf" type="file" accept="application/pdf" required />
+          Override PDF
+          <input name={FIDELITY_TOA_UPLOAD_FIELD} type="file" accept="application/pdf" />
         </label>
         <button type="submit">Run Demo</button>
       </form>
@@ -221,6 +245,16 @@ function StatusNotice({ status }: { status: string | null }) {
   const messages: Record<string, string> = {
     run_complete: "Demo run complete. Review the updated artifact below.",
     missing_template: "Upload the Fidelity TOA PDF template before running the demo.",
+    stored_template_not_configured:
+      "Stored template is not configured yet. Use the upload override or finish Supabase setup.",
+    stored_template_missing:
+      "Stored template was not found. Use the upload override or upload it to Supabase Storage.",
+    stored_template_download_failed:
+      "Stored template could not be downloaded. Use the upload override or check storage access.",
+    stored_template_invalid_pdf:
+      "The selected template must be a valid PDF under the demo size limit.",
+    stored_template_runtime_error:
+      "Stored template loading failed. Use the upload override or check server logs.",
     invalid_template: "The uploaded file must be a valid PDF under the demo size limit.",
     pdf_fill_runtime_unavailable:
       "The PDF fill runtime is unavailable in this environment.",

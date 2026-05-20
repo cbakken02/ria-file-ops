@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import {
+  getStoredExecutionLabTemplateStatusForError,
+  logStoredExecutionLabTemplateFailure,
+  resolveFidelityToaTemplateForWebsiteRun,
+} from "@/lib/work-packets/dev-demo/execution-lab-template-storage";
 import { requireExecutionLabDemoPrincipal } from "@/lib/work-packets/dev-demo/execution-lab-demo-access";
 import {
   WEBSITE_FIDELITY_TOA_DEMO_ARTIFACT_ID,
@@ -16,19 +21,23 @@ export async function runJonSmithFidelityToaWebsiteDemoAction(
   formData: FormData,
 ) {
   const principal = await requireExecutionLabDemoPrincipal();
-  const template = formData.get("templatePdf");
-
-  if (!(template instanceof File) || template.size === 0) {
-    redirectWithStatus("missing_template");
-  }
 
   try {
+    const template = await resolveFidelityToaTemplateForWebsiteRun({ formData });
+
     await runWebsiteJonSmithFidelityToaDemo({
       ownerEmail: principal.legacyOwnerEmail,
-      templateFileName: template.name,
-      templatePdfBuffer: Buffer.from(await template.arrayBuffer()),
+      templatePdfBuffer: template.templatePdfBuffer,
+      templateMetadata: template.templateMetadata,
     });
   } catch (error) {
+    const storedTemplateStatus = getStoredExecutionLabTemplateStatusForError(error);
+
+    if (storedTemplateStatus) {
+      logStoredExecutionLabTemplateFailure(error);
+      redirectWithStatus(storedTemplateStatus);
+    }
+
     logWebsiteFidelityToaDemoRunFailure(error);
     redirectWithStatus(getWebsiteFidelityToaDemoStatusForError(error));
   }
