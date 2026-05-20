@@ -21,6 +21,9 @@
 /build
 /data/
 
+# local dev-only artifacts
+/local-dev/
+
 # misc
 .DS_Store
 *.pem
