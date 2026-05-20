@@ -56,6 +56,11 @@ export type ExecutionReviewViewModel = {
     generatedPdfPath: string;
     createdAt: string;
     warning: string;
+    template: {
+      source: JonSmithFidelityToaReviewArtifact["metadata"]["templateSource"];
+      templateId?: string;
+      sha256?: string;
+    };
   };
   taskContext: {
     receivingCustodian: string;
@@ -128,6 +133,9 @@ export type ExecutionReviewViewModel = {
   artifactRefs: {
     generatedPdfPath: string;
     reviewJsonPath: string;
+    templateSource: JonSmithFidelityToaReviewArtifact["metadata"]["templateSource"];
+    templateId?: string;
+    templateSha256?: string;
     publicUrl: null;
   };
   safety: {
@@ -204,6 +212,11 @@ export function buildExecutionReviewViewModelFromArtifact(
       createdAt: artifact.metadata.createdAt,
       warning:
         "Dev-only fake-data review artifact. Do not use for real client workflows.",
+      template: {
+        source: artifact.metadata.templateSource,
+        templateId: artifact.metadata.templateId,
+        sha256: artifact.metadata.templateSha256,
+      },
     },
     taskContext: {
       receivingCustodian: artifact.safeTaskContext.receivingCustodian,
@@ -263,6 +276,9 @@ export function buildExecutionReviewViewModelFromArtifact(
       generatedPdfPath: artifact.metadata.generatedOutputPdfPath,
       reviewJsonPath:
         options.reviewJsonPath ?? JON_SMITH_FIDELITY_TOA_REVIEW_ARTIFACT_PATH,
+      templateSource: artifact.metadata.templateSource,
+      templateId: artifact.metadata.templateId,
+      templateSha256: artifact.metadata.templateSha256,
       publicUrl: null,
     },
     safety: {

@@ -327,6 +327,18 @@ export function ExecutionLabReviewSurface({
         </summary>
         <dl className={styles.pathGrid}>
           <MetaTerm
+            label="Template source"
+            value={formatToken(viewModel.artifactRefs.templateSource)}
+          />
+          <MetaTerm
+            label="Template ID"
+            value={viewModel.artifactRefs.templateId ?? "None"}
+          />
+          <MetaTerm
+            label="Template SHA-256"
+            value={viewModel.artifactRefs.templateSha256 ?? "None"}
+          />
+          <MetaTerm
             label="Generated PDF"
             value={viewModel.artifactRefs.generatedPdfPath}
           />

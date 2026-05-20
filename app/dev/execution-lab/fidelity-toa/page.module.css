@@ -139,6 +139,34 @@
   font-weight: 700;
 }
 
+.templateSourceGroup {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.templateSourceGroup legend {
+  margin: 0 0 2px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.runForm .radioChoice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
+.radioChoice input {
+  margin: 0;
+}
+
 .runForm input {
   max-width: 100%;
   color: var(--text-soft);

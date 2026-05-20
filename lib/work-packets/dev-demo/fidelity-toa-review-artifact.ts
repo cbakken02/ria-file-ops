@@ -49,6 +49,9 @@ export type JonSmithFidelityToaReviewArtifact = {
     taskType: string;
     templatePath: string;
     templateDocumentId: string;
+    templateSource: "local_dev_template" | "stored_template" | "upload_override";
+    templateId?: string;
+    templateSha256?: string;
     generatedOutputPdfPath: string;
     createdAt: string;
     status: "passed" | "failed";
@@ -126,6 +129,9 @@ export function buildJonSmithFidelityToaReviewArtifact(args: {
   verificationSummary: JonSmithFidelityToaVerificationSummary;
   templatePath?: string;
   templateDocumentId?: string;
+  templateSource?: JonSmithFidelityToaReviewArtifact["metadata"]["templateSource"];
+  templateId?: string;
+  templateSha256?: string;
   generatedOutputPdfPath?: string;
   createdAt?: string;
 }): JonSmithFidelityToaReviewArtifact {
@@ -141,6 +147,9 @@ export function buildJonSmithFidelityToaReviewArtifact(args: {
       templatePath: args.templatePath ?? JON_SMITH_FIDELITY_TOA_TEMPLATE_PATH,
       templateDocumentId:
         args.templateDocumentId ?? JON_SMITH_FIDELITY_TOA_TEMPLATE_REF.documentId,
+      templateSource: args.templateSource ?? "local_dev_template",
+      templateId: args.templateId,
+      templateSha256: args.templateSha256,
       generatedOutputPdfPath:
         args.generatedOutputPdfPath ||
         args.fillResult.outputPdfPath ||

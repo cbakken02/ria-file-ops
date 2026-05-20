@@ -25,11 +25,14 @@ import {
   type PdfFillAdapterResult,
   writeFieldsToPdfBufferWithPdfLib,
 } from "@/lib/work-packets/pdf-fill-adapter";
+import type { FidelityToaTemplateMetadata } from "./execution-lab-template-storage";
 
 export const WEBSITE_FIDELITY_TOA_DEMO_ARTIFACT_ID =
   "jon-smith-fidelity-toa";
 export const WEBSITE_FIDELITY_TOA_DEMO_TEMPLATE_LABEL =
   "uploaded://fidelity-toa-template.pdf";
+export const WEBSITE_FIDELITY_TOA_STORED_TEMPLATE_LABEL =
+  "stored-template://fidelity-toa";
 export const WEBSITE_FIDELITY_TOA_DEMO_REVIEW_JSON_REF =
   "temporary-demo://jon-smith-fidelity-toa-execution-review.json";
 export const WEBSITE_FIDELITY_TOA_DEMO_PDF_ROUTE =
@@ -50,6 +53,11 @@ export type WebsiteFidelityToaDemoArtifactSummary = {
   status: JonSmithFidelityToaReviewArtifact["metadata"]["status"];
   createdAt: string;
   storage: "temporary_server_memory";
+  templateSource:
+    | JonSmithFidelityToaReviewArtifact["metadata"]["templateSource"]
+    | undefined;
+  templateId: string | undefined;
+  templateSha256: string | undefined;
 };
 
 export type WebsiteFidelityToaDemoRunResult = {
@@ -107,11 +115,14 @@ export async function runWebsiteJonSmithFidelityToaDemo(input: {
   ownerEmail: string;
   templatePdfBuffer: Buffer;
   templateFileName?: string;
+  templateMetadata?: FidelityToaTemplateMetadata;
   createdAt?: string;
 }): Promise<WebsiteFidelityToaDemoRunResult> {
   assertValidTemplatePdfBuffer(input.templatePdfBuffer);
 
   const createdAt = input.createdAt ?? new Date().toISOString();
+  const templateSha256 = input.templateMetadata?.sha256 ?? sha256(input.templatePdfBuffer);
+  const templateSource = input.templateMetadata?.source ?? "upload_override";
   const demo = buildJonSmithFidelityToaDemo({ createdAt });
   let fillResult: Awaited<ReturnType<typeof fillPdfBufferFromCompletionPlan>>;
 
@@ -166,8 +177,17 @@ export async function runWebsiteJonSmithFidelityToaDemo(input: {
       errorCount: fillResult.errorCount,
     } satisfies PdfFillAdapterResult,
     verificationSummary,
-    templatePath: WEBSITE_FIDELITY_TOA_DEMO_TEMPLATE_LABEL,
-    templateDocumentId: "uploaded_demo_pdf_template_fidelity_toa",
+    templatePath:
+      templateSource === "stored_template"
+        ? WEBSITE_FIDELITY_TOA_STORED_TEMPLATE_LABEL
+        : WEBSITE_FIDELITY_TOA_DEMO_TEMPLATE_LABEL,
+    templateDocumentId:
+      templateSource === "stored_template"
+        ? "stored_demo_pdf_template_fidelity_toa"
+        : "uploaded_demo_pdf_template_fidelity_toa",
+    templateSource,
+    templateId: input.templateMetadata?.templateId,
+    templateSha256,
     generatedOutputPdfPath,
     createdAt,
   });
@@ -187,7 +207,7 @@ export async function runWebsiteJonSmithFidelityToaDemo(input: {
     outputPdfBuffer: fillResult.outputPdfBuffer,
     createdAt,
     expiresAt: Date.now() + STORE_TTL_MS,
-    templateSha256: sha256(input.templatePdfBuffer),
+    templateSha256,
   });
 
   return {
@@ -419,6 +439,9 @@ function summarizeWebsiteArtifact(
     status: artifact.metadata.status,
     createdAt: artifact.metadata.createdAt,
     storage: "temporary_server_memory",
+    templateSource: artifact.metadata.templateSource,
+    templateId: artifact.metadata.templateId,
+    templateSha256: artifact.metadata.templateSha256,
   };
 }
 

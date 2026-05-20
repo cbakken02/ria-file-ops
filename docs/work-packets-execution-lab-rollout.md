@@ -876,14 +876,84 @@ Implemented Phase 1 demo scaffold:
 - Local terminal scripts may still use Python/pypdf for dev inspection and verification. The website/Vercel path uses Node-native PDF filling and readback through `pdf-lib`, because Vercel's Node serverless runtime does not provide a Python package environment for importing pypdf inside a spawned `python3` process.
 - The website-run path does not use `local-dev/pdf-templates` or `local-dev/generated`. Because no durable private object store exists yet, it stores the generated PDF and safe review artifact in a temporary server-only in-memory registry keyed by the signed-in owner and stable demo id. This is acceptable only for the protected fake-data demo; it is not production persistence and may be lost on server restart or serverless instance changes.
 
-Future stored-template support:
+### Stored Fidelity TOA Template Plan
 
-- Store reusable PDF templates in a private Supabase Storage bucket, not as blobs in normal database tables.
-- Store template metadata later in a table, including template id, custodian/form family, display label, storage object key, fingerprint/hash, version, active status, created-by metadata, and created/updated timestamps.
-- Fetch stored templates only through server-side, admin-gated code paths. The browser should never receive arbitrary storage keys or direct bucket access.
-- Keep the current upload path as an optional one-off override for testing newer template versions before promoting them to the stored current template.
-- Track template fingerprints and versions so form updates can be detected before reusing stale field mappings or completion plans.
-- Future UI can offer "Use stored current Fidelity TOA template" and "Upload one-off template for this run" as explicit choices.
+Discovery findings:
+
+- The current website demo already has the right execution boundary: `/dev/execution-lab/fidelity-toa` is hidden from navigation, uses `requireExecutionLabDemoPrincipal`, and is owner/admin-gated in production through `WAITLIST_ADMIN_EMAILS` / `ADMIN_EMAILS`.
+- The current website action accepts uploaded PDF bytes, fills and verifies them with the Node-native `pdf-lib` path, and stores the generated PDF plus safe review artifact in temporary server memory.
+- Existing app storage provider code is user-connected storage for Google Drive (`lib/storage/provider-types.ts`, `provider-registry.ts`, `google-drive-adapter.ts`). It is the wrong place for app-owned demo templates because it depends on a user's external storage connection.
+- Existing Supabase usage is direct Postgres through `pg` for app state and document projection tables. There is no Supabase Storage client or bucket usage yet.
+- Existing Supabase migrations enable RLS on app tables. Future storage work should keep that posture and avoid client-exposed storage keys or public buckets.
+
+Recommendation: store the reusable Fidelity TOA template in a private Supabase Storage bucket, with template metadata in Postgres when durable template management begins. Supabase Storage is a better fit than a normal table blob because the PDF is an object asset, while Postgres should hold searchable metadata, version/fingerprint records, and promotion state. The existing Google Drive provider should not be reused for this because it represents user-connected document storage, not private application-managed template storage.
+
+Proposed bucket and object convention:
+
+- Bucket: `execution-lab-templates`
+- Access model: private bucket only.
+- Initial template id: `fidelity-toa`
+- Initial active object key: `templates/fidelity/toa/current/fidelity-toa-template.pdf`
+- Later immutable version object keys: `templates/fidelity/toa/versions/<sha256-prefix>/fidelity-toa-template.pdf`
+
+The first implementation can read a single known object key by stable template id. Do not expose that object key to the browser as an arbitrary path selector. Once template promotion/versioning matters, add metadata so `fidelity-toa` resolves to the active object key and fingerprint.
+
+Metadata to store now vs later:
+
+- No metadata table is required for the narrowest stored-template demo if the first implementation uses one server-side constant for `fidelity-toa`, downloads the private object, validates it as a PDF, computes SHA-256, and passes the bytes into the existing website run path.
+- Add a metadata table in the next storage phase, not as part of the first narrow loader unless the implementation needs admin-managed promotion immediately.
+- Future table: `execution_pdf_templates`.
+- Future columns: `id`, `template_id`, `custodian`, `form_family`, `display_name`, `bucket_id`, `object_key`, `sha256`, `byte_length`, `content_type`, `version_label`, `active`, `created_by_owner_key`, `created_at`, `updated_at`, and `metadata_json`.
+- Later, store PDF field inventories and confirmed option mappings by template hash/version so form updates can invalidate stale mappings before a run.
+
+Route choice:
+
+- Keep the current upload path as a one-off override.
+- Add an explicit template source choice in the hidden route: `Use stored current Fidelity TOA template` and `Upload one-off template`.
+- Default to the stored template when it is configured and readable.
+- If the stored template is missing or invalid, fail closed with a safe status such as `stored_template_missing`, `stored_template_load_failed`, or `stored_template_invalid`, and keep the upload override available for the demo.
+- The existing `runWebsiteJonSmithFidelityToaDemo` boundary can remain byte-oriented. The route/action should choose the byte source, then pass template bytes into the same fake-data run path.
+
+Access controls:
+
+- Continue requiring the existing admin/session gate before listing, loading, or running with any stored template.
+- Fetch private template objects only from server-side code. Never expose the service role key, raw storage credentials, or user-selectable object paths to the client.
+- Prefer a server-only Supabase Storage client for downloads. If using the service role key, keep it only in server code and only after the admin gate has passed.
+- Do not create signed URLs for the reusable template. The app should download the template server-side and use it as run input.
+- Keep generated PDFs and safe review artifacts in the existing temporary in-memory website registry until a separate artifact-storage design is approved.
+- Add sanitized audit events later for stored template read, template missing/invalid, and upload override usage.
+
+Narrow stored-template implementation:
+
+- `lib/work-packets/dev-demo/execution-lab-template-storage.ts` maps the stable template id `fidelity-toa` to the private Supabase Storage object, downloads it server-side, validates that it looks like a PDF, computes SHA-256, and returns bytes plus safe metadata to the existing website demo runner.
+- The implementation uses the existing server env names `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` directly through a small server-only `fetch` helper; no browser Supabase client, metadata table, bucket creation, migration, or new dependency is introduced.
+- `/dev/execution-lab/fidelity-toa` defaults to "Use stored Fidelity TOA template" and keeps "Upload one-off override" for testing newer templates or running the demo before storage setup is complete.
+- Safe failure statuses are `stored_template_not_configured`, `stored_template_missing`, `stored_template_download_failed`, `stored_template_invalid_pdf`, and `stored_template_runtime_error`.
+- The review artifact/view model can show the safe template source, stored template id, and SHA-256 hash. It does not expose storage credentials, raw storage keys as user input, or raw fake sensitive values.
+
+Manual storage setup required:
+
+- Create a private Supabase Storage bucket named `execution-lab-templates`.
+- Upload the Fidelity TOA template to `templates/fidelity/toa/current/fidelity-toa-template.pdf`.
+- Confirm Vercel has the required server-only Supabase URL/service-role env vars before implementation. Do not change env settings as part of planning.
+- If bucket creation is managed in code, use an explicit storage setup migration or documented admin operation. Do not silently create buckets from the demo route.
+- If using Storage RLS policies instead of service-role server access, add narrowly scoped policies on `storage.objects` for the bucket and operations needed. Upsert/promotion workflows will need more permissions than read-only demo loading.
+
+Remaining hardening path after the narrow loader:
+
+1. Decide whether template metadata should stay in server constants for the demo or move into `execution_pdf_templates`.
+2. Add metadata table and promotion workflow only when multiple template versions or admin-managed uploads are required.
+3. Store field inventories and confirmed option mappings by template hash/version so changed forms can be detected before a run.
+4. Add sanitized audit events for stored-template read, template missing/invalid, and upload override usage.
+5. Keep private artifact storage, template manager UI, and field-inventory persistence out of the narrow stored-template loader.
+
+Open questions before implementation:
+
+- Should the first stored-template implementation use `@supabase/supabase-js` for Storage downloads, or a tiny server-only REST helper using the existing `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` env shape?
+- Should the first bucket/object setup be a manual admin step, Supabase CLI step, or a later migration that inserts into `storage.buckets` and creates policies?
+- Is the stored demo template app-wide, or should it eventually be workspace-scoped? For the fake demo, app-wide is sufficient.
+- What is the promotion flow from uploaded override to stored current template?
+- Should template SHA mismatch block the run or only raise a review warning in the first stored-template demo?
 
 Still intentionally not implemented:
 
