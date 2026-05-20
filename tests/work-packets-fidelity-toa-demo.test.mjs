@@ -585,6 +585,7 @@ test("Jon Smith Fidelity TOA review view model shapes the artifact for a future 
     assert.equal(viewModel.viewModelType, "execution_review");
     assert.equal(viewModel.header.demoId, "jon_smith_fidelity_toa_dev_demo");
     assert.equal(viewModel.header.status, "passed");
+    assert.equal(viewModel.header.displayStatus, "Demo completed");
     assert.equal(viewModel.header.generatedPdfPath, JON_SMITH_FIDELITY_TOA_FILLED_OUTPUT_PATH);
     assert.equal(viewModel.header.warning.includes("Dev-only fake-data"), true);
     assert.equal(viewModel.taskContext.receivingCustodian, "Fidelity");
@@ -594,7 +595,11 @@ test("Jon Smith Fidelity TOA review view model shapes the artifact for a future 
     assert.equal(viewModel.fillTrace.counts.fieldsFilled, 14);
     assert.equal(viewModel.fillTrace.counts.optionsSelected, 3);
     assert.equal(viewModel.verification.status, "passed");
+    assert.equal(viewModel.verification.displayStatus, "Verified");
     assert.equal(viewModel.verification.issueCount, 0);
+    assert.equal(viewModel.completionPlan.displayStatus, "Mapped and verified");
+    assert.equal(viewModel.completionPlan.summary.mappedFields, 14);
+    assert.equal(viewModel.completionPlan.summary.manualReviewRows, 2);
     assert.equal(viewModel.artifactRefs.generatedPdfPath, JON_SMITH_FIDELITY_TOA_FILLED_OUTPUT_PATH);
     assert.equal(viewModel.artifactRefs.reviewJsonPath, testArtifactPath);
     assert.equal(viewModel.artifactRefs.publicUrl, null);
@@ -655,6 +660,78 @@ test("Jon Smith Fidelity TOA review view model shapes the artifact for a future 
   }
 });
 
+test("Execution Lab review view model hides stale scaffold warnings for verified website artifacts", () => {
+  const demo = buildJonSmithFidelityToaDemo();
+  const artifact = buildJonSmithFidelityToaReviewArtifact({
+    demo,
+    fillResult: makeVerifiedFillResult(),
+    verificationSummary: verifyJonSmithFidelityToaFieldValues(
+      makeVerifiedOutputFieldValues(),
+    ),
+    generatedOutputPdfPath: "/dev/execution-lab/fidelity-toa/pdf/jon-smith-fidelity-toa",
+    createdAt: "2026-05-19T00:00:00.000Z",
+  });
+  const viewModel = buildExecutionReviewViewModelFromArtifact(artifact, {
+    reviewJsonPath: "temporary-demo://jon-smith-fidelity-toa-execution-review.json",
+  });
+  const visibleFlags = JSON.stringify(viewModel.reviewFlags);
+  const debugWarnings = JSON.stringify(viewModel.debugWarnings);
+  const serialized = JSON.stringify(viewModel);
+
+  assert.equal(viewModel.header.displayStatus, "Demo completed");
+  assert.equal(viewModel.verification.displayStatus, "Verified");
+  assert.equal(viewModel.completionPlan.status, "blocked_missing_information");
+  assert.equal(viewModel.completionPlan.displayStatus, "Mapped and verified");
+  assert.ok(viewModel.debugWarnings.hiddenCount > 20);
+  assert.match(debugWarnings, /scaffold placeholder until the local PDF template is inspected/);
+  assert.doesNotMatch(visibleFlags, /scaffold placeholder until the local PDF template is inspected/);
+  assert.equal(
+    viewModel.reviewFlags.some(
+      (flag) => flag.reviewFlagId === "review_signature_date_left_blank",
+    ),
+    true,
+  );
+  assert.equal(
+    viewModel.reviewFlags.some(
+      (flag) => flag.reviewFlagId === "review_fake_data_only",
+    ),
+    true,
+  );
+  assert.equal(
+    viewModel.reviewFlags.some(
+      (flag) => flag.reviewFlagId === "review_acctnumber2_delivering_account_meaning",
+    ),
+    true,
+  );
+  assert.equal(
+    viewModel.reviewFlags.some(
+      (flag) => flag.reviewFlagId === "review_printacctowner_not_signature",
+    ),
+    true,
+  );
+  assert.equal(
+    viewModel.completionPlan.rows.some((row) =>
+      row.reviewFlags.some((flag) =>
+        /scaffold placeholder until the local PDF template is inspected/i.test(
+          flag.message,
+        ),
+      ),
+    ),
+    false,
+  );
+  assert.equal(
+    viewModel.completionPlan.rows.some(
+      (row) => row.hiddenDebugWarningCount > 0,
+    ),
+    true,
+  );
+  assert.doesNotMatch(serialized, /000126789/);
+  assert.doesNotMatch(serialized, /900012345/);
+  assert.doesNotMatch(serialized, /234567890/);
+  assert.doesNotMatch(serialized, /100 Ameriprise Demo Way/);
+  assert.doesNotMatch(serialized, /8005550199/);
+});
+
 test("Execution Lab review display surface is dev-only and does not hardcode raw fake values", async () => {
   const [componentSource, routeSource, actionSource, pdfRouteSource] = await Promise.all([
     readFile(
@@ -678,6 +755,10 @@ test("Execution Lab review display surface is dev-only and does not hardcode raw
   assert.match(routeSource, /Run Demo/);
   assert.match(routeSource, /No run yet/);
   assert.match(componentSource, /<details/);
+  assert.match(componentSource, /Mapped fields/);
+  assert.match(componentSource, /Full completion plan/);
+  assert.match(componentSource, /Debug warnings hidden from main view/);
+  assert.match(componentSource, /View safe debug JSON/);
   assert.match(routeSource, /loadWebsiteFidelityToaDemoViewModelById/);
   assert.match(routeSource, /resolvedSearchParams\?\.run/);
   assert.doesNotMatch(combinedSource, /000126789/);

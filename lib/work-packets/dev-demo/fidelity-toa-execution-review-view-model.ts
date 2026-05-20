@@ -14,6 +14,15 @@ export type ExecutionReviewPlanRowStatus =
   | "planned"
   | "intentionally_blank";
 
+export type ExecutionReviewFlagDisplay = {
+  reviewFlagId: string;
+  flagType?: string;
+  severity: string;
+  message: string;
+  status: string;
+  count?: number;
+};
+
 export type ExecutionReviewReference =
   | {
       referenceKind: "value_ref";
@@ -42,6 +51,7 @@ export type ExecutionReviewViewModel = {
     demoId: string;
     taskInstruction: string;
     status: ExecutionReviewViewModelStatus;
+    displayStatus: string;
     taskType: string;
     generatedPdfPath: string;
     createdAt: string;
@@ -57,7 +67,16 @@ export type ExecutionReviewViewModel = {
     sectionId: "completion_plan";
     completionPlanId: string;
     status: JonSmithFidelityToaReviewArtifact["completionPlanSummary"]["status"];
+    displayStatus: string;
     safeSummary?: string;
+    summary: {
+      totalRows: number;
+      mappedFields: number;
+      confirmedRows: number;
+      manualReviewRows: number;
+      intentionallyBlankRows: number;
+      hiddenDebugWarnings: number;
+    };
     rows: Array<{
       planFieldId: string;
       destinationField: string;
@@ -66,12 +85,8 @@ export type ExecutionReviewViewModel = {
       action: string;
       reason: string;
       confidence?: string;
-      reviewFlags: Array<{
-        reviewFlagId: string;
-        severity: string;
-        message: string;
-        status: string;
-      }>;
+      reviewFlags: ExecutionReviewFlagDisplay[];
+      hiddenDebugWarningCount: number;
     }>;
   };
   fillTrace: {
@@ -97,19 +112,19 @@ export type ExecutionReviewViewModel = {
   verification: {
     sectionId: "verification";
     status: ExecutionReviewViewModelStatus;
+    displayStatus: string;
     expectedTextFieldsFilledCount: number;
     expectedOptionsSelectedCount: number;
     blankFieldsConfirmedCount: number;
     issueCount: number;
     issues: JonSmithFidelityToaReviewArtifact["verificationSummary"]["issues"];
   };
-  reviewFlags: Array<{
-    reviewFlagId: string;
-    flagType: string;
-    severity: string;
-    message: string;
-    status: string;
-  }>;
+  reviewFlags: ExecutionReviewFlagDisplay[];
+  debugWarnings: {
+    sectionId: "debug_warnings";
+    hiddenCount: number;
+    groups: ExecutionReviewFlagDisplay[];
+  };
   artifactRefs: {
     generatedPdfPath: string;
     reviewJsonPath: string;
@@ -154,6 +169,27 @@ export function buildExecutionReviewViewModelFromArtifact(
   } = {},
 ): ExecutionReviewViewModel {
   assertJonSmithFidelityToaReviewArtifactIsSafe(artifact);
+  const artifactPassed = artifact.verificationSummary.status === "passed";
+  const reviewFlagBuckets = bucketReviewFlags(
+    artifact.reviewFlags,
+    artifactPassed,
+  );
+  const completionPlanRows = artifact.completionPlanSummary.fields.map((field) => {
+    const fieldFlagBuckets = bucketReviewFlags(field.reviewFlags, artifactPassed);
+
+    return {
+      planFieldId: field.planFieldId,
+      destinationField: field.destinationFieldName ?? "(unmapped field)",
+      reference: referenceForPlanField(field),
+      status: statusForPlanField(field, fieldFlagBuckets.visibleFlags),
+      action: field.action,
+      reason: field.reason,
+      confidence: field.confidence,
+      reviewFlags: fieldFlagBuckets.visibleFlags,
+      hiddenDebugWarningCount: fieldFlagBuckets.hiddenCount,
+    };
+  });
+  const completionPlanSummary = summarizeCompletionPlanRows(completionPlanRows);
 
   const viewModel: ExecutionReviewViewModel = {
     viewModelType: "execution_review",
@@ -162,6 +198,7 @@ export function buildExecutionReviewViewModelFromArtifact(
       demoId: artifact.metadata.demoId,
       taskInstruction: artifact.metadata.taskInstruction,
       status: artifact.metadata.status,
+      displayStatus: artifactPassed ? "Demo completed" : "Needs review",
       taskType: artifact.metadata.taskType,
       generatedPdfPath: artifact.metadata.generatedOutputPdfPath,
       createdAt: artifact.metadata.createdAt,
@@ -179,22 +216,10 @@ export function buildExecutionReviewViewModelFromArtifact(
       sectionId: "completion_plan",
       completionPlanId: artifact.completionPlanSummary.completionPlanId,
       status: artifact.completionPlanSummary.status,
+      displayStatus: artifactPassed ? "Mapped and verified" : formatToken(artifact.completionPlanSummary.status),
       safeSummary: artifact.completionPlanSummary.safeSummary,
-      rows: artifact.completionPlanSummary.fields.map((field) => ({
-        planFieldId: field.planFieldId,
-        destinationField: field.destinationFieldName ?? "(unmapped field)",
-        reference: referenceForPlanField(field),
-        status: statusForPlanField(field),
-        action: field.action,
-        reason: field.reason,
-        confidence: field.confidence,
-        reviewFlags: field.reviewFlags.map((flag) => ({
-          reviewFlagId: flag.reviewFlagId,
-          severity: flag.severity,
-          message: flag.message,
-          status: flag.status,
-        })),
-      })),
+      summary: completionPlanSummary,
+      rows: completionPlanRows,
     },
     fillTrace: {
       sectionId: "fill_trace",
@@ -218,6 +243,7 @@ export function buildExecutionReviewViewModelFromArtifact(
     verification: {
       sectionId: "verification",
       status: artifact.verificationSummary.status,
+      displayStatus: artifactPassed ? "Verified" : "Needs attention",
       expectedTextFieldsFilledCount:
         artifact.verificationSummary.filledTextFieldsExpected,
       expectedOptionsSelectedCount:
@@ -227,13 +253,12 @@ export function buildExecutionReviewViewModelFromArtifact(
       issueCount: artifact.verificationSummary.issueCount,
       issues: artifact.verificationSummary.issues,
     },
-    reviewFlags: artifact.reviewFlags.map((flag) => ({
-      reviewFlagId: flag.reviewFlagId,
-      flagType: flag.flagType,
-      severity: flag.severity,
-      message: flag.message,
-      status: flag.status,
-    })),
+    reviewFlags: reviewFlagBuckets.visibleFlags,
+    debugWarnings: {
+      sectionId: "debug_warnings",
+      hiddenCount: reviewFlagBuckets.hiddenCount,
+      groups: reviewFlagBuckets.debugGroups,
+    },
     artifactRefs: {
       generatedPdfPath: artifact.metadata.generatedOutputPdfPath,
       reviewJsonPath:
@@ -265,7 +290,10 @@ export function assertExecutionReviewViewModelIsSafe(
     /\b6175550184\b/.test(serialized) ||
     /\b\d{3}-\d{2}-\d{4}\b/.test(serialized) ||
     /jon\.smith@example\.test/i.test(serialized) ||
-    /123 Demo Lane/i.test(serialized)
+    /123 Demo Lane/i.test(serialized) ||
+    /100 Ameriprise Demo Way/i.test(serialized) ||
+    /\bMinneapolis\b/i.test(serialized) ||
+    /\b55402\b/.test(serialized)
   ) {
     throw new JonSmithFidelityToaReviewViewModelError(
       "Execution review view model included raw fake sensitive values.",
@@ -349,8 +377,9 @@ function referenceForPlanField(
 
 function statusForPlanField(
   field: JonSmithFidelityToaReviewArtifact["completionPlanSummary"]["fields"][number],
+  visibleReviewFlags: ExecutionReviewFlagDisplay[],
 ): ExecutionReviewPlanRowStatus {
-  if (field.reviewFlags.length > 0) {
+  if (visibleReviewFlags.length > 0) {
     return "manual_review";
   }
 
@@ -363,6 +392,113 @@ function statusForPlanField(
   }
 
   return "planned";
+}
+
+function summarizeCompletionPlanRows(
+  rows: ExecutionReviewViewModel["completionPlan"]["rows"],
+): ExecutionReviewViewModel["completionPlan"]["summary"] {
+  return {
+    totalRows: rows.length,
+    mappedFields: rows.filter(
+      (row) =>
+        row.reference.referenceKind === "value_ref" ||
+        row.reference.referenceKind === "option_ref",
+    ).length,
+    confirmedRows: rows.filter((row) => row.status === "confirmed").length,
+    manualReviewRows: rows.filter((row) => row.status === "manual_review").length,
+    intentionallyBlankRows: rows.filter(
+      (row) => row.status === "intentionally_blank",
+    ).length,
+    hiddenDebugWarnings: rows.reduce(
+      (total, row) => total + row.hiddenDebugWarningCount,
+      0,
+    ),
+  };
+}
+
+function bucketReviewFlags(
+  flags: Array<{
+    reviewFlagId: string;
+    flagType?: string;
+    severity: string;
+    message: string;
+    status: string;
+  }>,
+  artifactPassed: boolean,
+): {
+  visibleFlags: ExecutionReviewFlagDisplay[];
+  debugGroups: ExecutionReviewFlagDisplay[];
+  hiddenCount: number;
+} {
+  const visible = new Map<string, ExecutionReviewFlagDisplay>();
+  const debug = new Map<string, ExecutionReviewFlagDisplay>();
+
+  for (const flag of flags) {
+    if (isDebugOnlyReviewFlag(flag, artifactPassed)) {
+      const key = `${flag.severity}:${flag.status}:${flag.message}`;
+      const existing = debug.get(key);
+
+      if (existing) {
+        existing.count = (existing.count ?? 1) + 1;
+      } else {
+        debug.set(key, {
+          reviewFlagId: flag.reviewFlagId,
+          flagType: flag.flagType,
+          severity: flag.severity,
+          message: flag.message,
+          status: flag.status,
+          count: 1,
+        });
+      }
+
+      continue;
+    }
+
+    const key = `${flag.severity}:${flag.status}:${flag.message}`;
+    const existing = visible.get(key);
+
+    if (existing) {
+      existing.count = (existing.count ?? 1) + 1;
+    } else {
+      visible.set(key, {
+        reviewFlagId: flag.reviewFlagId,
+        flagType: flag.flagType,
+        severity: flag.severity,
+        message: flag.message,
+        status: flag.status,
+      });
+    }
+  }
+
+  const debugGroups = Array.from(debug.values());
+
+  return {
+    visibleFlags: Array.from(visible.values()),
+    debugGroups,
+    hiddenCount: debugGroups.reduce((total, group) => total + (group.count ?? 1), 0),
+  };
+}
+
+function isDebugOnlyReviewFlag(
+  flag: { reviewFlagId: string; message: string },
+  artifactPassed: boolean,
+) {
+  if (!artifactPassed) {
+    return false;
+  }
+
+  return (
+    flag.reviewFlagId.endsWith("_field_not_inspected") ||
+    flag.reviewFlagId.endsWith("_export_value") ||
+    /scaffold placeholder until the local PDF template is inspected/i.test(
+      flag.message,
+    ) ||
+    /local PDF template has not been inspected/i.test(flag.message)
+  );
+}
+
+function formatToken(value: string) {
+  return value.replaceAll("_", " ");
 }
 
 function isJonSmithFidelityToaReviewArtifact(

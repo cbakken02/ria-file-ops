@@ -153,6 +153,13 @@
   margin-bottom: 14px;
 }
 
+.sectionBadges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .sectionHeader h2 {
   margin: 5px 0 0;
   font-size: 1rem;
@@ -294,9 +301,28 @@
   color: var(--text-soft);
 }
 
-.debugDetails summary {
+.debugDetails summary,
+.nestedDetails summary {
   cursor: pointer;
   font-weight: 720;
+}
+
+.nestedDetails {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.nestedDetails summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-soft);
+}
+
+.nestedDetails[open] summary {
+  margin-bottom: 8px;
 }
 
 .debugDetails pre {
@@ -323,7 +349,9 @@
   }
 
   .summaryHeader,
-  .sectionHeader {
+  .sectionHeader,
+  .sectionBadges {
     display: grid;
+    justify-content: stretch;
   }
 }

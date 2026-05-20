@@ -23,7 +23,7 @@ export function ExecutionLabReviewSurface({
             </p>
           </div>
           <span className={statusBadgeClass(viewModel.verification.status)}>
-            {viewModel.verification.status}
+            {viewModel.header.displayStatus}
           </span>
         </div>
 
@@ -62,7 +62,7 @@ export function ExecutionLabReviewSurface({
 
         <dl className={styles.headerMeta} aria-label="Execution metadata">
           <MetaTerm label="Demo ID" value={viewModel.header.demoId} />
-          <MetaTerm label="Status" value={viewModel.header.status} />
+          <MetaTerm label="Status" value={viewModel.header.displayStatus} />
           <MetaTerm label="Task type" value={viewModel.header.taskType} />
           <MetaTerm label="Created" value={formatTimestamp(viewModel.header.createdAt)} />
           <MetaTerm
@@ -74,10 +74,50 @@ export function ExecutionLabReviewSurface({
         <p className={styles.warning}>{viewModel.header.warning}</p>
       </section>
 
+      <section className={styles.section} aria-labelledby="plan-snapshot-title">
+        <div className={styles.sectionHeader}>
+          <div>
+            <p className={styles.sectionEyebrow}>Completion plan</p>
+            <h2 id="plan-snapshot-title">Mapped fields</h2>
+          </div>
+          <span className={statusBadgeClass(viewModel.verification.status)}>
+            {viewModel.completionPlan.displayStatus}
+          </span>
+        </div>
+
+        <dl className={styles.metricGrid} aria-label="Completion plan summary">
+          <Metric
+            label="Mapped"
+            value={viewModel.completionPlan.summary.mappedFields}
+          />
+          <Metric
+            label="Confirmed"
+            value={viewModel.completionPlan.summary.confirmedRows}
+          />
+          <Metric
+            label="Manual review"
+            value={viewModel.completionPlan.summary.manualReviewRows}
+          />
+          <Metric
+            label="Blank"
+            value={viewModel.completionPlan.summary.intentionallyBlankRows}
+          />
+        </dl>
+
+        <p className={styles.sectionSummary}>
+          Full completion-plan detail is available below.{" "}
+          {viewModel.completionPlan.summary.hiddenDebugWarnings > 0
+            ? `${viewModel.completionPlan.summary.hiddenDebugWarnings} scaffold/debug warnings are hidden from the main view.`
+            : "No scaffold/debug warnings are hidden."}
+        </p>
+      </section>
+
       <details className={styles.detailsSection}>
         <summary>
-          <span>Completion plan</span>
-          <span className={styles.badge}>{viewModel.completionPlan.status}</span>
+          <span>Full completion plan</span>
+          <span className={styles.badge}>
+            {viewModel.completionPlan.summary.totalRows} rows
+          </span>
         </summary>
         {viewModel.completionPlan.safeSummary ? (
           <p className={styles.sectionSummary}>
@@ -112,6 +152,7 @@ export function ExecutionLabReviewSurface({
                         {row.reviewFlags.map((flag) => (
                           <span key={flag.reviewFlagId}>
                             {flag.severity}: {flag.message}
+                            {flag.count && flag.count > 1 ? ` (${flag.count})` : ""}
                           </span>
                         ))}
                       </div>
@@ -189,7 +230,7 @@ export function ExecutionLabReviewSurface({
             <h2 id="verification-title">Output checks</h2>
           </div>
           <span className={statusBadgeClass(viewModel.verification.status)}>
-            {viewModel.verification.status}
+            {viewModel.verification.displayStatus}
           </span>
         </div>
 
@@ -229,16 +270,54 @@ export function ExecutionLabReviewSurface({
             <p className={styles.sectionEyebrow}>Review flags</p>
             <h2 id="review-flags-title">Human checks</h2>
           </div>
-          <span className={styles.badge}>{viewModel.reviewFlags.length} flags</span>
+          <div className={styles.sectionBadges}>
+            <span className={styles.badge}>{viewModel.reviewFlags.length} shown</span>
+            {viewModel.debugWarnings.hiddenCount > 0 ? (
+              <span className={styles.badge}>
+                {viewModel.debugWarnings.hiddenCount} hidden
+              </span>
+            ) : null}
+          </div>
         </div>
-        <ul className={styles.flagList}>
-          {viewModel.reviewFlags.map((flag) => (
-            <li key={flag.reviewFlagId}>
-              <strong>{formatToken(flag.severity)}</strong>
-              <span>{flag.message}</span>
-            </li>
-          ))}
-        </ul>
+        {viewModel.reviewFlags.length > 0 ? (
+          <ul className={styles.flagList}>
+            {viewModel.reviewFlags.map((flag) => (
+              <li key={flag.reviewFlagId}>
+                <strong>{formatToken(flag.severity)}</strong>
+                <span>
+                  {flag.message}
+                  {flag.count && flag.count > 1 ? ` (${flag.count})` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.emptyText}>No primary human-review flags.</p>
+        )}
+
+        {viewModel.debugWarnings.hiddenCount > 0 ? (
+          <details className={styles.nestedDetails}>
+            <summary>
+              Debug warnings hidden from main view
+              <span className={styles.badge}>
+                {viewModel.debugWarnings.hiddenCount}
+              </span>
+            </summary>
+            <ul className={styles.flagList}>
+              {viewModel.debugWarnings.groups.map((warning) => (
+                <li key={warning.reviewFlagId}>
+                  <strong>{formatToken(warning.severity)}</strong>
+                  <span>
+                    {warning.message}
+                    {warning.count && warning.count > 1
+                      ? ` (${warning.count} fields)`
+                      : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </section>
 
       <details className={styles.detailsSection}>
