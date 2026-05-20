@@ -11,7 +11,8 @@ import {
   type JonSmithFidelityToaReviewArtifact,
 } from "@/lib/work-packets/dev-demo/fidelity-toa-review-artifact";
 import {
-  verifyJonSmithFidelityToaOutputPdfBuffer,
+  JonSmithFidelityToaVerificationError,
+  verifyJonSmithFidelityToaOutputPdfBufferWithPdfLib,
 } from "@/lib/work-packets/dev-demo/fidelity-toa-output-verification";
 import {
   JON_SMITH_FIDELITY_TOA_TASK,
@@ -20,7 +21,9 @@ import {
 } from "@/lib/work-packets/dev-demo/jon-smith-fidelity-toa";
 import {
   fillPdfBufferFromCompletionPlan,
+  PdfFillAdapterError,
   type PdfFillAdapterResult,
+  writeFieldsToPdfBufferWithPdfLib,
 } from "@/lib/work-packets/pdf-fill-adapter";
 
 export const WEBSITE_FIDELITY_TOA_DEMO_ARTIFACT_ID =
@@ -70,28 +73,33 @@ type StoredWebsiteFidelityToaDemoArtifact = {
 
 type Store = Map<string, StoredWebsiteFidelityToaDemoArtifact>;
 
+export type WebsiteFidelityToaDemoErrorCode =
+  | "missing_template"
+  | "invalid_template"
+  | "pdf_fill_runtime_unavailable"
+  | "pdf_fill_failed"
+  | "pdf_verify_runtime_unavailable"
+  | "pdf_verify_failed"
+  | "unsafe_artifact_id"
+  | "unknown_artifact_id"
+  | "missing_artifact"
+  | "unsafe_artifact";
+
 export class WebsiteFidelityToaDemoError extends Error {
-  readonly code:
-    | "missing_template"
-    | "invalid_template"
-    | "unsafe_artifact_id"
-    | "unknown_artifact_id"
-    | "missing_artifact"
-    | "unsafe_artifact";
+  readonly code: WebsiteFidelityToaDemoErrorCode;
+  readonly safeDiagnostic?: string;
 
   constructor(
     message: string,
-    code:
-      | "missing_template"
-      | "invalid_template"
-      | "unsafe_artifact_id"
-      | "unknown_artifact_id"
-      | "missing_artifact"
-      | "unsafe_artifact",
+    code: WebsiteFidelityToaDemoErrorCode,
+    options: {
+      safeDiagnostic?: string;
+    } = {},
   ) {
     super(message);
     this.name = "WebsiteFidelityToaDemoError";
     this.code = code;
+    this.safeDiagnostic = options.safeDiagnostic;
   }
 }
 
@@ -105,32 +113,49 @@ export async function runWebsiteJonSmithFidelityToaDemo(input: {
 
   const createdAt = input.createdAt ?? new Date().toISOString();
   const demo = buildJonSmithFidelityToaDemo({ createdAt });
-  const fillResult = await fillPdfBufferFromCompletionPlan({
-    templatePdfBuffer: input.templatePdfBuffer,
-    completionPlan: demo.completionPlan,
-    valueRefs: demo.valueRefs,
-    resolveValue: (valueRef) => {
-      const resolved = resolveJonSmithFidelityToaFakeValue(valueRef.valueRefId);
+  let fillResult: Awaited<ReturnType<typeof fillPdfBufferFromCompletionPlan>>;
 
-      if (resolved.status !== "resolved") {
+  try {
+    fillResult = await fillPdfBufferFromCompletionPlan({
+      templatePdfBuffer: input.templatePdfBuffer,
+      completionPlan: demo.completionPlan,
+      valueRefs: demo.valueRefs,
+      writeFieldsToPdfBuffer: writeFieldsToPdfBufferWithPdfLib,
+      resolveValue: (valueRef) => {
+        const resolved = resolveJonSmithFidelityToaFakeValue(valueRef.valueRefId);
+
+        if (resolved.status !== "resolved") {
+          return {
+            status: "not_found",
+            reason: resolved.reason,
+          };
+        }
+
         return {
-          status: "not_found",
-          reason: resolved.reason,
+          status: "resolved",
+          rawValue: resolved.rawValue,
+          maskedPreview: resolved.maskedPreview,
         };
-      }
+      },
+    });
+  } catch (error) {
+    throw classifyWebsiteFidelityToaDemoRuntimeError(error, "fill");
+  }
 
-      return {
-        status: "resolved",
-        rawValue: resolved.rawValue,
-        maskedPreview: resolved.maskedPreview,
-      };
-    },
-  });
   const generatedOutputPdfPath = WEBSITE_FIDELITY_TOA_DEMO_PDF_ROUTE;
-  const verificationSummary = await verifyJonSmithFidelityToaOutputPdfBuffer(
-    fillResult.outputPdfBuffer,
-    { outputPdfPath: generatedOutputPdfPath },
-  );
+  let verificationSummary: Awaited<
+    ReturnType<typeof verifyJonSmithFidelityToaOutputPdfBufferWithPdfLib>
+  >;
+
+  try {
+    verificationSummary = await verifyJonSmithFidelityToaOutputPdfBufferWithPdfLib(
+      fillResult.outputPdfBuffer,
+      { outputPdfPath: generatedOutputPdfPath },
+    );
+  } catch (error) {
+    throw classifyWebsiteFidelityToaDemoRuntimeError(error, "verify");
+  }
+
   const artifact = buildJonSmithFidelityToaReviewArtifact({
     demo,
     fillResult: {
@@ -176,6 +201,54 @@ export async function runWebsiteJonSmithFidelityToaDemo(input: {
     skippedFieldCount: fillResult.skippedFieldCount,
     errorCount: fillResult.errorCount,
   };
+}
+
+export function classifyWebsiteFidelityToaDemoRuntimeError(
+  error: unknown,
+  stage: "fill" | "verify",
+): WebsiteFidelityToaDemoError {
+  const safeDiagnostic = safeDiagnosticMessage(error);
+  const runtimeUnavailable = isPdfPythonRuntimeUnavailable(error);
+
+  if (stage === "fill") {
+    return new WebsiteFidelityToaDemoError(
+      runtimeUnavailable
+        ? "The PDF fill runtime is unavailable in this environment."
+        : "The uploaded PDF could not be filled by the demo PDF writer.",
+      runtimeUnavailable ? "pdf_fill_runtime_unavailable" : "pdf_fill_failed",
+      { safeDiagnostic },
+    );
+  }
+
+  return new WebsiteFidelityToaDemoError(
+    runtimeUnavailable
+      ? "The PDF verification runtime is unavailable in this environment."
+      : "The filled PDF could not be verified by the demo PDF reader.",
+    runtimeUnavailable ? "pdf_verify_runtime_unavailable" : "pdf_verify_failed",
+    { safeDiagnostic },
+  );
+}
+
+export function getWebsiteFidelityToaDemoStatusForError(error: unknown) {
+  if (error instanceof WebsiteFidelityToaDemoError) {
+    return error.code;
+  }
+
+  return "run_failed";
+}
+
+export function logWebsiteFidelityToaDemoRunFailure(error: unknown): void {
+  const status = getWebsiteFidelityToaDemoStatusForError(error);
+
+  console.error("[execution-lab-demo] Jon Smith Fidelity TOA run failed", {
+    status,
+    errorName: error instanceof Error ? error.name : typeof error,
+    message: error instanceof Error ? error.message : "Unknown error",
+    safeDiagnostic:
+      error instanceof WebsiteFidelityToaDemoError
+        ? error.safeDiagnostic
+        : safeDiagnosticMessage(error),
+  });
 }
 
 export function listWebsiteFidelityToaDemoArtifacts(input: {
@@ -294,7 +367,10 @@ export function assertWebsiteFidelityToaDemoOutputIsSafe(value: unknown): void {
     /\b6175550184\b/.test(serialized) ||
     /\b\d{3}-\d{2}-\d{4}\b/.test(serialized) ||
     /jon\.smith@example\.test/i.test(serialized) ||
-    /123 Demo Lane/i.test(serialized)
+    /123 Demo Lane/i.test(serialized) ||
+    /100 Ameriprise Demo Way/i.test(serialized) ||
+    /\bMinneapolis\b/i.test(serialized) ||
+    /\b55402\b/.test(serialized)
   ) {
     throw new WebsiteFidelityToaDemoError(
       "Website demo output included raw fake sensitive values.",
@@ -374,6 +450,42 @@ function storeKey(ownerEmail: string) {
 
 function sha256(buffer: Buffer) {
   return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+function isPdfPythonRuntimeUnavailable(error: unknown): boolean {
+  if (
+    error instanceof PdfFillAdapterError &&
+    error.code === "writer_failed" &&
+    isPythonRuntimeDiagnostic(error.message)
+  ) {
+    return true;
+  }
+
+  if (
+    error instanceof JonSmithFidelityToaVerificationError &&
+    error.code === "pdf_reader_failed" &&
+    isPythonRuntimeDiagnostic(error.message)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isPythonRuntimeDiagnostic(message: string): boolean {
+  return (
+    /ModuleNotFoundError:\s+No module named ['"]pypdf['"]/.test(message) ||
+    /\bspawn python3 ENOENT\b/.test(message) ||
+    /\bpython3 exited with code 127\b/.test(message)
+  );
+}
+
+function safeDiagnosticMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Unknown error";
+  }
+
+  return error.message.split("\n").slice(0, 6).join("\n").slice(0, 1000);
 }
 
 export const WEBSITE_FIDELITY_TOA_DEMO_TASK = JON_SMITH_FIDELITY_TOA_TASK;

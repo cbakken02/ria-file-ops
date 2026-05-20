@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { requireExecutionLabDemoPrincipal } from "@/lib/work-packets/dev-demo/execution-lab-demo-access";
 import {
   WEBSITE_FIDELITY_TOA_DEMO_ARTIFACT_ID,
-  WebsiteFidelityToaDemoError,
+  getWebsiteFidelityToaDemoStatusForError,
+  logWebsiteFidelityToaDemoRunFailure,
   runWebsiteJonSmithFidelityToaDemo,
 } from "@/lib/work-packets/dev-demo/website-fidelity-toa-demo";
 
@@ -28,7 +29,8 @@ export async function runJonSmithFidelityToaWebsiteDemoAction(
       templatePdfBuffer: Buffer.from(await template.arrayBuffer()),
     });
   } catch (error) {
-    redirectWithStatus(statusForDemoRunError(error));
+    logWebsiteFidelityToaDemoRunFailure(error);
+    redirectWithStatus(getWebsiteFidelityToaDemoStatusForError(error));
   }
 
   revalidatePath(ROUTE_PATH);
@@ -37,12 +39,4 @@ export async function runJonSmithFidelityToaWebsiteDemoAction(
 
 function redirectWithStatus(status: string): never {
   redirect(`${ROUTE_PATH}?status=${encodeURIComponent(status)}`);
-}
-
-function statusForDemoRunError(error: unknown) {
-  if (error instanceof WebsiteFidelityToaDemoError) {
-    return error.code;
-  }
-
-  return "run_failed";
 }

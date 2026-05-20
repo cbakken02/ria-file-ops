@@ -2,28 +2,30 @@
   width: min(1240px, 100%);
   margin: 0 auto;
   display: grid;
-  gap: 16px;
+  gap: 12px;
   color: var(--foreground);
 }
 
-.header,
+.summaryCard,
 .section,
+.detailsSection,
 .debugDetails {
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.025);
 }
 
-.header {
+.summaryCard {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
-  gap: 20px;
-  align-items: start;
-  padding: 22px;
+  gap: 14px;
+  padding: 18px;
   border-radius: 8px;
 }
 
-.headerMain {
-  min-width: 0;
+.summaryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
 }
 
 .eyebrow,
@@ -36,36 +38,42 @@
   text-transform: uppercase;
 }
 
-.header h1 {
-  max-width: 960px;
-  margin: 10px 0 12px;
-  font-size: clamp(1.45rem, 3vw, 2.2rem);
-  line-height: 1.08;
+.summaryHeader h2 {
+  margin: 5px 0 0;
+  font-size: 1.2rem;
+  line-height: 1.15;
   letter-spacing: 0;
 }
 
 .warning,
 .sectionSummary,
-.emptyText {
+.emptyText,
+.taskInstruction {
   color: var(--text-soft);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .warning {
-  max-width: 720px;
+  margin: 0;
+  max-width: 780px;
   color: #f1d9a6;
+}
+
+.taskInstruction {
+  margin: 6px 0 0;
 }
 
 .headerMeta,
 .pathGrid,
 .contextGrid,
-.metricGrid {
+.metricGrid,
+.metricStrip {
   display: grid;
   gap: 10px;
 }
 
 .headerMeta {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .pathGrid {
@@ -81,15 +89,18 @@
   margin-bottom: 12px;
 }
 
+.metricStrip {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
 .metaTerm,
 .metric {
   min-width: 0;
   display: grid;
   gap: 5px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.025);
+  padding: 10px 0;
 }
 
 .metaTerm dt,
@@ -113,9 +124,25 @@
 }
 
 .section,
+.detailsSection,
 .debugDetails {
-  padding: 18px;
+  padding: 14px;
   border-radius: 8px;
+}
+
+.detailsSection summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  color: var(--foreground);
+  font-weight: 760;
+  list-style-position: inside;
+}
+
+.detailsSection[open] summary {
+  margin-bottom: 12px;
 }
 
 .sectionHeader {
@@ -245,10 +272,12 @@
 .flagList li {
   display: grid;
   gap: 4px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.025);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.flagList li:last-child {
+  border-bottom: 0;
 }
 
 .flagList strong {
@@ -287,14 +316,13 @@
   .header,
   .pathGrid,
   .contextGrid,
-  .metricGrid {
-    grid-template-columns: 1fr;
-  }
-
+  .metricGrid,
+  .metricStrip,
   .headerMeta {
     grid-template-columns: 1fr;
   }
 
+  .summaryHeader,
   .sectionHeader {
     display: grid;
   }
