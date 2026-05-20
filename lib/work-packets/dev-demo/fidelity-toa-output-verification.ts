@@ -4,6 +4,14 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  PDFCheckBox,
+  PDFDocument,
+  PDFDropdown,
+  PDFOptionList,
+  PDFRadioGroup,
+  PDFTextField,
+} from "pdf-lib";
+import {
   JON_SMITH_FIDELITY_TOA_FILLED_OUTPUT_PATH,
 } from "@/lib/work-packets/dev-demo/jon-smith-fidelity-toa";
 
@@ -129,6 +137,20 @@ export async function verifyJonSmithFidelityToaOutputPdfBuffer(
   }
 }
 
+export async function verifyJonSmithFidelityToaOutputPdfBufferWithPdfLib(
+  outputPdfBuffer: Buffer,
+  options: {
+    outputPdfPath?: string;
+  } = {},
+): Promise<JonSmithFidelityToaVerificationSummary> {
+  const fieldValues = await readPdfFieldValuesWithPdfLib(outputPdfBuffer);
+
+  return verifyJonSmithFidelityToaFieldValues(fieldValues, {
+    outputPdfPath:
+      options.outputPdfPath ?? "website-demo://jon-smith-fidelity-toa-filled.pdf",
+  });
+}
+
 export function verifyJonSmithFidelityToaFieldValues(
   fieldValues: JonSmithFidelityToaPdfFieldValues,
   options: {
@@ -214,6 +236,42 @@ export async function readPdfFieldValuesWithPypdf(
   return JSON.parse(stdout) as JonSmithFidelityToaPdfFieldValues;
 }
 
+export async function readPdfFieldValuesWithPdfLib(
+  outputPdfBuffer: Buffer,
+): Promise<JonSmithFidelityToaPdfFieldValues> {
+  const pdfDocument = await PDFDocument.load(new Uint8Array(outputPdfBuffer));
+  const form = pdfDocument.getForm();
+  const values: JonSmithFidelityToaPdfFieldValues = {};
+
+  for (const field of form.getFields()) {
+    const fieldName = field.getName();
+
+    if (field instanceof PDFTextField) {
+      values[fieldName] = field.getText();
+      continue;
+    }
+
+    if (field instanceof PDFRadioGroup) {
+      values[fieldName] = field.getSelected();
+      continue;
+    }
+
+    if (field instanceof PDFCheckBox) {
+      values[fieldName] = pdfLibNameToValue(field.acroField.getValue());
+      continue;
+    }
+
+    if (field instanceof PDFDropdown || field instanceof PDFOptionList) {
+      values[fieldName] = field.getSelected()[0];
+      continue;
+    }
+
+    values[fieldName] = null;
+  }
+
+  return values;
+}
+
 function normalizeTextFieldValue(value: string | null | undefined): string | null {
   const normalized = normalizePdfFieldValue(value);
   return normalized === null ? null : normalized;
@@ -231,6 +289,14 @@ function normalizePdfFieldValue(value: string | null | undefined): string | null
   }
 
   return trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
+}
+
+function pdfLibNameToValue(value: { decodeText(): string } | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return value.decodeText();
 }
 
 function runPythonReadFieldsScript(outputPdfPath: string): Promise<{

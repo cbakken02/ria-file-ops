@@ -13,53 +13,35 @@ export function ExecutionLabReviewSurface({
 }: ExecutionLabReviewSurfaceProps) {
   return (
     <article className={styles.surface}>
-      <header className={styles.header}>
-        <div className={styles.headerMain}>
-          <p className={styles.eyebrow}>Execution Lab Review</p>
-          <h1>{viewModel.header.taskInstruction}</h1>
-          <p className={styles.warning}>{viewModel.header.warning}</p>
-        </div>
-
-        <dl className={styles.headerMeta} aria-label="Execution run summary">
-          <MetaTerm label="Demo ID" value={viewModel.header.demoId} />
-          <MetaTerm label="Status" value={viewModel.header.status} />
-          <MetaTerm label="Task type" value={viewModel.header.taskType} />
-          <MetaTerm label="Created" value={formatTimestamp(viewModel.header.createdAt)} />
-        </dl>
-      </header>
-
-      <section className={styles.section} aria-labelledby="artifact-refs-title">
-        <div className={styles.sectionHeader}>
+      <section className={styles.summaryCard} aria-labelledby="review-summary-title">
+        <div className={styles.summaryHeader}>
           <div>
-            <p className={styles.sectionEyebrow}>Local artifacts</p>
-            <h2 id="artifact-refs-title">Artifact references</h2>
+            <p className={styles.eyebrow}>Execution review</p>
+            <h2 id="review-summary-title">Run summary</h2>
+            <p className={styles.taskInstruction}>
+              {viewModel.header.taskInstruction}
+            </p>
           </div>
-          <span className={styles.badge}>Local dev only</span>
+          <span className={statusBadgeClass(viewModel.verification.status)}>
+            {viewModel.verification.status}
+          </span>
         </div>
-        <dl className={styles.pathGrid}>
-          <MetaTerm
-            label="Generated PDF"
-            value={viewModel.artifactRefs.generatedPdfPath}
-          />
-          <MetaTerm
-            label="Review JSON"
-            value={viewModel.artifactRefs.reviewJsonPath}
-          />
-          <MetaTerm
-            label="Public URL"
-            value={viewModel.artifactRefs.publicUrl ?? "None"}
-          />
-        </dl>
-      </section>
 
-      <section className={styles.section} aria-labelledby="task-context-title">
-        <div className={styles.sectionHeader}>
-          <div>
-            <p className={styles.sectionEyebrow}>Task context</p>
-            <h2 id="task-context-title">Transfer summary</h2>
-          </div>
-        </div>
-        <dl className={styles.contextGrid}>
+        <dl className={styles.metricStrip} aria-label="Review summary counts">
+          <Metric
+            label="Fields filled"
+            value={viewModel.fillTrace.counts.fieldsFilled}
+          />
+          <Metric
+            label="Options selected"
+            value={viewModel.fillTrace.counts.optionsSelected}
+          />
+          <Metric label="Skipped" value={viewModel.fillTrace.counts.skipped} />
+          <Metric label="Errors" value={viewModel.fillTrace.counts.errors} />
+          <Metric label="Issues" value={viewModel.verification.issueCount} />
+        </dl>
+
+        <dl className={styles.contextGrid} aria-label="Task context">
           <MetaTerm
             label="Receiving custodian"
             value={viewModel.taskContext.receivingCustodian}
@@ -77,21 +59,31 @@ export function ExecutionLabReviewSurface({
             value={viewModel.taskContext.transferInstructionSummary}
           />
         </dl>
+
+        <dl className={styles.headerMeta} aria-label="Execution metadata">
+          <MetaTerm label="Demo ID" value={viewModel.header.demoId} />
+          <MetaTerm label="Status" value={viewModel.header.status} />
+          <MetaTerm label="Task type" value={viewModel.header.taskType} />
+          <MetaTerm label="Created" value={formatTimestamp(viewModel.header.createdAt)} />
+          <MetaTerm
+            label="Generated PDF"
+            value={viewModel.artifactRefs.generatedPdfPath}
+          />
+        </dl>
+
+        <p className={styles.warning}>{viewModel.header.warning}</p>
       </section>
 
-      <section className={styles.section} aria-labelledby="completion-plan-title">
-        <div className={styles.sectionHeader}>
-          <div>
-            <p className={styles.sectionEyebrow}>Completion plan</p>
-            <h2 id="completion-plan-title">Field mapping</h2>
-            {viewModel.completionPlan.safeSummary ? (
-              <p className={styles.sectionSummary}>
-                {viewModel.completionPlan.safeSummary}
-              </p>
-            ) : null}
-          </div>
+      <details className={styles.detailsSection}>
+        <summary>
+          <span>Completion plan</span>
           <span className={styles.badge}>{viewModel.completionPlan.status}</span>
-        </div>
+        </summary>
+        {viewModel.completionPlan.safeSummary ? (
+          <p className={styles.sectionSummary}>
+            {viewModel.completionPlan.safeSummary}
+          </p>
+        ) : null}
 
         <div className={styles.tableWrap}>
           <table className={styles.table}>
@@ -132,15 +124,15 @@ export function ExecutionLabReviewSurface({
             </tbody>
           </table>
         </div>
-      </section>
+      </details>
 
-      <section className={styles.section} aria-labelledby="fill-trace-title">
-        <div className={styles.sectionHeader}>
-          <div>
-            <p className={styles.sectionEyebrow}>Fill trace</p>
-            <h2 id="fill-trace-title">Adapter output</h2>
-          </div>
-        </div>
+      <details className={styles.detailsSection}>
+        <summary>
+          <span>Fill trace</span>
+          <span className={styles.badge}>
+            {viewModel.fillTrace.rows.length} rows
+          </span>
+        </summary>
 
         <dl className={styles.metricGrid} aria-label="Fill trace counts">
           <Metric label="Fields filled" value={viewModel.fillTrace.counts.fieldsFilled} />
@@ -188,7 +180,7 @@ export function ExecutionLabReviewSurface({
             </tbody>
           </table>
         </div>
-      </section>
+      </details>
 
       <section className={styles.section} aria-labelledby="verification-title">
         <div className={styles.sectionHeader}>
@@ -248,6 +240,27 @@ export function ExecutionLabReviewSurface({
           ))}
         </ul>
       </section>
+
+      <details className={styles.detailsSection}>
+        <summary>
+          <span>Artifact references</span>
+          <span className={styles.badge}>safe refs</span>
+        </summary>
+        <dl className={styles.pathGrid}>
+          <MetaTerm
+            label="Generated PDF"
+            value={viewModel.artifactRefs.generatedPdfPath}
+          />
+          <MetaTerm
+            label="Review JSON"
+            value={viewModel.artifactRefs.reviewJsonPath}
+          />
+          <MetaTerm
+            label="Public URL"
+            value={viewModel.artifactRefs.publicUrl ?? "None"}
+          />
+        </dl>
+      </details>
 
       <details className={styles.debugDetails}>
         <summary>View safe debug JSON</summary>

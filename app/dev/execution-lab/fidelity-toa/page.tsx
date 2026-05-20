@@ -148,22 +148,21 @@ function PageHeader({
   return (
     <header className={styles.header}>
       <div>
-        <p className={styles.eyebrow}>Dev-only Execution Lab</p>
-        <h1>Jon Smith Fidelity TOA review</h1>
-        <p>
-          Fake-data surface for running and inspecting a protected Jon Smith TOA
-          completion demo without using real client data.
-        </p>
+        <h1>Jon Smith Fidelity TOA Demo</h1>
+        <p>Fake-data PDF completion test</p>
+        <div className={styles.pillRow} aria-label="Demo safety labels">
+          <span>Dev only</span>
+          <span>Admin only</span>
+          <span>Fake data</span>
+        </div>
         <div className={styles.runMeta}>
           <span>
-            Selected run:{" "}
-            <strong>
-              {selectedArtifact?.id ?? WEBSITE_FIDELITY_TOA_DEMO_ARTIFACT_ID}
-            </strong>
+            Run{" "}
+            <strong>{selectedArtifact?.id ?? WEBSITE_FIDELITY_TOA_DEMO_ARTIFACT_ID}</strong>
           </span>
-          <span>Storage: {selectedArtifact?.source ?? "temporary website"}</span>
+          <span>{selectedArtifact?.source ?? "temporary website"} storage</span>
           {availableArtifacts.length > 0 ? (
-            <span>{availableArtifacts.length} artifact available</span>
+            <span>{availableArtifacts.length} artifact</span>
           ) : null}
         </div>
       </div>
@@ -186,22 +185,17 @@ function DemoActionPanel({
 
   return (
     <section className={styles.actionPanel} aria-labelledby="demo-action-title">
-      <div>
-        <p className={styles.eyebrow}>Website-run demo</p>
-        <h2 id="demo-action-title">Run Jon Smith TOA Demo</h2>
-        <p>
-          Upload the Fidelity TOA template for this fake-data run. The server
-          fills, verifies, and stores the generated PDF in temporary demo memory
-          for this signed-in owner session.
-        </p>
+      <div className={styles.actionCopy}>
+        <p className={styles.eyebrow}>Template</p>
+        <h2 id="demo-action-title">Run Demo</h2>
         <StatusNotice status={status} />
       </div>
       <form action={runJonSmithFidelityToaWebsiteDemoAction} className={styles.runForm}>
         <label>
-          Fidelity TOA PDF template
+          Fidelity TOA PDF
           <input name="templatePdf" type="file" accept="application/pdf" required />
         </label>
-        <button type="submit">Run Jon Smith TOA Demo</button>
+        <button type="submit">Run Demo</button>
       </form>
       <div className={styles.artifactActions} aria-label="Generated PDF actions">
         {websiteArtifact ? (
@@ -212,7 +206,7 @@ function DemoActionPanel({
             <Link href={websiteArtifact.downloadPdfHref}>Download PDF</Link>
           </>
         ) : (
-          <span>Open and download links appear after a website-run demo.</span>
+          <span>PDF actions appear after a website run.</span>
         )}
       </div>
     </section>
@@ -228,6 +222,14 @@ function StatusNotice({ status }: { status: string | null }) {
     run_complete: "Demo run complete. Review the updated artifact below.",
     missing_template: "Upload the Fidelity TOA PDF template before running the demo.",
     invalid_template: "The uploaded file must be a valid PDF under the demo size limit.",
+    pdf_fill_runtime_unavailable:
+      "The PDF fill runtime is unavailable in this environment.",
+    pdf_fill_failed:
+      "The uploaded PDF could not be filled by the demo PDF writer.",
+    pdf_verify_runtime_unavailable:
+      "The PDF verification runtime is unavailable in this environment.",
+    pdf_verify_failed:
+      "The filled PDF could not be verified by the demo PDF reader.",
     run_failed: "The demo run failed. Try the upload again or check server logs.",
     unsafe_artifact: "The demo was stopped because a safety check failed.",
   };
@@ -242,13 +244,8 @@ function StatusNotice({ status }: { status: string | null }) {
 function MissingArtifactState() {
   return (
     <section className={styles.missingState}>
-      <p className={styles.eyebrow}>No review artifact loaded</p>
-      <h1>Run the website demo first.</h1>
-      <p>
-        Upload the Fidelity TOA template above and run the protected fake-data
-        demo. Local development can still build the terminal artifact with:
-      </p>
-      <pre>node scripts/run-work-packets-fidelity-toa-demo.mjs</pre>
+      <p className={styles.eyebrow}>No run yet</p>
+      <h2>Upload a Fidelity TOA template and run the fake-data demo.</h2>
     </section>
   );
 }

@@ -872,7 +872,17 @@ Implemented Phase 1 demo scaffold:
 - `scripts/run-work-packets-fidelity-toa-demo.mjs` runs the full fake-data dev pipeline in one command: check for the local Fidelity TOA template, fill the copied PDF, verify the output, build the review artifact, load the view-model summary, and print the hidden local route to inspect the result.
 - `lib/work-packets/dev-demo/local-execution-review-artifact-registry.ts` is a server-only local artifact selector. It maps stable dev run ids such as `jon-smith-fidelity-toa` to known JSON files under `local-dev/generated`, rejects path-like ids, loads the existing safe view model, and lets `/dev/execution-lab/fidelity-toa?run=jon-smith-fidelity-toa` select the current artifact without accepting raw file paths.
 - `app/dev/execution-lab/fidelity-toa/actions.ts`, `app/dev/execution-lab/fidelity-toa/pdf/[runId]/route.ts`, and `lib/work-packets/dev-demo/website-fidelity-toa-demo.ts` add a website-runnable fake-data demo path. An authorized developer uploads the Fidelity TOA template from the hidden route, the server uses fake Jon Smith data to fill and verify the PDF, and the page displays the safe view model with Open PDF and Download PDF links.
+- Local terminal scripts may still use Python/pypdf for dev inspection and verification. The website/Vercel path uses Node-native PDF filling and readback through `pdf-lib`, because Vercel's Node serverless runtime does not provide a Python package environment for importing pypdf inside a spawned `python3` process.
 - The website-run path does not use `local-dev/pdf-templates` or `local-dev/generated`. Because no durable private object store exists yet, it stores the generated PDF and safe review artifact in a temporary server-only in-memory registry keyed by the signed-in owner and stable demo id. This is acceptable only for the protected fake-data demo; it is not production persistence and may be lost on server restart or serverless instance changes.
+
+Future stored-template support:
+
+- Store reusable PDF templates in a private Supabase Storage bucket, not as blobs in normal database tables.
+- Store template metadata later in a table, including template id, custodian/form family, display label, storage object key, fingerprint/hash, version, active status, created-by metadata, and created/updated timestamps.
+- Fetch stored templates only through server-side, admin-gated code paths. The browser should never receive arbitrary storage keys or direct bucket access.
+- Keep the current upload path as an optional one-off override for testing newer template versions before promoting them to the stored current template.
+- Track template fingerprints and versions so form updates can be detected before reusing stale field mappings or completion plans.
+- Future UI can offer "Use stored current Fidelity TOA template" and "Upload one-off template for this run" as explicit choices.
 
 Still intentionally not implemented:
 

@@ -3,6 +3,15 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import {
+  PDFCheckBox,
+  PDFDocument,
+  PDFDropdown,
+  PDFName,
+  PDFOptionList,
+  PDFRadioGroup,
+  PDFTextField,
+} from "pdf-lib";
 import type {
   CompletionPlan,
   CompletionPlanField,
@@ -439,6 +448,112 @@ async function writeFieldsToPdfBufferWithPypdf(
   } finally {
     await rm(tempDir, { force: true, recursive: true });
   }
+}
+
+export async function writeFieldsToPdfBufferWithPdfLib(
+  input: PdfBufferFieldWriterInput,
+): Promise<PdfBufferFieldWriterResult> {
+  const pdfDocument = await PDFDocument.load(new Uint8Array(input.templatePdfBuffer));
+  const form = pdfDocument.getForm();
+  const existingFields = new Set(form.getFields().map((field) => field.getName()));
+  const writtenFields: string[] = [];
+  const missingFields: string[] = [];
+
+  for (const [fieldName, value] of Object.entries(input.fields)) {
+    if (!existingFields.has(fieldName)) {
+      missingFields.push(fieldName);
+      continue;
+    }
+
+    const field = form.getFieldMaybe(fieldName);
+
+    if (!field) {
+      missingFields.push(fieldName);
+      continue;
+    }
+
+    if (field instanceof PDFTextField) {
+      field.setText(value);
+      writtenFields.push(fieldName);
+      continue;
+    }
+
+    if (field instanceof PDFRadioGroup) {
+      if (!field.getOptions().includes(value)) {
+        missingFields.push(fieldName);
+        continue;
+      }
+
+      field.select(value);
+      writtenFields.push(fieldName);
+      continue;
+    }
+
+    if (field instanceof PDFCheckBox) {
+      if (!selectPdfLibButtonExportValue(field, value)) {
+        missingFields.push(fieldName);
+        continue;
+      }
+
+      writtenFields.push(fieldName);
+      continue;
+    }
+
+    if (field instanceof PDFDropdown || field instanceof PDFOptionList) {
+      if (!field.getOptions().includes(value)) {
+        missingFields.push(fieldName);
+        continue;
+      }
+
+      field.select(value);
+      writtenFields.push(fieldName);
+      continue;
+    }
+
+    missingFields.push(fieldName);
+  }
+
+  const outputPdfBuffer = Buffer.from(await pdfDocument.save());
+
+  return {
+    outputPdfBuffer,
+    writtenFields: writtenFields.sort(),
+    missingFields: missingFields.sort(),
+  };
+}
+
+function selectPdfLibButtonExportValue(
+  field: PDFCheckBox,
+  exportValue: string,
+): boolean {
+  const selectedState = PDFName.of(exportValue.replace(/^\//, ""));
+  const offState = PDFName.of("Off");
+  const acroField = field.acroField;
+  const widgets = acroField.getWidgets();
+  let matched = false;
+
+  for (const widget of widgets) {
+    const onValue = widget.getOnValue();
+
+    if (onValue && pdfNameToValue(onValue) === pdfNameToValue(selectedState)) {
+      widget.setAppearanceState(selectedState);
+      matched = true;
+    } else {
+      widget.setAppearanceState(offState);
+    }
+  }
+
+  if (!matched) {
+    acroField.setValue(offState);
+    return false;
+  }
+
+  acroField.dict.set(PDFName.of("V"), selectedState);
+  return true;
+}
+
+function pdfNameToValue(name: PDFName): string {
+  return name.decodeText().replace(/^\//, "");
 }
 
 function runPythonFillScript(input: PdfFieldWriterInput): Promise<{

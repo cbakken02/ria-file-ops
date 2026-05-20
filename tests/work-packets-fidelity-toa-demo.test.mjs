@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -20,6 +20,7 @@ import {
 } from "../lib/work-packets/dev-demo/fidelity-toa-option-visuals.ts";
 import {
   JonSmithFidelityToaVerificationError,
+  readPdfFieldValuesWithPdfLib,
   readPdfFieldValuesWithPypdf,
   verifyJonSmithFidelityToaFieldValues,
 } from "../lib/work-packets/dev-demo/fidelity-toa-output-verification.ts";
@@ -46,6 +47,8 @@ import {
   WEBSITE_FIDELITY_TOA_DEMO_ARTIFACT_ID,
   WebsiteFidelityToaDemoError,
   assertValidTemplatePdfBuffer,
+  classifyWebsiteFidelityToaDemoRuntimeError,
+  getWebsiteFidelityToaDemoStatusForError,
   listWebsiteFidelityToaDemoArtifacts,
   loadWebsiteFidelityToaDemoViewModelById,
   normalizeWebsiteFidelityToaDemoArtifactId,
@@ -119,6 +122,10 @@ test("Jon Smith Fidelity TOA demo builds a model-safe packet and run", () => {
   assert.doesNotMatch(serialized, /\b\d{3}-\d{2}-\d{4}\b/);
   assert.doesNotMatch(serialized, /\b\d{9,}\b/);
   assert.doesNotMatch(serialized, /Demo Lane/i);
+  assert.doesNotMatch(serialized, /100 Ameriprise Demo Way/i);
+  assert.doesNotMatch(serialized, /\bMinneapolis\b/i);
+  assert.doesNotMatch(serialized, /\b55402\b/);
+  assert.doesNotMatch(serialized, /\b8005550199\b/);
   assert.doesNotMatch(serialized, /jon\.smith@example\.test/i);
 });
 
@@ -668,16 +675,16 @@ test("Execution Lab review display surface is dev-only and does not hardcode raw
   assert.match(pdfRouteSource, /readWebsiteFidelityToaDemoPdf/);
   assert.match(pdfRouteSource, /Content-Disposition/);
   assert.match(pdfRouteSource, /download/);
-  assert.match(
-    routeSource,
-    /node scripts\/run-work-packets-fidelity-toa-demo\.mjs/,
-  );
+  assert.match(routeSource, /Run Demo/);
+  assert.match(routeSource, /No run yet/);
+  assert.match(componentSource, /<details/);
   assert.match(routeSource, /loadWebsiteFidelityToaDemoViewModelById/);
   assert.match(routeSource, /resolvedSearchParams\?\.run/);
   assert.doesNotMatch(combinedSource, /000126789/);
   assert.doesNotMatch(combinedSource, /900012345/);
   assert.doesNotMatch(combinedSource, /234567890/);
   assert.doesNotMatch(combinedSource, /8005550199/);
+  assert.doesNotMatch(combinedSource, /100 Ameriprise Demo Way/);
 });
 
 test("local Execution Lab artifact registry selects only known local-dev artifacts", async (t) => {
@@ -728,6 +735,8 @@ test("local Execution Lab artifact registry selects only known local-dev artifac
   assert.doesNotMatch(serialized, /000126789/);
   assert.doesNotMatch(serialized, /900012345/);
   assert.doesNotMatch(serialized, /234567890/);
+  assert.doesNotMatch(serialized, /100 Ameriprise Demo Way/);
+  assert.doesNotMatch(serialized, /8005550199/);
 });
 
 test("website Execution Lab demo registry validates ids and template uploads safely", () => {
@@ -768,7 +777,25 @@ test("website Execution Lab demo registry validates ids and template uploads saf
   );
 });
 
-test("website Execution Lab demo run creates a safe temporary review model when the template is present", async (t) => {
+test("website Execution Lab demo maps missing pypdf runtime to safe status", () => {
+  const wrapped = classifyWebsiteFidelityToaDemoRuntimeError(
+    new PdfFillAdapterError(
+      "Traceback (most recent call last):\nModuleNotFoundError: No module named 'pypdf'",
+      "writer_failed",
+    ),
+    "fill",
+  );
+
+  assert.equal(wrapped.code, "pdf_fill_runtime_unavailable");
+  assert.equal(
+    getWebsiteFidelityToaDemoStatusForError(wrapped),
+    "pdf_fill_runtime_unavailable",
+  );
+  assert.match(wrapped.message, /PDF fill runtime is unavailable/);
+  assert.doesNotMatch(wrapped.message, /Traceback|pypdf/);
+});
+
+test("website Execution Lab demo run is Node-native when the template is present", async (t) => {
   if (!existsSync(JON_SMITH_FIDELITY_TOA_TEMPLATE_PATH)) {
     t.skip("Local Fidelity TOA template is not present; upload/run path is covered by unit guards.");
     return;
@@ -776,11 +803,13 @@ test("website Execution Lab demo run creates a safe temporary review model when 
 
   const ownerEmail = "website-demo@example.test";
   const templatePdfBuffer = await readFile(JON_SMITH_FIDELITY_TOA_TEMPLATE_PATH);
-  const result = await runWebsiteJonSmithFidelityToaDemo({
-    ownerEmail,
-    templatePdfBuffer,
-    createdAt: "2026-05-19T00:00:00.000Z",
-  });
+  const result = await withPythonSitePackagesDisabled(() =>
+    runWebsiteJonSmithFidelityToaDemo({
+      ownerEmail,
+      templatePdfBuffer,
+      createdAt: "2026-05-19T00:00:00.000Z",
+    }),
+  );
   const loaded = loadWebsiteFidelityToaDemoViewModelById({
     ownerEmail,
     id: "jon-smith-fidelity-toa",
@@ -789,6 +818,7 @@ test("website Execution Lab demo run creates a safe temporary review model when 
     ownerEmail,
     id: "jon-smith-fidelity-toa",
   });
+  const fieldValues = await readPdfFieldValuesWithPdfLib(pdf.buffer);
   const artifacts = listWebsiteFidelityToaDemoArtifacts({ ownerEmail });
   const serialized = JSON.stringify({
     result,
@@ -805,6 +835,11 @@ test("website Execution Lab demo run creates a safe temporary review model when 
   assert.equal(loaded.viewModel.artifactRefs.generatedPdfPath, "/dev/execution-lab/fidelity-toa/pdf/jon-smith-fidelity-toa");
   assert.equal(pdf.artifact.downloadPdfHref, "/dev/execution-lab/fidelity-toa/pdf/jon-smith-fidelity-toa?download=1");
   assert.ok(pdf.buffer.byteLength > 0);
+  assert.equal(fieldValues.Type, "7");
+  assert.equal(fieldValues.Type2, "7");
+  assert.equal(fieldValues.Trans, "1");
+  assert.equal(fieldValues.NewAcct, "Off");
+  assert.equal(fieldValues["Date MM DD YYYY"], undefined);
   assert.equal(artifacts.length, 1);
   assert.equal(artifacts[0]?.storage, "temporary_server_memory");
   assert.doesNotMatch(serialized, /000126789/);
@@ -1214,4 +1249,36 @@ function getPlanField(demo, planFieldId) {
 
   assert.ok(field, `Expected ${planFieldId} to exist.`);
   return field;
+}
+
+async function withPythonSitePackagesDisabled(callback) {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "ria-file-ops-no-pypdf-"));
+  const originalPath = process.env.PATH;
+  const pythonPath = await findPythonPath(originalPath);
+  const shimPath = path.join(tempDir, "python3");
+
+  try {
+    await writeFile(shimPath, `#!/bin/sh\nexec "${pythonPath}" -S "$@"\n`);
+    await chmod(shimPath, 0o755);
+    process.env.PATH = `${tempDir}${path.delimiter}${originalPath ?? ""}`;
+
+    return await callback();
+  } finally {
+    process.env.PATH = originalPath;
+    await rm(tempDir, { force: true, recursive: true });
+  }
+}
+
+async function findPythonPath(originalPath) {
+  const paths = (originalPath ?? "").split(path.delimiter).filter(Boolean);
+
+  for (const directory of paths) {
+    const candidate = path.join(directory, "python3");
+
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "python3";
 }
